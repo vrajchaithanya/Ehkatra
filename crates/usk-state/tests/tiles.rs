@@ -279,10 +279,14 @@ fn co_located_authors_do_not_promote() {
     assert!(state.conflicts(RowId(r.id), ColId(c1.id)).is_empty());
 }
 
-/// A cell written by two actors promotes its tile, and only then does per-cell
-/// metadata exist.
+/// **TD-09's proof.** A cell written by two actors is promoted — and *only*
+/// that cell. Its neighbours in the same tile stay on the summary path.
+///
+/// Before TD-09 this test asserted the opposite ("one contested cell promotes
+/// every cell in its tile"), which is exactly the amplification that failed
+/// A-002: 0.1% contested cells became 100% promoted cells.
 #[test]
-fn contested_cell_promotes_its_tile() {
+fn contested_cell_is_promoted_alone() {
     let r = insert_row(1, 1, 1, Anchor::Start);
     let c1 = insert_col(1, 2, 2, Anchor::Start);
     let c2 = insert_col(1, 3, 3, Anchor::After(c1.id));
@@ -304,16 +308,25 @@ fn contested_cell_promotes_its_tile() {
     log.append(set_cell(2, 11, 14, r.id, c1.id, Value::Number(2.0)));
     let contested = State::replay(&log);
     let stats = contested.promotion_stats();
-    assert_eq!(stats.promoted_tiles, 1);
+    assert_eq!(stats.promoted_tiles, 1, "the tile holds the stamps");
     assert_eq!(
-        stats.promoted_cells, 2,
-        "one contested cell promotes every cell in its tile"
+        stats.promoted_cells, 1,
+        "exactly the contested cell is promoted — TD-09"
     );
-    assert_eq!(stats.promoted_cell_fraction(), 1.0);
+    assert_eq!(stats.promoted_cell_fraction(), 0.5, "one cell of the two");
     assert!(
-        contested.cell_summary(RowId(r.id), ColId(c1.id)).is_none(),
-        "a promoted tile has no causal summary"
+        contested.is_cell_promoted(RowId(r.id), ColId(c1.id)),
+        "the contested cell carries a stamp"
     );
+    assert!(
+        !contested.is_cell_promoted(RowId(r.id), ColId(c2.id)),
+        "its uncontested neighbour does not"
+    );
+    // A tile keeps its causal frontier even while holding stamps: anti-entropy
+    // diffs on the frontier (docs/15), and a few stamped cells do not remove it.
+    assert!(contested
+        .cell_summary(RowId(r.id), ColId(c1.id))
+        .is_some_and(|(lamport, _)| lamport == 14));
     // The contested cell resolves by (lamport, actor) and retains the loser.
     assert_eq!(
         contested.cell(RowId(r.id), ColId(c1.id)),
@@ -322,7 +335,7 @@ fn contested_cell_promotes_its_tile() {
     let losers = contested.conflicts(RowId(r.id), ColId(c1.id));
     assert_eq!(losers.len(), 1);
     assert_eq!(losers[0].2, Value::Number(1.0));
-    // The uncontested neighbour is dragged into the promoted tile untouched.
+    // The uncontested neighbour keeps its value and its summary path.
     assert_eq!(
         contested.cell(RowId(r.id), ColId(c2.id)),
         Some(Value::Number(3.0))

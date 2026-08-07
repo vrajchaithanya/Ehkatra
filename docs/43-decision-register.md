@@ -89,6 +89,17 @@ Comparing every dirty group against every other is O(groups²), and it is what a
 **D-050 — Cycles are read off the level assignment rather than from a separate Tarjan pass.**
 docs/13 names Tarjan SCC on the dirty subgraph. Kahn's algorithm already produces the same fact for free: whatever it cannot place has no valid level, and by definition is in a cycle. Self-references are detected directly, since a group reading its own output produces no edge to detect. Adding a second traversal to learn something the first already proved would be cost without information. If cycle *reporting* later needs the SCC membership (docs/36's workbook health report groups cells by cluster), add Tarjan then — it is a reporting need, not a correctness one.
 
+### Session 9 (2026-08-07) — TD-09 closed
+
+**D-061 — Promotion is per contested cell; the tile is only where stamps live.**
+TD-09's three candidates were sub-tile blocks, compact per-cell stamps, and two-level summaries. Chose per-cell: a block size B only changes the amplification *constant* (promoted ≈ 1−(1−p)^B), whereas per-cell removes amplification entirely. `Meta::Promoted(tile)` became `Meta::Mixed { frontier, stamps }`, and the pre-pass now returns a per-tile *bitmap* of contested indices instead of a boolean, so an uncontested cell inside a mixed tile stays on the summary path.
+Measured under W-TILE-10M: amplification **16,384× → 1×**; collab-pattern promotion 1.000% (== the contested rate); collab memory 11.09 B/cell / 123.6 MB, restoring A-001 under collaboration where it previously extrapolated to ~745 MB.
+Fixed along the way: the tile's causal frontier was not advancing on contested writes, which would have made a tile look stale to anti-entropy (docs/15). Caught by the frontier assertion in `contested_cell_is_promoted_alone`.
+
+**D-062 — A-002's pass bar is unachievable as written; not self-amended.**
+docs/38 sets *<1% promotion at the collab pattern*, and the collab pattern contests 1% of cells by definition. A contested cell must carry metadata to name a winner and retain a loser (ADR-006), so promoted ≥ contested = 1% for **any** correct implementation. The measurement is exactly 1.000% — the floor, not a near-miss.
+The intent behind A-002 (promotion must not amplify) is met and measured. The bar should be restated in amplification terms. **Deliberately not changed here:** docs/38 is normative, and loosening a bar one has just measured oneself against is the owner's call, not the implementer's. Filed per docs/00's "conflicting documents are defects" rule and surfaced in the session report.
+
 ### Session 9 (2026-08-07) — Row 9 exit criteria; new-spec deltas
 
 **D-058 — The calc engine addresses cells by identity; `Rect` survives as derived index geometry only.**

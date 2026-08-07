@@ -17,7 +17,7 @@
 //! convergence property depends on the value of a slot, only on its determinism.
 
 use alloc::boxed::Box;
-use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use core::borrow::Borrow;
 use core::mem::size_of;
@@ -342,9 +342,19 @@ enum Meta {
         max_lamport: Lamport,
         writer: ActorId,
     },
-    /// Some cell in this tile was written by two or more actors, so ordering
-    /// must be decided per cell and losers must be retained.
-    Promoted(BTreeMap<u16, CellMeta>),
+    /// Some cells in this tile are contested. **Only those cells** carry
+    /// stamps; the rest stay on the summary path, exactly as if they were in a
+    /// wholly uncontested tile.
+    ///
+    /// This is TD-09's fix. Promoting the whole tile was measured turning 0.1%
+    /// contested cells into 100% promoted cells and 8.4 → 74.5 B/cell, because
+    /// a tile is 16,384 cells and one conflict condemned all of them. The unit
+    /// of promotion is now the cell; the tile is only where the stamps live.
+    Mixed {
+        max_lamport: Lamport,
+        writer: ActorId,
+        stamps: BTreeMap<u16, CellMeta>,
+    },
 }
 
 #[derive(Clone)]
@@ -362,7 +372,11 @@ impl Tile {
             presence: Presence::default(),
             payload: CellPack::empty(kind),
             meta: if promoted {
-                Meta::Promoted(BTreeMap::new())
+                Meta::Mixed {
+                    max_lamport: 0,
+                    writer: ActorId(0),
+                    stamps: BTreeMap::new(),
+                }
             } else {
                 Meta::Summary {
                     max_lamport: 0,
@@ -381,7 +395,7 @@ impl Tile {
     fn heap_bytes(&self) -> usize {
         let meta = match &self.meta {
             Meta::Summary { .. } => 0,
-            Meta::Promoted(m) => m
+            Meta::Mixed { stamps: m, .. } => m
                 .values()
                 .map(|c| {
                     size_of::<u16>()
@@ -421,10 +435,10 @@ pub struct TileStore {
     pub rows: SlotMap,
     pub cols: SlotMap,
     tiles: BTreeMap<TileKey, Box<Tile>>,
-    /// Tiles the pre-pass proved to have more than one writer. Fixed before the
-    /// first write lands, which is what makes promotion lossless — see
-    /// `plan_promotions`.
-    promoted: BTreeSet<TileKey>,
+    /// Per tile, a bitmap of the cell indices the pre-pass proved contested.
+    /// Fixed before the first write lands, which is what makes promotion
+    /// lossless — see `plan_promotions`.
+    contested: BTreeMap<TileKey, [u64; PRESENCE_WORDS]>,
 }
 
 /// Result of the replay pre-pass: the slot assignment and the set of tiles that
@@ -432,7 +446,8 @@ pub struct TileStore {
 pub struct Plan {
     pub rows: SlotMap,
     pub cols: SlotMap,
-    pub promoted: BTreeSet<TileKey>,
+    /// Contested cell indices per tile.
+    pub contested: BTreeMap<TileKey, [u64; PRESENCE_WORDS]>,
 }
 
 impl TileStore {
@@ -442,7 +457,7 @@ impl TileStore {
             rows: plan.rows,
             cols: plan.cols,
             tiles: BTreeMap::new(),
-            promoted: plan.promoted,
+            contested: plan.contested,
         }
     }
 
@@ -457,7 +472,12 @@ impl TileStore {
         let col_slot = self.cols.intern(col);
         let key = TileKey::of(row_slot, col_slot);
         let idx = cell_index(row_slot, col_slot);
-        let promoted = self.promoted.contains(&key);
+        let tile_contested = self.contested.get(&key);
+        let promoted = tile_contested.is_some();
+        // Per-cell routing: a contested cell takes the stamped path, its
+        // neighbours in the same tile do not.
+        let cell_contested =
+            tile_contested.is_some_and(|bm| bm[idx as usize / 64] & (1u64 << (idx % 64)) != 0);
         let tile = self.tiles.entry(key).or_insert_with(|| {
             Box::new(Tile::new(
                 promoted,
@@ -498,34 +518,69 @@ impl TileStore {
                     tile.payload.insert(rank, value);
                 }
             }
-            Meta::Promoted(metas) => match metas.get_mut(&idx) {
-                Some(meta) if present => {
-                    let winner_actor = if (lamport, id) > (meta.lamport, meta.id) {
-                        let old = tile.payload.get(rank);
-                        meta.losers.push((meta.lamport, meta.id, old));
-                        meta.lamport = lamport;
-                        meta.id = id;
-                        tile.payload.replace(rank, value);
-                        id.actor
-                    } else {
-                        meta.losers.push((lamport, id, value));
-                        meta.id.actor
-                    };
-                    retain_concurrent_losers(&mut meta.losers, winner_actor);
-                }
-                _ => {
+            Meta::Mixed {
+                max_lamport,
+                writer,
+                stamps,
+            } if !cell_contested => {
+                // An uncontested cell inside a mixed tile: single writer,
+                // canonical arrival order, so the newest write wins with no
+                // stamp — identical to the pure-summary path.
+                debug_assert!(
+                    lamport >= *max_lamport,
+                    "mixed tile saw an out-of-order write; replay must feed \
+                     ops in (lamport, actor, counter) order"
+                );
+                *writer = id.actor;
+                *max_lamport = lamport;
+                if present {
+                    tile.payload.replace(rank, value);
+                } else {
                     tile.presence.set(idx);
                     tile.payload.insert(rank, value);
-                    metas.insert(
-                        idx,
-                        CellMeta {
-                            lamport,
-                            id,
-                            losers: Vec::new(),
-                        },
-                    );
                 }
-            },
+            }
+            Meta::Mixed {
+                max_lamport,
+                writer,
+                stamps: metas,
+            } => {
+                // The frontier covers every write to the tile, contested or
+                // not: anti-entropy diffs on it (docs/15), so a stamped write
+                // that did not advance it would make the tile look stale.
+                if lamport >= *max_lamport {
+                    *max_lamport = lamport;
+                    *writer = id.actor;
+                }
+                match metas.get_mut(&idx) {
+                    Some(meta) if present => {
+                        let winner_actor = if (lamport, id) > (meta.lamport, meta.id) {
+                            let old = tile.payload.get(rank);
+                            meta.losers.push((meta.lamport, meta.id, old));
+                            meta.lamport = lamport;
+                            meta.id = id;
+                            tile.payload.replace(rank, value);
+                            id.actor
+                        } else {
+                            meta.losers.push((lamport, id, value));
+                            meta.id.actor
+                        };
+                        retain_concurrent_losers(&mut meta.losers, winner_actor);
+                    }
+                    _ => {
+                        tile.presence.set(idx);
+                        tile.payload.insert(rank, value);
+                        metas.insert(
+                            idx,
+                            CellMeta {
+                                lamport,
+                                id,
+                                losers: Vec::new(),
+                            },
+                        );
+                    }
+                }
+            }
         }
         debug_assert!(
             tile.invariant_holds(),
@@ -546,25 +601,47 @@ impl TileStore {
     pub fn losers(&self, row: &OpId, col: &OpId) -> &[(Lamport, OpId, Value)] {
         match self.locate(row, col) {
             Some((tile, idx)) => match &tile.meta {
-                Meta::Promoted(m) => m.get(&idx).map(|c| c.losers.as_slice()).unwrap_or(&[]),
+                Meta::Mixed { stamps, .. } => {
+                    stamps.get(&idx).map(|c| c.losers.as_slice()).unwrap_or(&[])
+                }
                 Meta::Summary { .. } => &[],
             },
             None => &[],
         }
     }
 
-    /// The tile's ~24-byte causal summary `(max lamport, sole writer)`, or
-    /// `None` if the tile is promoted. This is the unit anti-entropy will diff
-    /// on at Row 10 (docs/15) and the reason a summary tile needs no per-cell
-    /// metadata at all.
+    /// The tile's ~24-byte causal frontier `(max lamport, latest writer)`.
+    ///
+    /// Present for every tile now, including tiles holding contested cells:
+    /// the frontier is what anti-entropy diffs on at Row 10 (docs/15), and a
+    /// tile does not stop having one just because a few of its cells carry
+    /// stamps.
     pub fn causal_summary(&self, row: &OpId, col: &OpId) -> Option<(Lamport, ActorId)> {
         match self.locate(row, col)?.0.meta {
             Meta::Summary {
                 max_lamport,
                 writer,
+            }
+            | Meta::Mixed {
+                max_lamport,
+                writer,
+                ..
             } => Some((max_lamport, writer)),
-            Meta::Promoted(_) => None,
         }
+    }
+
+    /// Whether this specific cell carries per-cell CRDT metadata.
+    pub fn is_cell_promoted(&self, row: &OpId, col: &OpId) -> bool {
+        let Some(row_slot) = self.rows.slot_of(row) else {
+            return false;
+        };
+        let Some(col_slot) = self.cols.slot_of(col) else {
+            return false;
+        };
+        let idx = cell_index(row_slot, col_slot);
+        self.contested
+            .get(&TileKey::of(row_slot, col_slot))
+            .is_some_and(|bm| bm[idx as usize / 64] & (1u64 << (idx % 64)) != 0)
     }
 
     fn locate(&self, row: &OpId, col: &OpId) -> Option<(&Tile, u16)> {
@@ -592,12 +669,16 @@ impl TileStore {
     pub fn promotion_stats(&self) -> PromotionStats {
         let mut s = PromotionStats::default();
         for (key, tile) in &self.tiles {
-            let n = tile.presence.count as usize;
             s.tiles += 1;
-            s.cells += n;
-            if self.promoted.contains(key) {
+            s.cells += tile.presence.count as usize;
+            if let Some(bitmap) = self.contested.get(key) {
                 s.promoted_tiles += 1;
-                s.promoted_cells += n;
+                // Only the cells that are actually present AND contested carry
+                // metadata — the number A-002 is about.
+                for (w, word) in bitmap.iter().enumerate() {
+                    let present = tile.presence.words[w] & *word;
+                    s.promoted_cells += present.count_ones() as usize;
+                }
             }
         }
         s
@@ -616,7 +697,7 @@ impl TileStore {
         tiles
             + self.rows.heap_bytes()
             + self.cols.heap_bytes()
-            + self.promoted.len() * size_of::<TileKey>()
+            + self.contested.len() * (size_of::<TileKey>() + PRESENCE_WORDS * 8)
     }
 
     pub fn tile_count(&self) -> usize {
@@ -653,24 +734,40 @@ impl TileWriters {
         self.by_actor.push((actor, map));
     }
 
-    /// True if any single cell was written by two different actors.
-    fn has_contested_cell(&self) -> bool {
+    /// Bitmap of the cells written by two or more different actors, or `None`
+    /// when the tile has no contested cell at all.
+    ///
+    /// The pairwise AND is the whole point: a cell is contested only if two
+    /// actors both wrote *it*, not if two actors both wrote somewhere in the
+    /// tile. Returning the map rather than a boolean is what lets promotion be
+    /// per cell (TD-09).
+    fn contested_cells(&self) -> Option<[u64; PRESENCE_WORDS]> {
+        let mut out = [0u64; PRESENCE_WORDS];
+        let mut any = false;
         for (i, (_, a)) in self.by_actor.iter().enumerate() {
             for (_, b) in &self.by_actor[i + 1..] {
-                if a.iter().zip(b.iter()).any(|(x, y)| x & y != 0) {
-                    return true;
+                for w in 0..PRESENCE_WORDS {
+                    let both = a[w] & b[w];
+                    if both != 0 {
+                        out[w] |= both;
+                        any = true;
+                    }
                 }
             }
         }
-        false
+        if any {
+            Some(out)
+        } else {
+            None
+        }
     }
 }
 
 /// Pre-pass over the canonically ordered ops: assigns slots and decides which
 /// tiles must start promoted.
 ///
-/// Promotion predicate: **a tile containing a cell written by two or more
-/// distinct actors is promoted.** This still over-approximates true concurrency
+/// Promotion predicate: **a cell written by two or more distinct actors is
+/// promoted, and only that cell.** This still over-approximates true concurrency
 /// — two actors writing one cell at causally ordered times are not concurrent —
 /// and it over-approximates deliberately, in the safe direction: a promoted tile
 /// is merely larger, whereas a wrongly-summarised tile would silently drop a
@@ -678,9 +775,10 @@ impl TileWriters {
 /// the causal `deps` delta docs/10 specifies for `Op`, which v0.1 does not yet
 /// carry; tracked as debt in docs/44.
 ///
-/// Note the amplification this predicate carries and A-002 does not account
-/// for: one contested cell promotes its whole 16,384-cell tile. See
-/// MEASUREMENTS.md for what that does to scattered contention.
+/// TD-09 removed the amplification this predicate used to carry: promotion was
+/// per *tile*, so one contested cell condemned 16,384 of them. Promoted cells
+/// now equal contested cells exactly — an amplification factor of 1, which is
+/// the floor for any implementation that must retain a concurrent loser.
 pub fn plan_promotions<B: Borrow<Op>, I: Iterator<Item = B>>(ops: I) -> Plan {
     let mut rows = SlotMap::default();
     let mut cols = SlotMap::default();
@@ -714,14 +812,13 @@ pub fn plan_promotions<B: Borrow<Op>, I: Iterator<Item = B>>(ops: I) -> Plan {
         }
     }
 
-    let promoted = writers
+    let contested = writers
         .into_iter()
-        .filter(|(_, w)| w.has_contested_cell())
-        .map(|(k, _)| k)
+        .filter_map(|(k, w)| w.contested_cells().map(|bm| (k, bm)))
         .collect();
     Plan {
         rows,
         cols,
-        promoted,
+        contested,
     }
 }

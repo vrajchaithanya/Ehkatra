@@ -336,6 +336,12 @@ impl State {
         self.cells.causal_summary(&row.0, &col.0)
     }
 
+    /// Whether this specific cell carries per-cell CRDT metadata (TD-09: the
+    /// promoted unit is the cell, not its tile).
+    pub fn is_cell_promoted(&self, row: RowId, col: ColId) -> bool {
+        self.cells.is_cell_promoted(&row.0, &col.0)
+    }
+
     /// Promotion accounting for assumption A-002 (docs/42) — the number that
     /// decides whether ADR-005's tile granularity holds up.
     pub fn promotion_stats(&self) -> PromotionStats {

@@ -179,6 +179,62 @@ Dominated by parsing 100,000 formula strings. docs/31 budgets cold open of a
 but a naive 1M-formula build would extrapolate to ~7 s. Filed as TD-19 rather
 than left to be discovered at Row 11.
 
+## W-TILE-10M (docs/38) — TD-09 closure · A-001 / A-002 · M1
+
+10,000 × 1,000 = **10,000,000 numeric cells**. Actor 1 authors the whole grid
+(import), then actors 2 and 3 re-write an evenly *scattered* share — scattered
+because that is the shape that punished tile-granularity promotion hardest.
+Reproduce: `./target/release/tile-bench 10000 1000 [import|collab|adversarial]`.
+
+| Pattern | Tiles | Structural heap | **B/cell** | **Promoted cells** | OS peak RSS |
+|---|---|---|---|---|---|
+| import — 1 actor, 0% overlap | 640 | 84,265,696 | **8.43** | 0.000% | **90.0 MB** |
+| collab — 3 actors, 1% overlap | 640 | 110,888,096 | **11.09** | **1.000%** | **123.6 MB** |
+| adversarial — 3 actors, 50% overlap | 640 | 1,375,581,536 | 137.56 | 50.000% | 1,709.0 MB |
+
+### What TD-09 changed
+Promotion is now per **contested cell**, not per tile. The amplification factor
+went from **16,384× to 1×**: promoted cells now equal contested cells exactly.
+
+| | Before TD-09 (tile-granular) | After TD-09 (cell-granular) |
+|---|---|---|
+| 0.1% contested, scattered | 100% promoted, 74.5 B/cell | 0.1% promoted |
+| 1% contested (collab) | ~100% promoted, ~74.5 B/cell → **~745 MB** | **1.0% promoted, 11.09 B/cell → 111 MB** |
+
+### A-001 · **passes at import and collab; fails at adversarial**
+Budget <400 MB at 10M cells. Import 90.0 MB, collab **123.6 MB** — and this is
+the headline: **A-001 now holds under collaboration**, where before TD-09 the
+same load extrapolated to ~745 MB and broke it.
+
+Adversarial (50% of cells genuinely contested) reaches 1.7 GB and **fails the
+budget**. That is not amplification — it is 5M cells each legitimately carrying
+a stamp and a retained loser. docs/38 sets no pass bar for the adversarial
+pattern, only a measurement; recorded as a fact, not smoothed. If a real
+workload ever looks like this, the answer is compact stamps (TD-10's causal
+`deps` would let most of them not exist at all), not a bigger budget.
+
+### A-002 · **amplification fixed; the bar as written cannot be met — doc defect filed**
+docs/38's bar: *<1% promotion at the collab pattern*. Measured: **exactly
+1.000%**.
+
+That is the **floor, not a near-miss**. The collab pattern contests 1% of cells
+by definition, and a contested cell *must* carry metadata — it has to name the
+winner and retain the loser (ADR-006). So promoted ≥ contested = 1% for **any**
+correct implementation, and "<1% at 1% overlap" is unachievable by
+construction, not by this design.
+
+The engineering goal behind A-002 — *promotion must not amplify* — is met, and
+measurably: 16,384× → 1×. The bar needs restating in terms of amplification
+rather than an absolute rate (e.g. "promoted cells ≤ contested cells", or "<1%
+promotion at ≤0.1% contested"). **Left for the owner: docs/38 is normative and
+loosening a bar I just measured against myself is not mine to do.** Filed per
+docs/00's rule that conflicting documents are defects.
+
+### Compaction ratio — not yet measurable
+docs/38 lists it among W-TILE-10M's measures. Compaction lands with the
+container at Row 11; there is nothing to measure until then. Recorded rather
+than silently omitted.
+
 ## W-CHAIN-100K re-run after TD-21 (session 9) — identity path
 
 Row 9's exit criterion required A-003 to be **re-measured over the identity

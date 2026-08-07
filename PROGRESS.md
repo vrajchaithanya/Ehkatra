@@ -316,3 +316,38 @@ fmt ✓ · clippy 0 warnings ✓ · **tests 118/118 ✓** · no_std wasm32 kerne
 ### NEXT — TD-09, per D-054 (hard gate)
 **TD-09 is the next work unit, and Row 10 may not start until it closes with A-002 re-measured under docs/38's W-TILE-10M.** W-TILE-10M: 10M numeric cells written by 1 actor (import), then a 3-actor storm at 1% cell overlap (collab), then 50% (adversarial). Measures RSS at load, bytes/cell, promotion rate per pattern, compaction ratio. **A-002 pass bar: <1% promotion at the collab pattern.**
 
+## Session 9 (cont.) — **TD-09 CLOSED**; Row 10's gate is satisfied
+
+**The fix (D-061).** Promotion is per contested **cell**, not per tile. `Meta::Promoted(tile)` became `Meta::Mixed { frontier, stamps }`, and the pre-pass returns a per-tile *bitmap* of contested indices rather than a boolean — so an uncontested cell inside a mixed tile stays on the summary path. Chose per-cell over sub-tile blocks because a block size only moves the amplification constant; cells remove it.
+
+**Measured under W-TILE-10M** (docs/38), 10M cells, M1:
+
+| Pattern | B/cell | Promoted | RSS |
+|---|---|---|---|
+| import (1 actor) | 8.43 | 0.000% | 90.0 MB |
+| collab (3 actors, 1% overlap) | **11.09** | **1.000%** | **123.6 MB** |
+| adversarial (3 actors, 50%) | 137.56 | 50.000% | 1,709.0 MB |
+
+- **Amplification 16,384× → 1×.** Promoted cells now equal contested cells exactly.
+- **A-001 restored under collaboration**: 123.6 MB against a 400 MB budget, where the same load previously extrapolated to ~745 MB and failed.
+- **A-001 fails at the adversarial pattern** (1.7 GB). That is 5M genuinely contested cells, not amplification; docs/38 sets no bar there. Recorded, not smoothed.
+- Fixed along the way: the tile's causal frontier was not advancing on contested writes, which would have made a tile look stale to anti-entropy (docs/15).
+
+### ⚠ A-002's bar cannot be met as written — OWNER DECISION NEEDED (D-062)
+docs/38 says *<1% promotion at the collab pattern*; the collab pattern contests 1% of cells **by definition**; a contested cell must carry metadata (ADR-006). So promoted ≥ contested = 1% for *any* correct implementation, and the measured 1.000% is the **floor, not a near-miss**.
+
+The intent (no amplification) is met and measured. The bar should be restated in amplification terms — e.g. "promoted ≤ contested", or "<1% promotion at ≤0.1% contested". **I did not change docs/38**: it is normative, and loosening a bar I just measured myself against is not the implementer's call.
+
+### GATES STATUS
+fmt ✓ · clippy 0 warnings ✓ · **tests 118/118 ✓** · no_std wasm32 kernel build ✓ · dep budget ✓ · differential replay native==wasm ✓ · purity + host-isolation greps ✓
+
+### NEXT — Row 10 (sync), now unblocked
+D-054's hard gate is satisfied: TD-09 is closed with A-002 re-measured under W-TILE-10M.
+
+Row 10 must implement **docs/27 §1's replica-sync state machine exactly**, including its forbidden-transition tests: no OPS before HelloAck; remote ops failing schema/bounds validation are rejected-and-reported while staying LIVE; queued local ops are never dropped in any transition. Workload **W-SYNC-RELAY** (docs/38): 2 and 50 replicas, one relay, 10 ops/s each for 60 s, 1% packet loss; measures propagation p95, convergence time after last op, queued-op durability across a mid-run kill.
+
+Carry into Row 10:
+- **TD-22 first**: formula-vs-value LWW currently rides on full-replay order. Sync brings incremental apply, which needs per-entry stamps in the formula registry. Do this *before* the first incremental apply path exists, not after.
+- docs/37 boundary 2 (collaborator → op applier) binds: schema+bounds validation on receive (DP-E4), poison-op quarantine, per-actor rate/byte buckets at the relay.
+- `Session::integrate` is the seam; it currently re-replays the whole log (v0.1 cost, noted at Row 9).
+

@@ -1,5 +1,14 @@
 # Changelog — Architecture Repository
 
+## 2026-08-07 (session 9) — new specs absorbed · Row 9 DONE · TD-09 CLOSED
+- **docs/29 violation fixed**: replay-check's generator covered 4 of 9 payload variants — `ClearCell` and `Value::Decimal` had *never* been in the corpus, and Row 9's three op types were missing. The DP-A2 gate had been silently green. Corpus now covers all nine; reference hashes changed (`ef7933e8…` / `5dbb01c2…`), native==wasm32.
+- **docs/38 applied**: MEASUREMENTS.md carries a reference-machine block and `W-*` workload ids; pre-docs/38 numbers marked *unspecified workload* and declared unquotable.
+- **Row 9 DONE**: TD-21 closed (ordinal `Sheet`/`Rect` addressing deleted; engine works over `State`, rebinding references from identity bindings each rebuild) and TD-18 closed (`Engine::observe` routes structural/formula ops to a regroup, value ops to incremental). W-CHAIN-100K re-measured over the identity path: 53.0 → 92.6 ms (+75%), both budgets still passing, filed as TD-23.
+- **TD-09 CLOSED**: promotion is per contested **cell**; amplification 16,384× → 1×. W-TILE-10M: import 8.43 B/cell / 0% promoted / 90 MB; collab 11.09 B/cell / **1.000%** / **123.6 MB**; adversarial 137.56 B/cell / 50% / 1.7 GB. **A-001 restored under collaboration**; fails at the adversarial pattern (real conflict metadata, no bar set).
+- **A-002's bar is unachievable as written** (D-062): <1% promotion at a pattern that contests 1% of cells is impossible for any implementation that retains losers. Intent met; bar left for the owner to restate.
+- docs/27 §3 generation mark and §5 undo-machine transition/forbidden tests added.
+- 118 tests total.
+
 ## 2026-08-07 (session 8) — Owner corrections (D-054) + Row 9 core
 - **D-054 corrections applied**: TD-09 is the next work unit after Row 9 with Row 10 hard-gated on its closure; TD-21/TD-18 are Row 9 exit criteria; supply-chain gate verified present in ci.yml with its real blocker named (no remote, never pushed — remote now configured, push is the owner's); TD-17 trigger made explicit; D-052 ratified (no proptest).
 - **Row 9 core** (Row 9 remains IN-PROGRESS until the TD-21/TD-18 exit criteria close): new ops `SetFormula` (identity bindings bound once at the author) and `UndeleteRow`/`UndeleteCol`; `State` formula registry; new kernel crate **`usk-reduce`** — `Command` vocabulary, pure versioned `reduce_v1`, `Session` with per-actor undo/redo.
