@@ -260,6 +260,14 @@ impl State {
         self.formulas.get(&(row.0, col.0))
     }
 
+    /// Every formula in the workbook, keyed by cell identity, in identity
+    /// order. The calc engine's source of truth for what to evaluate.
+    pub fn formulas(&self) -> impl Iterator<Item = (RowId, ColId, &FormulaCell)> {
+        self.formulas
+            .iter()
+            .map(|((r, c), f)| (RowId(*r), ColId(*c), f))
+    }
+
     /// Retained concurrent losers for conflict surfacing (ADR-006).
     pub fn conflicts(&self, row: RowId, col: ColId) -> &[(Lamport, OpId, Value)] {
         self.cells.losers(&row.0, &col.0)

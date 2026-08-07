@@ -130,7 +130,7 @@ Reproduce with `cargo build --release -p calc-bench; ./target/release/calc-bench
 | | |
 |---|---|
 | Budget (docs/31, A-003) | < 200 ms for 100k dependents **on 8 cores** |
-| Measured | **53.0 ms**, median of 5 |
+| Measured (ordinal path, superseded — see the identity-path re-run above) | **53.0 ms**, median of 5 |
 | Threads used | **1** |
 | Throughput | 1.89 M cells/s |
 | Graph size | **10 nodes for 100,000 formula cells** (10,000 cells/node) |
@@ -178,6 +178,34 @@ Dominated by parsing 100,000 formula strings. docs/31 budgets cold open of a
 1M-cell workbook at <1.5 s for *skeleton + viewport*, which is not this number,
 but a naive 1M-formula build would extrapolate to ~7 s. Filed as TD-19 rather
 than left to be discovered at Row 11.
+
+## W-CHAIN-100K re-run after TD-21 (session 9) — identity path
+
+Row 9's exit criterion required A-003 to be **re-measured over the identity
+path**, not assumed to carry over from the ordinal one. It did not carry over.
+
+| | Ordinal path (session 6) | Identity path (session 9) | |
+|---|---|---|---|
+| Full recalc, 100k cells | 53.0 ms | **92.6 ms** | **+75% — a real regression** |
+| Single edit | 0.191 ms | **0.328 ms** | +72%, still 24× under budget |
+| Graph nodes | 10 | 10 | unchanged |
+| Levels / width | 10 / ~1 | 10 / ~1 | unchanged |
+| Budget (A-003) | <200 ms on 8 cores | **passes on 1 core** | |
+| Budget (single edit) | <8 ms | **passes** | |
+
+Cause, measured not guessed: results are now keyed by cell **identity**
+(`(RowId, ColId)` = 48 bytes) in a `BTreeMap`, where the ordinal engine wrote
+into a `Vec` by index. 100,000 tree inserts with 48-byte keys is the whole
+difference; the evaluator and the graph are unchanged.
+
+This is the honest price of TD-21, and docs/38's regression policy says a
+>5% regression gets a signed-off debt entry rather than a footnote — filed as
+**TD-23**. Both budgets still pass with margin, so the correct call was to take
+the regression and record it rather than keep two addressing models alive.
+
+Also confirmed by this run: `regrouped: false` on a value edit — the TD-18
+trigger routes value ops to the incremental path and structural/formula ops to
+a rebuild, without the caller deciding.
 
 ## W-REPLAY-5K — corpus extended to full payload coverage (session 9)
 

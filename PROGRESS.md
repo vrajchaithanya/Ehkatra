@@ -294,3 +294,25 @@ The winner check first compared the group's specific op id and wrongly blocked u
 ### GATES STATUS
 fmt ✓ · clippy 0 warnings ✓ · **tests 109/109 ✓** · no_std wasm32 kernel build (incl. usk-reduce) ✓ · dep budget 1/5, 10/12, 10/40 ✓ · differential replay native==wasm ✓ · purity + host-isolation greps ✓
 
+## Session 9 — new specs absorbed · **Row 9 DONE** (all exit criteria met)
+
+Re-read docs/00 and the eight new normative docs (08, 25, 26, 27, 28, 29, 37, 38) before resuming. Gates verified green first, per protocol.
+
+### Deltas found against the new specs
+- **docs/29 violated — and worse than reported.** The rule "a new op type joins the replay-check generator" had been broken by Row 9, and auditing found `ClearCell` and `Value::Decimal` were *never* covered. The DP-A2 gate had been green over 4 of 9 payload variants. Fixed; corpus now covers all nine. **Reference hashes changed** — `oplog:ef7933e8…`, `state:5dbb01c2…`, native==wasm32. Old values recorded beside them.
+- **docs/38 applied**: MEASUREMENTS.md now carries a reference-machine block (M1) and `W-*` workload ids; pre-docs/38 numbers are marked *unspecified workload* and are not quotable.
+- **docs/27 §3**: generation mark added (`Engine::generation()`), tested.
+- **docs/27 §5**: undo-machine transition-coverage + forbidden-transition tests added.
+- **docs/26, docs/28**: no delta — identity encodings and error-domain separation already match.
+
+### ROW 9 EXIT CRITERIA — all met
+1. **TD-21 CLOSED.** `Sheet`/`Cell`/`CellRef` deleted; `Engine` works over `State`, addressing cells by `(RowId, ColId)`. References are **rebound from stored identity bindings on every rebuild**, so structural edits never rewrite formula text. `Rect` survives only as derived index geometry, rebuilt per regroup and documented as such (D-058).
+2. **TD-18 CLOSED.** `Engine::observe(state, ops)` routes structural/formula ops to a regroup and value ops to the incremental path; `Session` feeds it every batch (D-059).
+3. **W-CHAIN-100K re-measured over the identity path** — and it did *not* carry over: full recalc **53.0 → 92.6 ms (+75%)**, single edit 0.191 → 0.328 ms. Both budgets still pass (200 ms / 8 ms). Cause measured: identity-keyed `BTreeMap` vs `Vec` indexing. Filed as **TD-23** per docs/38's regression policy.
+
+### GATES STATUS
+fmt ✓ · clippy 0 warnings ✓ · **tests 118/118 ✓** · no_std wasm32 kernel build ✓ · dep budget 1/5, 10/12, 10/40 ✓ · differential replay native==wasm ✓ · purity + host-isolation greps ✓
+
+### NEXT — TD-09, per D-054 (hard gate)
+**TD-09 is the next work unit, and Row 10 may not start until it closes with A-002 re-measured under docs/38's W-TILE-10M.** W-TILE-10M: 10M numeric cells written by 1 actor (import), then a 3-actor storm at 1% cell overlap (collab), then 50% (adversarial). Measures RSS at load, bytes/cell, promotion rate per pattern, compaction ratio. **A-002 pass bar: <1% promotion at the collab pattern.**
+

@@ -28,9 +28,11 @@ extern crate alloc;
 use alloc::string::String;
 use alloc::vec::Vec;
 use usk_calc::refs::Binder;
+use usk_calc::Engine;
 use usk_formula::parse::{parse, Ast, A1};
 use usk_oplog::{Anchor, Op, OpLog, Payload, RangeBinding};
 use usk_state::State;
+use usk_types::coerce::Profile;
 use usk_types::{ActorId, ColId, OpId, RowId, Value};
 
 /// The command vocabulary — what UI, API and MCP all speak (DP-D1).
@@ -524,6 +526,9 @@ fn invert_group(
 pub struct Session {
     pub log: OpLog,
     state: State,
+    /// The calc graph, kept in step by feeding it every op batch. It routes
+    /// itself between regroup and incremental recalc (docs/13, TD-18).
+    engine: Engine,
     actor: ActorId,
     counter: u64,
     lamport: u64,
@@ -533,9 +538,12 @@ pub struct Session {
 
 impl Session {
     pub fn new(actor: ActorId) -> Session {
+        let state = State::default();
+        let engine = Engine::build(&state, Profile::Compat);
         Session {
             log: OpLog::new(),
-            state: State::default(),
+            state,
+            engine,
             actor,
             counter: 0,
             lamport: 0,
@@ -548,13 +556,24 @@ impl Session {
         &self.state
     }
 
+    pub fn engine(&self) -> &Engine {
+        &self.engine
+    }
+
+    /// What a reader sees at a cell: the computed formula result if the cell
+    /// holds a formula, otherwise the stored value.
+    pub fn value(&self, row: RowId, col: ColId) -> Option<Value> {
+        self.engine.value(&self.state, row, col)
+    }
+
     /// Integrates a remote op (another actor's edit arriving via sync).
     pub fn integrate(&mut self, op: Op) {
         if op.lamport > self.lamport {
             self.lamport = op.lamport;
         }
+        let batch = alloc::vec![op.clone()];
         self.log.append(op);
-        self.refresh();
+        self.refresh(&batch);
     }
 
     pub fn apply(&mut self, cmd: Command) -> Result<ApplyReport, CommandError> {
@@ -567,13 +586,14 @@ impl Session {
                 self.counter = mint.counter();
                 self.lamport = mint.lamport();
                 let emitted = reduction.ops.len();
+                let batch = reduction.ops.clone();
                 for op in reduction.ops {
                     self.log.append(op);
                 }
                 self.undo_stack.push(reduction.group);
                 // A fresh edit invalidates the redo branch, as everywhere.
                 self.redo_stack.clear();
-                self.refresh();
+                self.refresh(&batch);
                 Ok(ApplyReport {
                     ops_emitted: emitted,
                     blocked: 0,
@@ -606,6 +626,7 @@ impl Session {
         self.counter = mint.counter;
         self.lamport = mint.lamport;
         let emitted = ops.len();
+        let batch = ops.clone();
         for op in ops {
             self.log.append(op);
         }
@@ -616,7 +637,7 @@ impl Session {
                 self.undo_stack.push(inverse);
             }
         }
-        self.refresh();
+        self.refresh(&batch);
         ApplyReport {
             ops_emitted: emitted,
             blocked,
@@ -626,7 +647,11 @@ impl Session {
     /// State is a fold over the log; the fold is rerun after every append.
     /// v0.1 cost, acceptable at CLI scale — incremental apply arrives with
     /// sync (Row 10), which needs it for remote ops anyway.
-    fn refresh(&mut self) {
+    ///
+    /// The calc graph is then handed the batch that caused the change, so it
+    /// can pick regroup-vs-incremental itself (TD-18).
+    fn refresh(&mut self, applied: &[Op]) {
         self.state = State::replay(&self.log);
+        self.engine.observe(&self.state, applied);
     }
 }

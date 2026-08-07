@@ -89,6 +89,24 @@ Comparing every dirty group against every other is O(groups²), and it is what a
 **D-050 — Cycles are read off the level assignment rather than from a separate Tarjan pass.**
 docs/13 names Tarjan SCC on the dirty subgraph. Kahn's algorithm already produces the same fact for free: whatever it cannot place has no valid level, and by definition is in a cycle. Self-references are detected directly, since a group reading its own output produces no edge to detect. Adding a second traversal to learn something the first already proved would be cost without information. If cycle *reporting* later needs the SCC membership (docs/36's workbook health report groups cells by cluster), add Tarjan then — it is a reporting need, not a correctness one.
 
+### Session 9 (2026-08-07) — Row 9 exit criteria; new-spec deltas
+
+**D-058 — The calc engine addresses cells by identity; `Rect` survives as derived index geometry only.**
+TD-21 is closed: `Sheet`, `Cell` and `CellRef` are deleted, and `Engine` works over `State`. Formulas come from `State`'s registry; each reference is **rebound** from its stored identity bindings on every rebuild, so a structural edit needs no formula rewriting — the same bindings simply resolve to different positions (DP-A6 made executable).
+`Rect` is kept, deliberately, and documented as *derived view coordinates*: a spatial index needs a total order on two axes, which identities alone do not provide. It is rebuilt from the axis order on every regroup and never outlives one, so a stale position cannot survive an edit. Deleting it entirely would mean inventing an identity-space index — that is TD-20's R-tree, not this row's work.
+Measured cost recorded as TD-23: full recalc 53.0 → 92.6 ms on W-CHAIN-100K, both budgets still passing.
+
+**D-059 — `Engine::observe(state, ops)` is the regrouping trigger (TD-18 closed).**
+Structural and formula ops invalidate the graph (positions move, patterns change); value ops do not. `observe` inspects the batch and routes to `regroup + recalc_all` or `recalc_after`, so no caller has to remember which kind of edit it just made. `Session` feeds it every batch it applies, including remote ops arriving via `integrate`.
+
+**D-060 — Deltas found against the new normative specs, and what was done about each.**
+* **docs/29** ("a new op type joins the replay-check generator"): violated by Row 9, and the audit found the hole was older — `ClearCell` and `Value::Decimal` had never been in the corpus. Fixed; reference hashes changed and both old and new are recorded. This was a *silently green gate*, the worst failure mode a gate has.
+* **docs/38** (workload ids + machine context mandatory): MEASUREMENTS.md restructured — reference machine M1 block, `W-*` ids on the numbers that have them, and pre-docs/38 numbers explicitly marked *unspecified workload* and declared unquotable.
+* **docs/27 §3** (generation mark): `Engine::generation()` added and tested; every completed pass advances it.
+* **docs/27 §5** (undo machine): transition-coverage and forbidden-transition tests added. Both forbidden transitions turn out to be structurally impossible rather than checked at runtime — a foreign group is unreachable from a Session's own stack, and one `apply` pushes exactly one group — and the tests prove those properties rather than asserting an error path that cannot fire.
+* **docs/26** (container schema): identity encodings already match (`ActorId` u128 BE, `Counter` u64 BE, `OpId` = actor‖counter). No delta; Row 11 implements the schema.
+* **docs/28** (three error domains): current code already separates them — spreadsheet errors are `Value`s, `CommandError` is domain 2, `debug_assert` guards domain 3. No delta.
+
 ### Session 8 (2026-08-07) — Row 9 core: reducer, commands, selective undo
 
 **D-055 — `SetFormula` ops carry identity bindings, bound once at the author.**

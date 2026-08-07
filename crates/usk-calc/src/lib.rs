@@ -27,8 +27,6 @@ extern crate alloc;
 
 pub mod graph;
 pub mod refs;
-pub mod sheet;
 
-pub use graph::{Engine, RecalcStats};
+pub use graph::{Engine, RecalcStats, Rect};
 pub use refs::{AnchorMode, Axis, Binder, IdRange, Resolved, StateGrid};
-pub use sheet::{Cell, CellRef, Rect, Sheet};

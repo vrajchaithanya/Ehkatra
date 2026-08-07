@@ -11,3 +11,5 @@ path = "src/main.rs"
 usk-types = { path = "../../crates/usk-types" }
 usk-formula = { path = "../../crates/usk-formula" }
 usk-calc = { path = "../../crates/usk-calc" }
+usk-oplog = { path = "../../crates/usk-oplog" }
+usk-state = { path = "../../crates/usk-state" }
