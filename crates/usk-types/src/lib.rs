@@ -6,8 +6,12 @@
 #![no_std]
 extern crate alloc;
 
+pub mod coerce;
+pub mod decimal;
+
 use alloc::string::String;
 use alloc::vec::Vec;
+pub use decimal::Decimal;
 
 /// A replica/participant identity. 128 bits so device-scoped random ids
 /// cannot collide in practice (docs/15 failure drills).
@@ -47,16 +51,124 @@ pub enum ErrorKind {
     Spill,
 }
 
-/// The v0.1 value lattice subset (docs/04). Decimal/Date/etc. arrive with
-/// the formula milestone; adding variants is additive (docs/10 evolution rule).
+impl ErrorKind {
+    /// The name a user sees. Storage is canonical and display is localized
+    /// (SPEC §i18n); this is the canonical spelling.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ErrorKind::Div0 => "#DIV/0!",
+            ErrorKind::Value => "#VALUE!",
+            ErrorKind::Ref => "#REF!",
+            ErrorKind::Name => "#NAME?",
+            ErrorKind::Num => "#NUM!",
+            ErrorKind::Na => "#N/A",
+            ErrorKind::Circ => "#CIRC!",
+            ErrorKind::Spill => "#SPILL!",
+        }
+    }
+}
+
+/// A value's type, without its payload — the vocabulary error origins use to
+/// say what was being converted into what.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TypeTag {
+    Blank,
+    Bool,
+    Number,
+    Decimal,
+    Text,
+    Error,
+}
+
+/// The arithmetic operation that produced an error, for `Origin::Arithmetic`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ArithOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
+/// **Why this error exists** — the differentiator behind "every `#VALUE!`
+/// answers where it came from" (BOOTSTRAP §10.6, DP-A11).
+///
+/// The origin records only what cannot be recovered from the op log. It does
+/// not carry the authoring op id, because a value lives *inside* its own op and
+/// so cannot name it; the log already answers "who wrote this cell".
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Origin {
+    /// Entered or imported as a literal error (an `#N/A` typed by a user, or
+    /// an error cell read out of an XLSX).
+    Authored,
+    /// A conversion the `strict` profile refused to perform silently.
+    Coercion { from: TypeTag, to: TypeTag },
+    /// Arithmetic with no defined result: division by zero, or a magnitude
+    /// past the decimal coefficient's range.
+    Arithmetic { op: ArithOp },
+    /// Inherited from a referenced cell.
+    ///
+    /// Row 6 extends this with the source cell once formulas can reference one;
+    /// adding a field is additive (docs/10 evolution rule), and the trace is
+    /// deliberately *not* stored per value — a full provenance chain belongs in
+    /// a watermarked fold over the log (DP-A9), not inline in every cell.
+    Propagated,
+}
+
+/// An error value: the kind a user sees, plus why it happened.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct CellError {
+    pub kind: ErrorKind,
+    pub origin: Origin,
+}
+
+impl CellError {
+    pub fn new(kind: ErrorKind, origin: Origin) -> CellError {
+        CellError { kind, origin }
+    }
+
+    /// The `#VALUE!` raised when `strict` refuses a silent conversion.
+    pub fn refused_coercion(from: TypeTag, to: TypeTag) -> CellError {
+        CellError::new(ErrorKind::Value, Origin::Coercion { from, to })
+    }
+}
+
+/// The v0.1 value lattice (docs/04, BOOTSTRAP row 5).
+///
+/// `Date`/`DateTime`/`Duration`/`Array`/`Reference`/`Rich`/`Lambda` are in the
+/// full lattice docs/04 describes but are not in this row's scope; they land
+/// with the rows that need them, as additive variants (docs/10 evolution rule).
 #[derive(Clone, PartialEq, Debug)]
 pub enum Value {
     Blank,
     Bool(bool),
     /// IEEE-754 binary64, Excel-compatible arithmetic domain.
     Number(f64),
+    /// Exact base-10, for currency (ADR-010/ADR-035). See [`decimal`].
+    Decimal(Decimal),
     Text(String),
-    Error(ErrorKind),
+    Error(CellError),
+}
+
+impl Value {
+    /// This value's type, for coercion diagnostics.
+    pub fn type_tag(&self) -> TypeTag {
+        match self {
+            Value::Blank => TypeTag::Blank,
+            Value::Bool(_) => TypeTag::Bool,
+            Value::Number(_) => TypeTag::Number,
+            Value::Decimal(_) => TypeTag::Decimal,
+            Value::Text(_) => TypeTag::Text,
+            Value::Error(_) => TypeTag::Error,
+        }
+    }
+
+    /// Errors propagate through everything (docs/04 invariant 5).
+    pub fn as_error(&self) -> Option<CellError> {
+        match self {
+            Value::Error(e) => Some(*e),
+            _ => None,
+        }
+    }
 }
 
 impl Value {
@@ -83,10 +195,36 @@ impl Value {
                 out.extend_from_slice(&(b.len() as u32).to_be_bytes());
                 out.extend_from_slice(b);
             }
-            Value::Error(k) => {
+            Value::Error(e) => {
                 out.push(0x05);
-                out.push(*k as u8);
+                out.push(e.kind as u8);
+                encode_origin(&e.origin, out);
+            }
+            // Tag 0x06 is new in Row 5. Tags 0x00–0x05 keep their meaning and
+            // their bytes, which the unchanged replay-corpus oplog hash proves.
+            Value::Decimal(d) => {
+                out.push(0x06);
+                out.extend_from_slice(&d.coefficient().to_be_bytes());
+                out.extend_from_slice(&d.exponent().to_be_bytes());
             }
         }
+    }
+}
+
+/// Canonical encoding of an error origin. Fixed field order, big-endian, one
+/// byte per enum discriminant — same rules as every other encoding here.
+fn encode_origin(origin: &Origin, out: &mut Vec<u8>) {
+    match origin {
+        Origin::Authored => out.push(0x00),
+        Origin::Coercion { from, to } => {
+            out.push(0x01);
+            out.push(*from as u8);
+            out.push(*to as u8);
+        }
+        Origin::Arithmetic { op } => {
+            out.push(0x02);
+            out.push(*op as u8);
+        }
+        Origin::Propagated => out.push(0x03),
     }
 }

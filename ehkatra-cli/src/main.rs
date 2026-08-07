@@ -133,8 +133,9 @@ fn print_grid(s: &State) {
             let cell = match s.cell(*r, *c) {
                 Some(Value::Text(t)) => t,
                 Some(Value::Number(n)) => format!("{n}"),
+                Some(Value::Decimal(d)) => format!("{d}"),
                 Some(Value::Bool(b)) => format!("{b}"),
-                Some(Value::Error(e)) => format!("{e:?}"),
+                Some(Value::Error(e)) => String::from(e.kind.as_str()),
                 Some(Value::Blank) | None => String::from("·"),
             };
             line.push_str(&format!("{cell:>12} "));

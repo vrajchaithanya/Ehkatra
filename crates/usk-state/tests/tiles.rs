@@ -9,7 +9,7 @@ use helpers::*;
 use usk_oplog::{Anchor, Op, OpLog};
 use usk_state::tile::{TILE_COLS, TILE_ROWS};
 use usk_state::State;
-use usk_types::{ActorId, ColId, ErrorKind, OpId, RowId, Value};
+use usk_types::{ActorId, CellError, ColId, ErrorKind, OpId, Origin, RowId, Value};
 
 mod helpers {
     use std::collections::BTreeMap;
@@ -170,7 +170,7 @@ fn corpus(rows: usize, cols: usize, actors: u128, seed: u64) -> (OpLog, Vec<OpId
                 let value = match rng.next() % 5 {
                     0 => Value::Text(format!("t{counter}")),
                     1 => Value::Bool(counter.is_multiple_of(2)),
-                    2 => Value::Error(ErrorKind::Value),
+                    2 => Value::Error(CellError::new(ErrorKind::Value, Origin::Authored)),
                     _ => Value::Number((rng.next() % 10_000) as f64 / 4.0),
                 };
                 log.append(set_cell(actor, counter, lamport, *r, *c, value));

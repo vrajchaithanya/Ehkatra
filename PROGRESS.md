@@ -77,13 +77,53 @@ ADR-034 stable identity→slot band keying (with the two rejected alternatives) 
 ### GATES STATUS
 fmt ✓ · clippy 0 warnings ✓ · **tests 14/14 ✓** · no_std wasm32 kernel build ✓ · dep budget 1/5, 10/12, 10/40 ✓ · differential replay native==wasm ✓ · purity + host-isolation greps ✓ — all via `pwsh -File tools/gates.ps1`
 
-### NEXT (unchanged BOOTSTRAP order)
-**Row 5: values** — Blank/Bool/Number/Decimal128/Text/Error(+origin), compat vs strict coercion, unit vectors including the Excel-quirk cases. Then Row 6 formula engine (60 functions), Row 7 dep graph + recalc bench.
-
-Carry into Row 5: `Value` is what tiles pack, so adding `Decimal128`/`Date` changes `CellPack`. Add the homogeneous packed variants there rather than widening everything to `Tagged` — and re-run `tools/tile-bench`, because A-001's 8.425 B/cell is a `Number`-only figure.
+### NEXT AFTER ROW 4 (done — see session 4 below)
+Row 5: values.
 
 ### ONE GATE IS ADDED BUT NOT YET PROVEN (don't report it as green)
 The `supply-chain` CI job (cargo-deny + cargo-audit) is written and `deny.toml` is committed, but it **has never been executed**. `cargo install cargo-deny` fails on this host: the windows-gnu toolchain here has no `dlltool.exe`, which cargo-deny's own dependency tree needs. Our crates are unaffected — this is a limitation of building that third-party tool locally, not of the workspace. Don't burn time retrying it on Windows; it will first run for real on CI's `ubuntu-latest`.
 What *was* verified by hand, since the licence check is the likeliest failure: all 10 dependencies are `BSD-2-Clause`, `MIT OR Apache-2.0`, `CC0-1.0 OR Apache-2.0 OR Apache-2.0 WITH LLVM-exception`, or `CC0-1.0 OR MIT-0 OR Apache-2.0` — every one satisfiable from `deny.toml`'s allow list. Sources are crates.io only, and nothing in the `bans` deny list is present.
 
-The TD-09 redesign is *not* a Row-5 prerequisite (nothing above it depends on promotion granularity), but it must land before Q2 — do it when a row naturally touches tile metadata, or explicitly as its own unit if none does.
+## Session 4 — Row 5: value lattice · DONE
+
+**Row 5 is built and proven** (`crates/usk-types/src/decimal.rs`, `crates/usk-types/src/coerce.rs`, 24 new tests in `crates/usk-types/tests/values.rs`). 38 tests total, all gates green.
+
+### What shipped
+- **`Decimal`** — exact base-10 currency arithmetic: `{i128 coefficient, i16 exponent}`, canonically normalised, 38 significant digits, exact `+ − ×`, exact comparison, half-even division. Pure integer math, no float path, no panics (overflow → `None` → `#NUM!`).
+- **`CellError { kind, origin }`** — errors carry *why*. `Origin` is `Authored | Coercion{from,to} | Arithmetic{op} | Propagated`, and it survives propagation through arithmetic, which is what makes "where did this `#VALUE!` come from" answerable.
+- **`Profile::{Compat, Strict}`** — input coercion, arithmetic coercion, and `Number`/`Decimal` promotion. Promotion is lossless-only: a `Number` joins the exact domain solely when its *true* binary value fits in 38 decimal digits.
+- **Packed decimal tiles** — `CellPack::Decimals`, the carry-forward item from Row 4.
+
+### Evidence worth reading
+- `gene_symbol_survives_strict_and_is_mangled_by_compat` — `"1E2"` becomes `Number(100)` under compat (Excel's real behaviour, the one that made the HUGO committee rename genes) and stays `Text` under strict. This is the row's reason for existing.
+- `cent_reconciliation_has_no_phantom_pennies` — 100 × `0.01` is exactly `1`, where `f64` drifts.
+- `float_to_decimal_conversion_refuses_inexact_values` — `0.1_f64` does **not** convert, because it is really `0.1000000000000000055…`. My first implementation used float scaling and wrongly claimed it did; conversion now works on the float's bits.
+- `existing_value_encodings_are_byte_stable`, plus the unchanged replay-corpus hashes (`77e5b1bf…`, `e6cc2757…`) — proof the two new variants were genuinely additive, not merely intended to be.
+
+### Two things I got wrong and fixed (both worth knowing)
+1. **Excel's "15-digit quirk" is two rules.** A single 15-significant-digit rounding does not produce `=0.1+0.2-0.3 → 0`; that case is catastrophic cancellation and needs the *operand magnitude*, not just the result. Split into `compat_round_15` (display) and `compat_final_adjust` (evaluation). See D-041.
+2. **Scale-round-unscale is wrong at the extremes.** `f64` holds powers of ten exactly only to `10^22`, so a built-up factor rounded `1e300` to `9.999999999999978e299`. `compat_round_15` is now a format-and-reparse round trip, which is exact *and* platform-identical (`core`'s float code is pure Rust and locale-free).
+
+### Measured (MEASUREMENTS.md)
+`size_of::<Value>()` grew 32 → 48 B (`i128` alignment), landing **only** on the tagged path. Per cell: `Number` 8.5 B · `Decimal` 32.5 B · `Text` 56.1 B — giving currency its own packed layout saves 42% over the tagged fallback. **A-001 did not regress**: the 10M-cell numeric figure is byte-identical at 8.425 B/cell.
+
+### DECISIONS (docs/43)
+ADR-035 `Decimal` is a scaled integer, explicitly *not* IEEE decimal128 (with both rejected alternatives) · D-041 the two compat rules and the unvalidated threshold · D-042 six of the lattice's variants ship now, the rest with the rows that need them.
+
+### DEBT (docs/44)
+TD-12 not-IEEE-decimal128 · TD-13 `compat_final_adjust`'s threshold is documentation-derived, not oracle-captured — it belongs in the first Excel COM capture batch (ADR-024, A-007).
+
+### GATES STATUS
+fmt ✓ · clippy 0 warnings ✓ · **tests 38/38 ✓** · no_std wasm32 kernel build ✓ · dep budget 1/5, 10/12, 10/40 ✓ · differential replay native==wasm ✓ · purity + host-isolation greps ✓ — all via `pwsh -File tools/gates.ps1`
+
+### NEXT (unchanged BOOTSTRAP order)
+**Row 6: formula engine** — lexer → Pratt parser → CST → AST → binder, and 60 functions (arith, logical, text, date core, SUM/AVERAGE/COUNT/MIN/MAX/IF/AND/OR/NOT/CONCAT/LEFT/RIGHT/MID/LEN/TRIM/UPPER/LOWER/ROUND family, VLOOKUP/XLOOKUP/INDEX/MATCH, SUMIF/COUNTIF/SUMIFS/COUNTIFS, IFERROR, TODAY/NOW as materialized volatiles). Proof: function conformance vectors + error-propagation tests.
+
+Carry into Row 6:
+- `coerce::arith` already provides binary arithmetic with profile-driven coercion, decimal promotion and error propagation. The evaluator should call it, not re-implement it.
+- Date functions need a `Date`-vs-serial decision. docs/04 lists `Date`/`DateTime`/`Duration` as real types and the archive agrees ("dates are real types, not serial numbers"), with export mapping back to serials. Excel's 1900-leap-year fiction is a `compat` concern (docs/32) and belongs in the date↔serial conversion, not in the type.
+- `Origin::Propagated` is the variant to extend with the source cell once formulas can reference one (D-042).
+- Every new `Value` variant costs the tagged path 48 B/cell — re-run `tools/tile-bench` after adding any.
+- Volatiles (`TODAY`/`NOW`) must be *materialized*, never read from an ambient clock: DP-A2 forbids ambient time in kernel paths, and ADR-009 puts them behind the Calculation Authority.
+
+TD-09 (tile promotion granularity, A-002's failure) is still open and still not a prerequisite for Row 6 — but it must land before Q2.

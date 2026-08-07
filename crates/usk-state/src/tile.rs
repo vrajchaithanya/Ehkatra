@@ -22,7 +22,7 @@ use alloc::vec::Vec;
 use core::borrow::Borrow;
 use core::mem::size_of;
 use usk_oplog::{Op, Payload};
-use usk_types::{ActorId, Lamport, OpId, Value};
+use usk_types::{ActorId, Decimal, Lamport, OpId, Value};
 
 /// Rows per tile (docs/14; frozen by ADR-005 as part of tile granularity).
 pub const TILE_ROWS: u32 = 256;
@@ -170,14 +170,35 @@ impl Presence {
 enum CellPack {
     /// The numeric fast path: 8 bytes per cell, no tag, no indirection.
     Numbers(Vec<f64>),
-    /// Mixed-type tile: 32 bytes per cell.
+    /// The currency fast path: 18 bytes of payload per cell (padded to 32),
+    /// still far below the tagged union and, unlike it, exact.
+    Decimals(Vec<Decimal>),
+    /// Mixed-type tile.
     Tagged(Vec<Value>),
 }
 
 impl CellPack {
+    /// The packed variant this value can live in, if any.
+    fn kind_of(value: &Value) -> Option<Kind> {
+        match value {
+            Value::Number(_) => Some(Kind::Numbers),
+            Value::Decimal(_) => Some(Kind::Decimals),
+            _ => None,
+        }
+    }
+
+    fn empty(kind: Kind) -> CellPack {
+        match kind {
+            Kind::Numbers => CellPack::Numbers(Vec::new()),
+            Kind::Decimals => CellPack::Decimals(Vec::new()),
+            Kind::Tagged => CellPack::Tagged(Vec::new()),
+        }
+    }
+
     fn len(&self) -> usize {
         match self {
             CellPack::Numbers(v) => v.len(),
+            CellPack::Decimals(v) => v.len(),
             CellPack::Tagged(v) => v.len(),
         }
     }
@@ -185,53 +206,64 @@ impl CellPack {
     fn get(&self, rank: usize) -> Value {
         match self {
             CellPack::Numbers(v) => Value::Number(v[rank]),
+            CellPack::Decimals(v) => Value::Decimal(v[rank]),
             CellPack::Tagged(v) => v[rank].clone(),
         }
     }
 
-    /// Widens a packed numeric tile to a tagged one. One-way in v0.1: a tile
-    /// that has ever held a non-number stays tagged, because narrowing back
-    /// would need a full scan on every write for no measured benefit.
+    /// Widens a packed tile to a tagged one. One-way in v0.1: a tile that has
+    /// ever held a foreign type stays tagged, because narrowing back would need
+    /// a full scan on every write for no measured benefit.
+    ///
+    /// Note a `Number` landing in a `Decimals` tile widens it rather than
+    /// converting: `f64` → decimal is only exact for some values, and a storage
+    /// layer must never make that judgement silently. `Profile::to_decimal`
+    /// is where that decision belongs, in front of the store.
     fn widen(&mut self) {
-        if let CellPack::Numbers(v) = self {
-            let mut tagged = Vec::with_capacity(v.capacity());
-            for n in v.iter() {
-                tagged.push(Value::Number(*n));
-            }
-            *self = CellPack::Tagged(tagged);
-        }
+        let tagged: Vec<Value> = match self {
+            CellPack::Tagged(_) => return,
+            CellPack::Numbers(v) => v.iter().map(|n| Value::Number(*n)).collect(),
+            CellPack::Decimals(v) => v.iter().map(|d| Value::Decimal(*d)).collect(),
+        };
+        *self = CellPack::Tagged(tagged);
     }
 
     fn insert(&mut self, rank: usize, value: Value) {
-        if let (CellPack::Numbers(v), Value::Number(n)) = (&mut *self, &value) {
-            v.insert(rank, *n);
-            return;
+        match (&mut *self, &value) {
+            (CellPack::Numbers(v), Value::Number(n)) => return v.insert(rank, *n),
+            (CellPack::Decimals(v), Value::Decimal(d)) => return v.insert(rank, *d),
+            _ => {}
         }
         self.widen();
-        match self {
-            CellPack::Tagged(v) => v.insert(rank, value),
-            // Unreachable: `widen` guarantees Tagged, and the Numbers/Number
-            // pair returned above. Written as a no-op rather than a panic
-            // because the kernel never panics across a boundary (DP-A10).
-            CellPack::Numbers(_) => {}
+        // `widen` guarantees Tagged; doing nothing otherwise is deliberate,
+        // because the kernel never panics across a boundary (DP-A10).
+        if let CellPack::Tagged(v) = self {
+            v.insert(rank, value);
         }
     }
 
     fn replace(&mut self, rank: usize, value: Value) {
-        if let (CellPack::Numbers(v), Value::Number(n)) = (&mut *self, &value) {
-            v[rank] = *n;
-            return;
+        match (&mut *self, &value) {
+            (CellPack::Numbers(v), Value::Number(n)) => {
+                v[rank] = *n;
+                return;
+            }
+            (CellPack::Decimals(v), Value::Decimal(d)) => {
+                v[rank] = *d;
+                return;
+            }
+            _ => {}
         }
         self.widen();
-        match self {
-            CellPack::Tagged(v) => v[rank] = value,
-            CellPack::Numbers(_) => {}
+        if let CellPack::Tagged(v) = self {
+            v[rank] = value;
         }
     }
 
     fn heap_bytes(&self) -> usize {
         match self {
             CellPack::Numbers(v) => v.capacity() * size_of::<f64>(),
+            CellPack::Decimals(v) => v.capacity() * size_of::<Decimal>(),
             CellPack::Tagged(v) => {
                 let mut n = v.capacity() * size_of::<Value>();
                 // Interned strings arrive with compaction (docs/14 §Interning);
@@ -245,6 +277,14 @@ impl CellPack {
             }
         }
     }
+}
+
+/// Which packed layout a tile is using.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Kind {
+    Numbers,
+    Decimals,
+    Tagged,
 }
 
 /// Reduces a cell's retained losers to **one value per competing actor**, and
@@ -315,14 +355,12 @@ struct Tile {
 }
 
 impl Tile {
-    fn new(promoted: bool, first_is_number: bool) -> Self {
+    /// A tile adopts the packed layout of its first value, so a numeric or
+    /// currency column never pays the tagged-union price.
+    fn new(promoted: bool, kind: Kind) -> Self {
         Tile {
             presence: Presence::default(),
-            payload: if first_is_number {
-                CellPack::Numbers(Vec::new())
-            } else {
-                CellPack::Tagged(Vec::new())
-            },
+            payload: CellPack::empty(kind),
             meta: if promoted {
                 Meta::Promoted(BTreeMap::new())
             } else {
@@ -420,10 +458,12 @@ impl TileStore {
         let key = TileKey::of(row_slot, col_slot);
         let idx = cell_index(row_slot, col_slot);
         let promoted = self.promoted.contains(&key);
-        let tile = self
-            .tiles
-            .entry(key)
-            .or_insert_with(|| Box::new(Tile::new(promoted, matches!(value, Value::Number(_)))));
+        let tile = self.tiles.entry(key).or_insert_with(|| {
+            Box::new(Tile::new(
+                promoted,
+                CellPack::kind_of(&value).unwrap_or(Kind::Tagged),
+            ))
+        });
 
         let present = tile.presence.contains(idx);
         // Append fast path: bulk loads walk row-major, so the new index is

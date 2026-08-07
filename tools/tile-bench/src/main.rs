@@ -15,7 +15,7 @@
 
 use usk_oplog::{Anchor, Op, Payload};
 use usk_state::State;
-use usk_types::{ActorId, ColId, OpId, RowId, Value};
+use usk_types::{ActorId, ColId, Decimal, OpId, RowId, Value};
 
 /// How a second author's edits land on top of a sheet someone else authored.
 ///
@@ -45,6 +45,41 @@ impl Pattern {
     }
 }
 
+/// Which value type fills the grid — one per packed tile layout (docs/14), so
+/// the cost of each layout is measured rather than assumed (Row 5).
+#[derive(Clone, Copy)]
+enum Stored {
+    /// `CellPack::Numbers` — packed f64.
+    Number,
+    /// `CellPack::Decimals` — packed exact base-10, the currency column.
+    Decimal,
+    /// `CellPack::Tagged` — the mixed-type fallback.
+    Text,
+}
+
+impl Stored {
+    fn make(self, v: f64) -> Value {
+        match self {
+            Stored::Number => Value::Number(v),
+            // Cents, which is what a currency column actually holds.
+            Stored::Decimal => Value::Decimal(Decimal::new((v * 100.0) as i128, -2)),
+            Stored::Text => Value::Text(alloc_text(v)),
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Stored::Number => "Number  (packed f64)",
+            Stored::Decimal => "Decimal (packed exact base-10)",
+            Stored::Text => "Text    (tagged union)",
+        }
+    }
+}
+
+fn alloc_text(v: f64) -> String {
+    format!("{v}")
+}
+
 /// Yields a fully-ordered op stream for a `rows`x`cols` grid: actor 1 authors
 /// every cell, then a second actor re-writes `contested_in_n` of them according
 /// to `pattern`. Called twice by `State::replay_sorted`, and deterministic, so
@@ -54,6 +89,7 @@ fn corpus(
     cols: usize,
     contested_in_n: usize,
     pattern: Pattern,
+    stored: Stored,
 ) -> impl Iterator<Item = Op> {
     let structural = (0..rows)
         .map(move |i| Op {
@@ -109,9 +145,7 @@ fn corpus(
                 actor: ActorId(1),
                 counter: (rows + c) as u64,
             }),
-            // Numeric: the case the packed f64 path and the 80 MB budget line
-            // in docs/14 are both about.
-            value: Value::Number(v),
+            value: stored.make(v),
         },
     };
 
@@ -151,7 +185,11 @@ fn corpus(
 }
 
 fn build(rows: usize, cols: usize, contested_in_n: usize, pattern: Pattern) -> State {
-    State::replay_sorted(|| corpus(rows, cols, contested_in_n, pattern))
+    State::replay_sorted(|| corpus(rows, cols, contested_in_n, pattern, Stored::Number))
+}
+
+fn build_typed(rows: usize, cols: usize, stored: Stored) -> State {
+    State::replay_sorted(|| corpus(rows, cols, 0, Pattern::Solo, stored))
 }
 
 fn main() {
@@ -171,6 +209,25 @@ fn main() {
     println!("bytes per cell : {:.3}", bytes as f64 / cells as f64);
     println!("state hash     : {}", state.state_hash().to_hex());
     drop(state);
+
+    // Row 5 added a second packed layout and grew `Value`. Measure all three
+    // layouts on the same grid rather than reasoning about struct sizes.
+    println!("\n== Row 5: cost per cell by stored type (1024 x 256) ==");
+    println!("size_of::<Value>() = {} B", size_of::<Value>());
+    println!(
+        "{:<34} {:>12} {:>10}",
+        "stored type", "heap bytes", "B/cell"
+    );
+    for stored in [Stored::Number, Stored::Decimal, Stored::Text] {
+        let s = build_typed(1_024, 256, stored);
+        let n = 1_024 * 256;
+        println!(
+            "{:<34} {:>12} {:>10.1}",
+            stored.name(),
+            s.cell_heap_bytes(),
+            s.cell_heap_bytes() as f64 / n as f64
+        );
+    }
 
     // A-002 asks for <1% of cells promoted. Promotion is per tile, so the
     // number that matters is not how many cells are contested but how many

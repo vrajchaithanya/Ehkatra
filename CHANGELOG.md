@@ -1,5 +1,15 @@
 # Changelog — Architecture Repository
 
+## 2026-08-07 (session 4) — BOOTSTRAP Row 5: value lattice
+- **`Decimal`**: exact base-10 currency arithmetic — 128-bit coefficient + base-10 exponent, canonically normalised, 38 significant digits, exact `+ − ×` and comparison, half-even division, no float path, no panics. `0.1 + 0.2` is exactly `0.3`; 100 cents is exactly 1.
+- **Error provenance**: `Value::Error` now carries `CellError { kind, origin }`, where `Origin` distinguishes an authored error from a refused coercion, undefined arithmetic, or propagation — and the origin survives propagation through arithmetic.
+- **`Profile::{Compat, Strict}`**: Excel's coercion rules including the gene-symbol mangling (`"1E2"` → `100`) versus no-silent-conversion; `Number`/`Decimal` promotion that only promotes when lossless; both Excel 15-digit rules (`compat_round_15` for display, `compat_final_adjust` for cancellation).
+- **Packed decimal tiles** (`CellPack::Decimals`): 32.5 B/cell against 56.1 for the tagged fallback.
+- Encoding stayed additive: tags `0x00`–`0x05` are byte-identical and both replay-corpus hashes are unchanged. `size_of::<Value>()` 32 → 48 B, on the tagged path only; A-001's numeric figure did not move.
+- New decisions: ADR-035 (`Decimal` is a scaled integer, explicitly not IEEE 754-2008 decimal128, with alternatives), D-041 (Excel's "15-digit quirk" is two rules; the cancellation threshold is documentation-derived, not oracle-captured), D-042 (Row 5 ships six lattice variants; the rest land with the rows needing them).
+- New debt: TD-12 not-IEEE-decimal128, TD-13 unvalidated compat threshold.
+- 24 new tests (38 total), all gates green.
+
 ## 2026-08-07 (session 3) — BOOTSTRAP Row 4: tile store; A-002 fails
 - **Row 4 built**: `usk_state::tile` — 256×64 tiles in identity space, presence bitmap, payload packed dense over present cells (`f64` fast path / tagged union), 24-byte per-tile causal summary with promotion on contested cells. `State` no longer holds a flat cell map. 9 new tests (14 total), including a reference-model equivalence proof.
 - **A-001 confirmed (single-author)**: 10M numeric cells = 84.2 MB structural / 93.1 MB OS peak, 8.425 B/cell, vs a 400 MB budget.

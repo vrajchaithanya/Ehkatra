@@ -60,6 +60,44 @@ shipped here is the improved version, and it still fails the assumption.
 Consequence executed per docs/42: A-002 → Failed, tile-granularity redesign is
 now a Q1 gate (docs/44 debt entry, docs/43 D-039).
 
+## Row 5 — value lattice (`tools/tile-bench`, release, same machine)
+
+### Cost per cell by stored type (1024 × 256 = 262,144 cells)
+| Stored type | Tile layout | Heap bytes | **B/cell** |
+|---|---|---|---|
+| `Number` | `CellPack::Numbers` (packed f64) | 2,218,496 | **8.5** |
+| `Decimal` | `CellPack::Decimals` (packed exact base-10) | 8,509,952 | **32.5** |
+| `Text` | `CellPack::Tagged` (union + string bytes) | 14,712,528 | **56.1** |
+
+`size_of::<Value>()` = **48 B**, up from 32 B before this row. The growth is
+`i128` alignment in `Decimal`, and it lands only on the *tagged* path — the
+numeric fast path is untouched, which the A-001 re-run confirms below. Giving
+currency its own packed layout is what keeps it at 32.5 rather than 56.1: a 42%
+saving on the column type this row exists to serve.
+
+### A-001 re-run after Row 5 · **no regression**
+| | Row 4 | Row 5 |
+|---|---|---|
+| 10M numeric cells, structural | 84,245,216 B (8.425 B/cell) | **identical** |
+| OS peak working set | 93.1 MB | 92.7 MB |
+| Grid state hash | `be64a419…` | **identical** |
+
+Adding two variants to `Value` changed nothing on the numeric path, which is
+the property that keeps A-001 valid across the row.
+
+### Encoding stability across the row · the DP-A4 evidence
+| | |
+|---|---|
+| replay-check oplog hash | `77e5b1bf…` — **unchanged** |
+| replay-check state hash | `e6cc2757…` — **unchanged** |
+
+Row 5 added a value variant (`Decimal`, tag `0x06`) and extended the error
+payload with an origin, and the 5,000-op corpus still hashes bit-identically.
+That is the proof the extension was genuinely additive rather than merely
+intended to be: tags `0x00`–`0x05` produce the same bytes they did before.
+Pinned independently by `existing_value_encodings_are_byte_stable`, which
+asserts the literal byte sequences.
+
 ### Determinism after the tile refactor
 | | |
 |---|---|
