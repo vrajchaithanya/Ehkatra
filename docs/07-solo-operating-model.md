@@ -29,7 +29,7 @@ One engineer, enterprise-grade output, years of maintenance. The design rule tha
 |---|---|---|
 | No CI existed | every gate was manual = solo death by toil | **FIXED this session**: `.github/workflows/ci.yml` — fmt, clippy, tests, differential replay (native+wasm32), kernel-purity greps |
 | wasm32 determinism unproven (A-005/DP-A2) | the web-first bet rested on it | **FIXED**: replay-check binary, 5000-op corpus, bit-identical hashes measured |
-| No dependency/supply-chain scanning | solo devs get owned via deps | ADD next session: cargo-deny + cargo-audit + OSV in CI (1 hour) |
+| No dependency/supply-chain scanning | solo devs get owned via deps | **Session 3: `deny.toml` + a `supply-chain` CI job (cargo-deny + cargo-audit) added — but not yet executed.** cargo-deny will not build on the windows-gnu dev host (no `dlltool.exe`); it first runs for real on CI. Licences hand-verified in the meantime (all 10 deps within the allow list). Status: *added, unproven* — not green until CI says so (DP-F5). |
 | No release automation | manual releases don't happen reliably solo | ADD at v0.2: tag-driven release workflow + SBOM |
 | No secrets story for server | leaked tokens end the company | Design decided: env-injected, never in files; documented in 30 at server milestone |
 | No browser-matrix testing | web-first without it is faith | ADD at Q2 shell: Playwright against Chrome/Edge/Firefox/WebKit (free, automated); budget gates run headless-Chromium + WebKit |

@@ -82,4 +82,8 @@ fmt ✓ · clippy 0 warnings ✓ · **tests 14/14 ✓** · no_std wasm32 kernel 
 
 Carry into Row 5: `Value` is what tiles pack, so adding `Decimal128`/`Date` changes `CellPack`. Add the homogeneous packed variants there rather than widening everything to `Tagged` — and re-run `tools/tile-bench`, because A-001's 8.425 B/cell is a `Number`-only figure.
 
+### ONE GATE IS ADDED BUT NOT YET PROVEN (don't report it as green)
+The `supply-chain` CI job (cargo-deny + cargo-audit) is written and `deny.toml` is committed, but it **has never been executed**. `cargo install cargo-deny` fails on this host: the windows-gnu toolchain here has no `dlltool.exe`, which cargo-deny's own dependency tree needs. Our crates are unaffected — this is a limitation of building that third-party tool locally, not of the workspace. Don't burn time retrying it on Windows; it will first run for real on CI's `ubuntu-latest`.
+What *was* verified by hand, since the licence check is the likeliest failure: all 10 dependencies are `BSD-2-Clause`, `MIT OR Apache-2.0`, `CC0-1.0 OR Apache-2.0 OR Apache-2.0 WITH LLVM-exception`, or `CC0-1.0 OR MIT-0 OR Apache-2.0` — every one satisfiable from `deny.toml`'s allow list. Sources are crates.io only, and nothing in the `bans` deny list is present.
+
 The TD-09 redesign is *not* a Row-5 prerequisite (nothing above it depends on promotion granularity), but it must land before Q2 — do it when a row naturally touches tile metadata, or explicitly as its own unit if none does.
