@@ -218,3 +218,45 @@ Carry into Row 8:
 - `usk-state` already has the identity-interval machinery (`SlotMap`, `TileKey`); Row 8 is where `usk-calc` starts speaking it, which also means `usk-calc` finally depends on `usk-state` rather than carrying its own `Sheet`.
 - The A-002 tile-promotion redesign (TD-09) is **still open** and must land before Q2.
 
+## Session 7 — Row 8: identity references · DONE
+
+**Row 8 is built and proven** — `crates/usk-calc/src/refs.rs` plus `full_row_order`/`full_col_order` on `State`, with 11 tests in `crates/usk-calc/tests/identity_refs.rs`. **96 tests total**, all gates green.
+
+### What shipped
+- **`IdRange`** — a reference is a pair of endpoint *identities* with an `AnchorMode`. There is no position anywhere in the type; that is the point (DP-A6).
+- **`Binder`** — A1 view ordinals become identities once, at bind time (docs/04 invariant 3).
+- **`Axis`** — the axis order **including tombstones**, which is what makes "re-anchor inward" answerable.
+- **`StateGrid`** — reads a `State` through the formula engine's `Grid` port, identity-first.
+
+### THE canonical test passes
+`concurrent_row_insert_against_sum_converges`: Alice inserts a row inside the span of `SUM(A1:A10)` while Bob overwrites cells in it, concurrently, and the four ops arrive at two replicas in opposite orders. Both replicas reach the **same state hash**, the reference resolves to the **same eleven rows** on both, and the sum agrees (1145). Nothing rewrote the formula.
+
+The five docs/11 shift rules each have their own test, and all five fall out of one resolution rule rather than being implemented separately: insert above leaves the span · insert inside extends it · insert below stays outside · delete inside shrinks it · delete an endpoint re-anchors inward · everything deleted is `#REF!`.
+
+### Property coverage
+- `resolution_is_always_a_contiguous_live_run` — 200 seeded insert/delete sequences; a resolved reference is always a contiguous run of live rows in axis order, never containing a tombstone.
+- `reference_resolution_is_arrival_order_independent` — 60 shuffled arrival orders of the same op set, identical resolution and identical answer every time.
+
+### One thing I got wrong and fixed
+The first `Axis` carried the endpoints' **bind-time ordinals** as a hint for re-anchoring. That is wrong: ordinals shift under later edits, so the hint quietly decays into a lie. Exposing the tombstoned order from `usk-state` removed the hint entirely — the deleted endpoint still marks where the interval reached, and the live order alone has forgotten it.
+
+### DECISIONS (docs/43)
+D-051 references resolve against the tombstone-retaining order (with the rejected ordinal-hint approach) · D-052 seeded LCG sweeps instead of `proptest`, recorded as a deviation from a stack decision with its reasoning and revisit trigger · D-053 `usk-calc`'s ordinal `Sheet` coexists with the identity path for now.
+
+### DEBT (docs/44)
+TD-21 two addressing models in one crate — resolve at Row 9.
+
+### GATES STATUS
+fmt ✓ · clippy 0 warnings ✓ · **tests 96/96 ✓** · no_std wasm32 kernel build ✓ · dep budget 1/5, 10/12, 10/40 ✓ · differential replay native==wasm ✓ · purity + host-isolation greps ✓
+
+Both replay hashes unchanged (`77e5b1bf…`, `e6cc2757…`) — Row 8 added a read path and an accessor, and moved no op encoding.
+
+### NEXT (unchanged BOOTSTRAP order)
+**Row 9: reducer + commands** — `set_value`/`set_formula`/`insert`/`delete` rows-cols/`clear`/`undo`/`redo`, with per-actor labeled undo groups. Proof: undo-law tests (undo∘do = id on the actor's own scope).
+
+Carry into Row 9:
+- The reducer is `reduce_vN(Command, &Snapshot) → Vec<Op>`, **pure and versioned**, and remote replicas never see Commands (ADR-001, DP-A7). It is also where copy/fill rewrites relative anchors — `AnchorMode` is already carried on `IdRange` for exactly that.
+- Selective undo is *inverse against current state*, not a stack replay (docs/11): registers restore only if the actor's own write still wins, and structural undo narrows rather than destroys others' work (DP-A12).
+- This is the row that closes **TD-21** (two addressing models) and **TD-18** (no incremental regrouping) — both are waiting on edits becoming ops.
+- TD-09 (tile promotion granularity, A-002's failure) is **still open** and must land before Q2.
+

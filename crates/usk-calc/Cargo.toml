@@ -7,3 +7,5 @@ license.workspace = true
 [dependencies]
 usk-types = { path = "../usk-types" }
 usk-formula = { path = "../usk-formula" }
+usk-state = { path = "../usk-state" }
+usk-oplog = { path = "../usk-oplog" }

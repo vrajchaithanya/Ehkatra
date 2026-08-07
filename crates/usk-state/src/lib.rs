@@ -66,6 +66,28 @@ impl AxisSeq {
     fn is_live(&self, id: &OpId) -> bool {
         !self.tombstones.contains_key(id)
     }
+
+    /// The full axis order **including tombstones**, each tagged with whether
+    /// it is still live.
+    ///
+    /// Needed by identity references (docs/11): when a range endpoint is
+    /// deleted the reference re-anchors *inward*, and "inward" is only
+    /// meaningful against the order the tombstone still occupies. The live
+    /// order alone cannot answer it.
+    fn full_order(&self) -> Vec<(OpId, bool)> {
+        let mut out = Vec::new();
+        self.walk_full(None, &mut out);
+        out
+    }
+
+    fn walk_full(&self, key: Option<OpId>, out: &mut Vec<(OpId, bool)>) {
+        if let Some(kids) = self.children.get(&key) {
+            for (_, id) in kids {
+                out.push((*id, self.is_live(id)));
+                self.walk_full(Some(*id), out);
+            }
+        }
+    }
 }
 
 /// The workbook state (single sheet in v0.1).
@@ -153,6 +175,25 @@ impl State {
     /// Live row identities in display order.
     pub fn row_order(&self) -> Vec<RowId> {
         self.rows.live_order().into_iter().map(RowId).collect()
+    }
+
+    /// Row identities in axis order, tombstones included, each tagged live.
+    /// The substrate for identity-interval references (docs/11).
+    pub fn full_row_order(&self) -> Vec<(RowId, bool)> {
+        self.rows
+            .full_order()
+            .into_iter()
+            .map(|(id, live)| (RowId(id), live))
+            .collect()
+    }
+
+    /// Column identities in axis order, tombstones included.
+    pub fn full_col_order(&self) -> Vec<(ColId, bool)> {
+        self.cols
+            .full_order()
+            .into_iter()
+            .map(|(id, live)| (ColId(id), live))
+            .collect()
     }
 
     /// Live column identities in display order.

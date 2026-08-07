@@ -1,5 +1,15 @@
 # Changelog — Architecture Repository
 
+## 2026-08-07 (session 7) — BOOTSTRAP Row 8: identity references
+- **`IdRange`**: a reference is a pair of endpoint identities with an `AnchorMode` — no position in the type at all (DP-A6, docs/04 invariant 3).
+- **The canonical test passes**: Alice inserts a row inside `SUM(A1:A10)` while Bob overwrites cells in it, concurrently, ops arriving at two replicas in opposite orders. Same state hash, same eleven resolved rows, same answer, and nothing rewrote the formula.
+- All five of docs/11's insert/delete shift rules fall out of one resolution rule rather than being implemented separately, each with its own test.
+- `State` now exposes the axis order **including tombstones**, which is what makes "re-anchor inward" answerable; a first attempt using bind-time ordinal hints was wrong, because ordinals shift under later edits.
+- Property coverage: 200 seeded insert/delete sequences and 60 shuffled arrival orders.
+- New decisions: D-051 (resolve against the tombstone-retaining order), D-052 (seeded LCG sweeps instead of `proptest`, recorded as a deviation from a stack decision), D-053 (ordinal `Sheet` coexists with the identity path until Row 9).
+- New debt: TD-21 two addressing models in `usk-calc`.
+- 11 new tests (96 total); both replay hashes unchanged.
+
 ## 2026-08-07 (session 6) — BOOTSTRAP Row 7: dependency graph
 - New kernel crate **`usk-calc`**: formula groups, range-granular edges, incremental recalculation, cycle detection (docs/13).
 - **Formula groups**: nodes are R1C1 patterns, measured at **10 nodes for 100,000 formula cells**.

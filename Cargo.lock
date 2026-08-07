@@ -118,6 +118,8 @@ name = "usk-calc"
 version = "0.1.0"
 dependencies = [
  "usk-formula",
+ "usk-oplog",
+ "usk-state",
  "usk-types",
 ]
 
