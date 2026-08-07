@@ -1,0 +1,13 @@
+[package]
+name = "replay-check"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "replay-check"
+path = "src/main.rs"
+
+[dependencies]
+usk-types = { path = "../../crates/usk-types" }
+usk-oplog = { path = "../../crates/usk-oplog" }
+usk-state = { path = "../../crates/usk-state" }

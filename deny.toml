@@ -1,0 +1,46 @@
+# cargo-deny configuration — the solo stand-in for a security/licensing review
+# board (docs/07 §2, DP-E8). Anything this file permits, you personally maintain.
+
+[advisories]
+db-urls = ["https://github.com/rustsec/advisory-db"]
+yanked = "deny"
+ignore = []
+
+[licenses]
+# UNLICENSED product: every dependency must be permissively licensed. Copyleft
+# is not "review it later" — it is a deny, because a solo owner cannot absorb a
+# licence surprise at release time.
+allow = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "MIT",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "CC0-1.0",
+  "Unicode-3.0",
+  "Zlib",
+]
+confidence-threshold = 0.9
+
+[bans]
+# DP-S1 "one of each hard thing": duplicate major versions of the same crate are
+# the usual way a dependency graph doubles behind your back.
+multiple-versions = "warn"
+wildcards = "deny"
+deny = [
+  # DP-E1/DP-S5: the kernel must have no ambient I/O and must never speak to a
+  # database on the host. Denying the clients structurally beats reviewing for it.
+  { name = "tokio-postgres" },
+  { name = "postgres" },
+  { name = "diesel" },
+  { name = "sqlx" },
+  # DP-B9: no custom crypto, and no second hashing stack — blake3 is the one.
+  { name = "openssl" },
+  { name = "ring" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

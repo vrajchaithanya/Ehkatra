@@ -1,0 +1,8 @@
+[package]
+name = "usk-oplog"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+usk-types = { path = "../usk-types" }
+blake3.workspace = true

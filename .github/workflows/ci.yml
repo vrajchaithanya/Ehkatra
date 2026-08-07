@@ -1,0 +1,58 @@
+# Ehkatra CI — the automated stand-in for build/QA/release engineering (solo model).
+# Every gate here is a rule from docs/06; a red gate is a blocked merge, no human judgment needed.
+name: ci
+on:
+  push: { branches: [main] }
+  pull_request:
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # No toolchain input: rustup reads rust-toolchain.toml, which pins the
+      # exact channel, components and targets (D-034/DP-E8).
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Format (DP-C1)
+        run: cargo fmt --check
+      - name: Clippy (DP-C1)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Tests (DP-C4)
+        run: cargo test --workspace
+      - name: Differential replay gate (DP-A2)
+        run: |
+          cargo build --release -p replay-check
+          cargo build --release -p replay-check --target wasm32-wasip1
+          ./target/release/replay-check > native.txt
+          node --no-warnings tools/run-wasi.mjs target/wasm32-wasip1/release/replay-check.wasm > wasm.txt
+          diff native.txt wasm.txt
+          echo "determinism gate PASS"
+      - name: Kernel purity — no_std surface (DP-A3)
+        run: |
+          ! grep -rn "use std::" crates/*/src --include="*.rs" || (echo "std leaked into kernel" && exit 1)
+      - name: cfg placement (DP-C2)
+        run: |
+          ! grep -rn "cfg(target_os" crates/ --include="*.rs" || (echo "target_os cfg in kernel tree" && exit 1)
+      - name: Host isolation (DP-S5, docs/07 §6)
+        run: |
+          ! grep -rniE "postgres://|:5432|localhost:3000|:8080" \
+              --include="*.rs" --include="*.toml" crates ehkatra-cli tools \
+            || (echo "Ehkatra must never reference host services or common ports" && exit 1)
+      - name: no_std kernel builds without std (DP-A3)
+        run: cargo build -p usk-types -p usk-oplog -p usk-state --target wasm32-wasip1
+      - name: Complexity budget (DP-S2, docs/07 §3)
+        run: node tools/dep-budget.mjs
+
+  supply-chain:
+    # docs/07 gap register: "No dependency/supply-chain scanning — solo devs get
+    # owned via deps". Closed here (DP-E8).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: taiki-e/install-action@v2
+        with: { tool: "cargo-deny,cargo-audit" }
+      - name: Advisories, licences, bans, sources
+        run: cargo deny check
+      - name: RUSTSEC advisories
+        run: cargo audit

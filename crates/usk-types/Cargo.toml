@@ -1,0 +1,6 @@
+[package]
+name = "usk-types"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

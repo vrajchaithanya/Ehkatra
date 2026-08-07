@@ -1,0 +1,8 @@
+# Pinned per D-034 / DP-E8: the toolchain is part of the build's identity.
+# An unpinned `stable` silently changed clippy lints between sessions and broke
+# a green gate set (see PROGRESS Session 3). rustup installs this on demand, so
+# CI and this machine run the byte-same compiler.
+[toolchain]
+channel = "1.97.1"
+components = ["clippy", "rustfmt"]
+targets = ["wasm32-wasip1"]

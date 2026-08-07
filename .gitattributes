@@ -1,0 +1,6 @@
+# The repo is built on Windows and on Linux CI. Line endings are normalized to
+# LF in the object store so the two hosts see byte-identical sources — the same
+# reason DP-A2 exists, applied to the checkout.
+* text=auto eol=lf
+*.ps1 text eol=lf
+*.wasm binary
