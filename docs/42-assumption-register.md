@@ -3,8 +3,8 @@ Status: Living · Rule: no work may build on an assumption past its validation d
 
 | ID | Assumption | Load-bearing for | Validation | Date | Status |
 |---|---|---|---|---|---|
-| A-001 | 10M-cell workbook fits <400 MB working set with tiered store | desktop scale story | memory harness | Q1 W5 | Open |
-| A-002 | CRDT promotion <1% cells under realistic multi-author load | ADR-005, memory model | promotion harness, 3 patterns | Q1 W5 | Open |
+| A-001 | 10M-cell workbook fits <400 MB working set with tiered store | desktop scale story | memory harness | Q1 W5 | **Confirmed, single-author only** — 84.2 MB structural / 93.1 MB RSS at 10M cells (MEASUREMENTS.md, `tools/tile-bench`). Under A-002's measured contention it becomes ~745 MB and **fails**; re-validate after the A-002 redesign. |
+| A-002 | CRDT promotion <1% cells under realistic multi-author load | ADR-005, memory model | promotion harness, 3 patterns | Q1 W5 | **FAILED** — 0.1% contested cells promote 25% (clustered) to 100% (scattered) of cells, because one contested cell promotes its whole 16,384-cell tile. Consequence executes: tile-granularity redesign is a Q1 gate (docs/44 D-04, docs/43 D-039). |
 | A-003 | 100k-dep recalc <200 ms on 8-core via level-parallel groups | budget table | recalc bench | Q1 W7 | Open |
 | A-004 | Keystroke→paint <16 ms incl. a11y tree diff on ref hw | flagship UX claim | Q2 renderer bench | Q2 | Open |
 | A-005 | wasm32 holds a 1M-cell working set in Safari (web-viewer future) | H2 web decision | wasm harness | Q1 W6 | Open |

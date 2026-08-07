@@ -96,6 +96,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
+name = "tile-bench"
+version = "0.1.0"
+dependencies = [
+ "usk-oplog",
+ "usk-state",
+ "usk-types",
+]
+
+[[package]]
 name = "usk-oplog"
 version = "0.1.0"
 dependencies = [

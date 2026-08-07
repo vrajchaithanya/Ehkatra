@@ -55,5 +55,31 @@ Sessions 1–2 were built in a cloud environment. Re-run here from scratch:
 ### GATES STATUS
 fmt ✓ · clippy 0 warnings ✓ · tests 5/5 ✓ · no_std wasm32 kernel build ✓ · dep budget 1/5, 10/12, 10/40 ✓ · differential replay native==wasm ✓ · purity + host-isolation greps ✓ — **all via `pwsh -File tools/gates.ps1`**
 
+## Session 3 (cont.) — Row 4: tile store · DONE, and it failed an assumption
+
+**Row 4 is built and proven** (`crates/usk-state/src/tile.rs`, 9 new tests in `crates/usk-state/tests/tiles.rs`, harness `tools/tile-bench`). `State` no longer keeps a flat `BTreeMap` of cells; cells live in 256×64 tiles with a presence bitmap, a payload packed dense over present cells (`f64` when type-uniform, tagged otherwise), and CRDT metadata that is a 24-byte causal summary until a contested cell forces promotion.
+
+### What proves it
+- `tile_store_matches_reference_semantics` — a randomized 3-actor corpus run through **both** the tile store and an independently-written flat reference model of ADR-006 semantics; they must agree on every winner and every retained loser. This is the test that makes the refactor a proof rather than a hope.
+- `tiled_state_converges_under_reordering` · `co_located_authors_do_not_promote` · `contested_cell_promotes_its_tile` · `single_author_region_never_promotes` · `inserting_a_row_never_rekeys_existing_tiles` · `numeric_tiles_pack_tighter_than_mixed_tiles` · `cells_group_into_256x64_tiles` · `out_of_order_writes_keep_the_payload_dense`.
+- The oplog hash is **unchanged** (`77e5b1bf…`) across the whole refactor — the op algebra did not move. The state hash **did** change by design (`4516044e…` → `e6cc2757…`): cells now fold in tile-major order, which is docs/10's tile-Merkle direction (D-040).
+
+### THE HEADLINE: A-002 FAILED — read this before building Row 5
+- **A-001 passes, single-author**: 10M numeric cells = **84.2 MB structural / 93.1 MB OS peak**, 8.425 B/cell, against a 400 MB budget. Matches docs/14's ~81 MB prediction.
+- **A-002 fails**: the claim was *promotion <1% of cells*. Measured: **0.1% of cells contested promotes 25% (clustered) to 100% (scattered) of cells**. A tile is 16,384 cells and one contested cell promotes all of them.
+- The two interact: under scattered contention memory goes 8.4 → **74.5 B/cell**, which puts 10M cells at **~745 MB — 1.9× over budget**. A-001 holds only for single-author workbooks.
+- I first shipped a coarser predicate (any two actors writing the same *tile*) and measured 100% promotion everywhere; the per-cell predicate in the tree now is the improved version, and it *still* fails. So this is ADR-005's tile granularity under question, not an implementation bug.
+- Consequence executed per docs/42: **A-002 → Failed**, tile-granularity redesign is a Q1 gate. Filed as TD-09 (+TD-10, TD-11) with the redesign options to weigh. Do not pick one without re-running `tools/tile-bench`.
+
+### DECISIONS (docs/43)
+ADR-034 stable identity→slot band keying (with the two rejected alternatives) · D-039 per-contested-cell promotion decided in a pre-pass, and the A-002 outcome · D-040 tile-major state hash.
+
+### GATES STATUS
+fmt ✓ · clippy 0 warnings ✓ · **tests 14/14 ✓** · no_std wasm32 kernel build ✓ · dep budget 1/5, 10/12, 10/40 ✓ · differential replay native==wasm ✓ · purity + host-isolation greps ✓ — all via `pwsh -File tools/gates.ps1`
+
 ### NEXT (unchanged BOOTSTRAP order)
-**Row 4: tile store** — 256×64 tiles, presence bitmap, packed f64/tagged payloads, per-tile causal summary + promotion; memory harness reporting bytes/cell into MEASUREMENTS.md (assumptions A-001/A-002). Then Row 5 values (Decimal128/Date + compat/strict coercion), Row 6 formula engine.
+**Row 5: values** — Blank/Bool/Number/Decimal128/Text/Error(+origin), compat vs strict coercion, unit vectors including the Excel-quirk cases. Then Row 6 formula engine (60 functions), Row 7 dep graph + recalc bench.
+
+Carry into Row 5: `Value` is what tiles pack, so adding `Decimal128`/`Date` changes `CellPack`. Add the homogeneous packed variants there rather than widening everything to `Tagged` — and re-run `tools/tile-bench`, because A-001's 8.425 B/cell is a `Number`-only figure.
+
+The TD-09 redesign is *not* a Row-5 prerequisite (nothing above it depends on promotion granularity), but it must land before Q2 — do it when a row naturally touches tile metadata, or explicitly as its own unit if none does.

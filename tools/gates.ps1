@@ -32,9 +32,13 @@ $native | ForEach-Object { Write-Host "  $_" }
 Write-Host 'determinism gate PASS'
 
 Write-Host "`n=== Kernel purity / host isolation greps ===" -ForegroundColor Cyan
+$kernelSrc = Get-ChildItem -Directory 'crates' | ForEach-Object { Join-Path $_.FullName 'src' }
+# Kernel *sources* must be no_std; integration tests are ordinary std binaries
+# that link the kernel, so they are deliberately out of scope (CI greps
+# `crates/*/src` for the same reason).
 $greps = @(
-    @{ Name = 'std leaked into kernel (DP-A3)'; Pattern = 'use std::'; Path = 'crates' },
-    @{ Name = 'target_os cfg in kernel (DP-C2)'; Pattern = 'cfg\(target_os'; Path = 'crates' },
+    @{ Name = 'std leaked into kernel (DP-A3)'; Pattern = 'use std::'; Path = $kernelSrc },
+    @{ Name = 'target_os cfg in kernel (DP-C2)'; Pattern = 'cfg\(target_os'; Path = $kernelSrc },
     @{ Name = 'host service reference (DP-S5)'; Pattern = 'postgres://|:5432|localhost:3000|:8080'; Path = 'crates', 'ehkatra-cli', 'tools' }
 )
 foreach ($g in $greps) {

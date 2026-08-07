@@ -7,10 +7,13 @@
 #![no_std]
 extern crate alloc;
 
+pub mod tile;
+
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
+use tile::{PromotionStats, TileStore};
 use usk_oplog::{Anchor, Op, OpLog, Payload};
-use usk_types::{ColId, OpId, RowId, Value};
+use usk_types::{ColId, Lamport, OpId, RowId, Value};
 
 /// One axis (rows or columns) as a neighbor-anchored ordered sequence with
 /// tombstones. Deterministic concurrent-insert resolution: children of the
@@ -65,32 +68,65 @@ impl AxisSeq {
     }
 }
 
-/// Cell register: last-writer-wins by (lamport, actor, counter), with the
-/// losing concurrent write RETAINED for conflict surfacing (ADR-006).
-#[derive(Clone, Debug, PartialEq)]
-pub struct CellReg {
-    pub winner: (u64, OpId, Value),
-    pub losers: Vec<(u64, OpId, Value)>,
-}
-
 /// The workbook state (single sheet in v0.1).
+///
+/// Cells live in the tile store (docs/14, ADR-005), not in a flat per-cell map:
+/// CRDT metadata is a per-tile causal summary until concurrency forces
+/// promotion, which is what makes a 10M-cell workbook fit its memory budget.
 #[derive(Default, Clone)]
 pub struct State {
     rows: AxisSeq,
     cols: AxisSeq,
-    cells: BTreeMap<(OpId, OpId), CellReg>,
+    cells: TileStore,
 }
 
 impl State {
     /// Fold a log into state. The ONLY public constructor from data.
+    ///
+    /// Two passes over the canonical order. The first assigns identity slots
+    /// and decides which tiles must start promoted; the second applies. The
+    /// split exists because promotion has to be decided *before* the first
+    /// write lands: a summary tile records no per-cell stamps, so it could not
+    /// reconstruct them if it were asked to promote later (see `tile::Meta`).
     pub fn replay(log: &OpLog) -> Self {
         let mut ops: Vec<&Op> = log.ops().iter().collect();
         // Total order: applying in this order is equivalent to any causal
         // order because every apply_* below is commutative for concurrent ops.
         ops.sort_by_key(|o| (o.lamport, o.id.actor, o.id.counter));
-        let mut s = State::default();
+        let mut s = State {
+            cells: TileStore::from_plan(tile::plan_promotions(ops.iter().copied())),
+            ..Default::default()
+        };
         for op in ops {
             s.apply(op);
+        }
+        s
+    }
+
+    /// Replays ops that are **already** in canonical total order, without ever
+    /// materializing an `OpLog`.
+    ///
+    /// `source` is called twice — once for the promotion pre-pass, once to
+    /// apply — and must yield the identical sequence both times, ordered by
+    /// `(lamport, actor, counter)`. The caller owns that precondition, which is
+    /// exactly why `replay` (which sorts, and cannot be misused) stays the
+    /// default constructor.
+    ///
+    /// This exists because some inputs are larger than the state they build: a
+    /// 10M-cell import is ~1.2 GB of ops producing ~80 MB of tiles. Row 11
+    /// (snapshot + op-tail recovery) and Row 12 (import) need the same shape,
+    /// and the A-001 memory harness cannot be run at all without it.
+    pub fn replay_sorted<F, I>(mut source: F) -> Self
+    where
+        F: FnMut() -> I,
+        I: Iterator<Item = Op>,
+    {
+        let mut s = State {
+            cells: TileStore::from_plan(tile::plan_promotions(source())),
+            ..Default::default()
+        };
+        for op in source() {
+            s.apply(&op);
         }
         s
     }
@@ -102,52 +138,14 @@ impl State {
             Payload::InsertCol { anchor } => self.cols.insert(anchor, op.id, op.lamport),
             Payload::DeleteCol { col } => self.cols.delete(col.0),
             Payload::SetCell { row, col, value } => {
-                let key = (row.0, col.0);
-                let cand = (op.lamport, op.id, value.clone());
-                match self.cells.get_mut(&key) {
-                    None => {
-                        self.cells.insert(
-                            key,
-                            CellReg {
-                                winner: cand,
-                                losers: Vec::new(),
-                            },
-                        );
-                    }
-                    Some(reg) => {
-                        if (cand.0, cand.1) > (reg.winner.0, reg.winner.1) {
-                            let old = core::mem::replace(&mut reg.winner, cand);
-                            reg.losers.push(old);
-                        } else {
-                            reg.losers.push(cand);
-                        }
-                        reg.losers.sort_by_key(|(l, id, _)| (*l, *id));
-                    }
-                }
+                self.cells
+                    .write(row.0, col.0, op.lamport, op.id, value.clone())
             }
+            // A clear is a write of Blank, not an erasure: the cell keeps its
+            // identity and its place in the causal history (DP-A1).
             Payload::ClearCell { row, col } => {
-                let key = (row.0, col.0);
-                let cand = (op.lamport, op.id, Value::Blank);
-                match self.cells.get_mut(&key) {
-                    None => {
-                        self.cells.insert(
-                            key,
-                            CellReg {
-                                winner: cand,
-                                losers: Vec::new(),
-                            },
-                        );
-                    }
-                    Some(reg) => {
-                        if (cand.0, cand.1) > (reg.winner.0, reg.winner.1) {
-                            let old = core::mem::replace(&mut reg.winner, cand);
-                            reg.losers.push(old);
-                        } else {
-                            reg.losers.push(cand);
-                        }
-                        reg.losers.sort_by_key(|(l, id, _)| (*l, *id));
-                    }
-                }
+                self.cells
+                    .write(row.0, col.0, op.lamport, op.id, Value::Blank)
             }
         }
     }
@@ -163,20 +161,24 @@ impl State {
     }
 
     /// Current winning value of a cell, if any (Blank clears count as values).
-    pub fn cell(&self, row: RowId, col: ColId) -> Option<&Value> {
-        self.cells.get(&(row.0, col.0)).map(|r| &r.winner.2)
+    ///
+    /// Returns an owned `Value` rather than a reference: a packed numeric tile
+    /// stores bare `f64`s, so there is no `Value` in memory to borrow.
+    pub fn cell(&self, row: RowId, col: ColId) -> Option<Value> {
+        self.cells.get(&row.0, &col.0)
     }
 
     /// Retained concurrent losers for conflict surfacing (ADR-006).
-    pub fn conflicts(&self, row: RowId, col: ColId) -> &[(u64, OpId, Value)] {
-        self.cells
-            .get(&(row.0, col.0))
-            .map(|r| r.losers.as_slice())
-            .unwrap_or(&[])
+    pub fn conflicts(&self, row: RowId, col: ColId) -> &[(Lamport, OpId, Value)] {
+        self.cells.losers(&row.0, &col.0)
     }
 
     /// Deterministic state hash: the determinism-gate primitive (docs/10).
     /// Hashes live axis order + winning cell values of live cells.
+    ///
+    /// Cells fold in tile-major order — the tile-Merkle direction docs/10
+    /// specifies — which is deterministic because slot assignment is a pure
+    /// function of the op set. Identities, never slots, go into the hash.
     pub fn state_hash(&self) -> blake3::Hash {
         let mut h = blake3::Hasher::new();
         let mut buf = Vec::new();
@@ -190,17 +192,40 @@ impl State {
             h.update(&c.counter.to_be_bytes());
         }
         h.update(b"|cells|");
-        for ((r, c), reg) in &self.cells {
-            if self.rows.is_live(r) && self.cols.is_live(c) {
+        let (rows, cols) = (&self.rows, &self.cols);
+        self.cells.for_each(|r, c, value| {
+            if rows.is_live(&r) && cols.is_live(&c) {
                 h.update(&r.actor.0.to_be_bytes());
                 h.update(&r.counter.to_be_bytes());
                 h.update(&c.actor.0.to_be_bytes());
                 h.update(&c.counter.to_be_bytes());
                 buf.clear();
-                reg.winner.2.encode_into(&mut buf);
+                value.encode_into(&mut buf);
                 h.update(&buf);
             }
-        }
+        });
         h.finalize()
+    }
+
+    /// The causal summary `(max lamport, sole writer)` of the tile holding this
+    /// cell, or `None` if that tile is promoted (docs/14 §CRDT metadata).
+    pub fn cell_summary(&self, row: RowId, col: ColId) -> Option<(Lamport, usk_types::ActorId)> {
+        self.cells.causal_summary(&row.0, &col.0)
+    }
+
+    /// Promotion accounting for assumption A-002 (docs/42) — the number that
+    /// decides whether ADR-005's tile granularity holds up.
+    pub fn promotion_stats(&self) -> PromotionStats {
+        self.cells.promotion_stats()
+    }
+
+    /// Structural heap bytes held by the cell store, for the A-001 harness.
+    pub fn cell_heap_bytes(&self) -> usize {
+        self.cells.heap_bytes()
+    }
+
+    /// Number of live tiles backing the cell store.
+    pub fn tile_count(&self) -> usize {
+        self.cells.tile_count()
     }
 }

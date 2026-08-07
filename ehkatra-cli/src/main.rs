@@ -131,7 +131,7 @@ fn print_grid(s: &State) {
         let mut line = String::new();
         for c in &cols {
             let cell = match s.cell(*r, *c) {
-                Some(Value::Text(t)) => t.clone(),
+                Some(Value::Text(t)) => t,
                 Some(Value::Number(n)) => format!("{n}"),
                 Some(Value::Bool(b)) => format!("{b}"),
                 Some(Value::Error(e)) => format!("{e:?}"),

@@ -106,11 +106,11 @@ fn concurrent_structural_edit_converges() {
     // Bob's writes are on the rows he meant, not displaced by the insert.
     assert_eq!(
         sa.cell(RowId(r1.id), ColId(c1.id)),
-        Some(&Value::Number(1.0))
+        Some(Value::Number(1.0))
     );
     assert_eq!(
         sa.cell(RowId(r2.id), ColId(c1.id)),
-        Some(&Value::Number(2.0))
+        Some(Value::Number(2.0))
     );
 }
 
@@ -131,7 +131,7 @@ fn concurrent_cell_write_retains_loser() {
     // (5, actor2) > (5, actor1): actor 2 wins deterministically.
     assert_eq!(
         s.cell(RowId(r1.id), ColId(c1.id)),
-        Some(&Value::Number(20.0))
+        Some(Value::Number(20.0))
     );
     let losers = s.conflicts(RowId(r1.id), ColId(c1.id));
     assert_eq!(losers.len(), 1);

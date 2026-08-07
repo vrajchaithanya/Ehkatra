@@ -1,6 +1,13 @@
 [workspace]
 resolver = "2"
-members = ["crates/usk-types", "crates/usk-oplog", "crates/usk-state", "ehkatra-cli", "tools/replay-check"]
+members = [
+  "crates/usk-types",
+  "crates/usk-oplog",
+  "crates/usk-state",
+  "ehkatra-cli",
+  "tools/replay-check",
+  "tools/tile-bench",
+]
 
 [workspace.package]
 version = "0.1.0"
