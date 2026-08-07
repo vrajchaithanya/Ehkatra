@@ -11,6 +11,11 @@ Every document carries a header: `Status: Draft | Approved | Superseded` · `Own
 | 04 | Domain Model | Chief Architect | Approved |
 | 05 | Architecture Flow & Feature Comparison | Chief Architect | Approved |
 | 06 | **Design Principles — the complete rule set (authority)** | Chief Architect | Approved |
+| 07 | Solo Operating Model & Review (incl. DP-S rules) | You | Approved |
+| 08 | Engineering Handbook (process, self-review, releases) | You | Approved |
+| 25 | UX Architecture (five surfaces, interaction rules) | You | Approved |
+| 26 | Data Model & Container Schema Specs | You | Approved |
+| — | templates/ (ADR, RFC) | You | Living |
 
 ## Module architecture (normative)
 | # | Document | Owner | Status |

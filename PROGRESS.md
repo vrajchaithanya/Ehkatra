@@ -260,3 +260,13 @@ Carry into Row 9:
 - This is the row that closes **TD-21** (two addressing models) and **TD-18** (no incremental regrouping) — both are waiting on edits becoming ops.
 - TD-09 (tile promotion granularity, A-002's failure) is **still open** and must land before Q2.
 
+## Session 8 — Owner corrections applied (D-054), then Row 9
+
+Five corrections from the owner, applied before starting Row 9:
+
+1. **TD-09 reprioritised** — A-002's consequence had drifted four rows past its failure, violating DP-F5. TD-09 is now the next work unit after Row 9, and **Row 10 may not start until TD-09 is closed with a re-run A-002 measurement**. Registers updated (docs/42, docs/44).
+2. **Row 9 exit criteria hardened** — Row 9 is not done until `usk-calc`'s ordinal `Sheet`/`Rect` addressing path is deleted (TD-21) and the regrouping trigger is wired (TD-18).
+3. **Supply-chain gate** — verified the cargo-deny/cargo-audit job has been in `.github/workflows/ci.yml` since session 3. The reason it has never run: **this repository has no remote and has never been pushed**; all of CI is equally dead, not just this job. Remote now configured (`origin` → the CLAUDE.md repo URL). **Standing instruction: on the first push, check the Actions run and record the supply-chain job's first green here.** The push is the owner's call — nothing has been pushed.
+4. **TD-17 trigger** — PAL `Compute` + rayon bench only when a real workload breaches 200 ms single-threaded; A-003 stays "confirmed (single-threaded path)".
+5. **D-052 ratified** — LCG sweeps stay; proptest is not added. CLAUDE.md stack list updated to match (DP-F3).
+

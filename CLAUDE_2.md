@@ -19,10 +19,10 @@ Architecture authority: `docs/` (41 governed documents). Read `docs/00-INDEX.md`
 - Errors are values with origin traces; evaluation never panics across the FFI boundary.
 
 ## Stack decisions (already made — do not relitigate)
-Rust stable (pinned in `rust-toolchain.toml`) · Cargo workspace monorepo · web-first: wasm32 target + WebGPU/Canvas2D later, headless-first now · SQL via DataFusion (TD-01) · property tests via seeded-LCG sweeps (D-052; `proptest` rejected, owner-ratified) · fuzz via `cargo-fuzz` · CBOR via `ciborium`-compatible canonical encoder (write our own canonical layer) · hashing `blake3` · parallelism `rayon` (behind PAL Compute) · server later (Q1 is kernel + CLI + local two-replica sync).
+Rust stable (pinned in `rust-toolchain.toml`) · Cargo workspace monorepo · web-first: wasm32 target + WebGPU/Canvas2D later, headless-first now · SQL via DataFusion (TD-01) · property tests via `proptest` · fuzz via `cargo-fuzz` · CBOR via `ciborium`-compatible canonical encoder (write our own canonical layer) · hashing `blake3` · parallelism `rayon` (behind PAL Compute) · server later (Q1 is kernel + CLI + local two-replica sync).
 
 ## Quality gates (all must be green before a phase is "complete")
-`cargo fmt --check` · `clippy -D warnings` · `cargo test --workspace` · kernel `no_std` check-build · differential replay test (native vs wasm32 via wasmtime) hash-equal · seeded-LCG CRDT convergence suite (D-052) · benches compile and run (record numbers in `MEASUREMENTS.md`, never assert unmeasured claims).
+`cargo fmt --check` · `clippy -D warnings` · `cargo test --workspace` · kernel `no_std` check-build · differential replay test (native vs wasm32 via wasmtime) hash-equal · proptest CRDT convergence suite · benches compile and run (record numbers in `MEASUREMENTS.md`, never assert unmeasured claims).
 
 ## Style
 Small crates per docs/10 layering; doc-comments on public items explain *why*; no `unwrap()` outside tests; every `unsafe` block justified in a comment and minimized (target: zero in Q1).

@@ -89,6 +89,15 @@ Comparing every dirty group against every other is O(groups²), and it is what a
 **D-050 — Cycles are read off the level assignment rather than from a separate Tarjan pass.**
 docs/13 names Tarjan SCC on the dirty subgraph. Kahn's algorithm already produces the same fact for free: whatever it cannot place has no valid level, and by definition is in a cycle. Self-references are detected directly, since a group reading its own output produces no edge to detect. Adding a second traversal to learn something the first already proved would be cost without information. If cycle *reporting* later needs the SCC membership (docs/36's workbook health report groups cells by cluster), add Tarjan then — it is a reporting need, not a correctness one.
 
+### Session 8 (2026-08-07) — Owner corrections (directive, recorded verbatim in effect)
+
+**D-054 — Five corrections from the owner, applied before Row 9.**
+1. **TD-09 reprioritised.** A-002 failed in Row 4 and its recorded consequence (tile-granularity redesign) drifted four rows — a DP-F5 violation ("a failed assumption executes its named consequence"). TD-09 is the next work unit after Row 9, and **Row 10 (sync) is hard-gated on TD-09 closed with a re-run A-002 measurement**.
+2. **TD-21 and TD-18 are Row 9 exit criteria.** Row 9 is not done until `usk-calc`'s ordinal addressing (`Sheet`/`Rect` path) is deleted with only identity intervals remaining, and the regrouping trigger is wired.
+3. **Supply-chain gate must not stay silently dead.** Verified: the cargo-deny/cargo-audit job has been in `.github/workflows/ci.yml` since session 3 — the actual reason it has never executed is that the repository has **no git remote and has never been pushed**. Remote now configured from CLAUDE.md's stated URL; the first push triggers all CI including this job, and PROGRESS.md carries a standing instruction to record its first green run. The push itself is left to the owner.
+4. **TD-17 trigger made explicit.** PAL `Compute` + the rayon bench are built only when a real workload breaches the 200 ms budget single-threaded. Until then A-003's status stays "confirmed (single-threaded path)".
+5. **D-052 ratified as-is** — LCG sweeps stay, proptest is not added.
+
 ### Session 7 (2026-08-07) — Row 8, identity references
 
 **D-051 — A reference is a pair of endpoint identities, resolved against the axis order that *retains tombstones*.**
@@ -99,6 +108,7 @@ The one thing that rule cannot do without help is re-anchor inward, because "inw
 CLAUDE.md's stack list names proptest, and BOOTSTRAP row 8 asks for "a dedicated regression + proptest". The tests here instead use a hand-rolled seeded LCG, matching the convention already established in `usk-state` (`randomized_interleavings_converge`, explicitly "no rand dep").
 Reason: DP-A2 wants a failure reproducible by seed alone, the workspace has one dependency and a complexity budget that exists to be defended (DP-S2), and the `supply-chain` CI gate has still never executed (session 3), so adding ~20 transitive dev-dependencies would be adding unverifiable surface. The *property* coverage BOOTSTRAP asks for is delivered — 200 randomized insert/delete sequences asserting resolution is always a contiguous live run, plus 60 shuffled arrival orders asserting resolution is order-independent.
 This is a deviation from a recorded stack decision, so it is recorded rather than assumed. Revisit when the supply-chain gate has actually run green and shrinking would genuinely pay — proptest's real value is the counterexample minimiser, and these properties fail with small inputs anyway.
+**Ratified by the owner, 2026-08-07 (D-054):** keep the LCG sweeps; do not add proptest. The revisit trigger above is void, and CLAUDE.md's stack list is updated to match (DP-F3).
 
 **D-053 — `usk-calc` keeps its ordinal `Sheet` alongside the new identity path.**
 Row 8 adds `refs::{Binder, IdRange, StateGrid}` and makes `usk-calc` depend on `usk-state`, but the Row 7 `Sheet`/`Engine` still speak ordinals. Converting the dependency graph to identity intervals is a bigger change than Row 8 asks for and would put an unproven rewrite under the recalculation benchmark. The two coexist deliberately: `StateGrid` is the identity-first read path, `Sheet` is the graph's substrate, and Row 9's reducer is where edits become ops and the graph can be rebuilt over identities. Filed as TD-21 so the split does not become permanent by inattention.
