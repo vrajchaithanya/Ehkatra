@@ -1,5 +1,16 @@
 # Changelog — Architecture Repository
 
+## 2026-08-07 (session 5) — BOOTSTRAP Row 6: formula engine
+- New kernel crate **`usk-formula`**: `text → lexer → Pratt parser → lossless CST → AST → evaluator` (docs/12).
+- **Lossless CST (ADR-011)**: `Cst::text()` reproduces the input byte for byte — whitespace, unterminated strings and unparseable garbage included — with spans retained for error carets.
+- **Excel precedence including its quirks**: unary minus binds tighter than `^` (`-2^2` = 4), `^` right-associative, postfix `%`.
+- **69 functions** (row 6 asks for 60): aggregation, rounding, logical, error/type predicates, text, lookup, conditional aggregation, date core. `SUM` stays in the exact decimal domain when every addend is exact.
+- Evaluation is total — malformed input, unknown names, bad references and undefined arithmetic are all error *values* carrying their origin.
+- Excel's 1900 leap-year fiction reproduced under `compat` and not under `strict`; volatiles (`TODAY`/`NOW`) injected via the evaluation context, never read from a clock (DP-A2, ADR-009).
+- New decisions: D-043 (dates as serials for now, with a proven non-breaking path to `Value::Date`), D-044 (approximate lookup refused rather than guessed), D-045 (`match` dispatch instead of docs/12's declarative registry, deferred until it carries load), D-046 (in-crate `powf`/`sqrt` rather than libm, for bit-identical results).
+- New debt: TD-14 exact-match-only lookup, TD-15 fractional-exponent accuracy, TD-16 implicit intersection pending Row 7.
+- 33 new tests (71 total); both replay hashes unchanged.
+
 ## 2026-08-07 (session 4) — BOOTSTRAP Row 5: value lattice
 - **`Decimal`**: exact base-10 currency arithmetic — 128-bit coefficient + base-10 exponent, canonically normalised, 38 significant digits, exact `+ − ×` and comparison, half-even division, no float path, no panics. `0.1 + 0.2` is exactly `0.3`; 100 cents is exactly 1.
 - **Error provenance**: `Value::Error` now carries `CellError { kind, origin }`, where `Origin` distinguishes an authored error from a refused coercion, undefined arithmetic, or propagation — and the origin survives propagation through arithmetic.

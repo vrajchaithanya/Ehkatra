@@ -14,7 +14,7 @@ function Step($name, [scriptblock]$body) {
 Step 'Format (DP-C1)'            { cargo fmt --all -- --check }
 Step 'Clippy (DP-C1)'            { cargo clippy --workspace --all-targets -- -D warnings }
 Step 'Tests (DP-C4)'             { cargo test --workspace }
-Step 'no_std kernel (DP-A3)'     { cargo build -p usk-types -p usk-oplog -p usk-state --target wasm32-wasip1 }
+Step 'no_std kernel (DP-A3)'     { cargo build -p usk-types -p usk-oplog -p usk-state -p usk-formula --target wasm32-wasip1 }
 Step 'Complexity budget (DP-S2)' { node tools/dep-budget.mjs }
 
 Write-Host "`n=== Differential replay (DP-A2) ===" -ForegroundColor Cyan

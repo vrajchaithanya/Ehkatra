@@ -105,6 +105,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "usk-formula"
+version = "0.1.0"
+dependencies = [
+ "usk-types",
+]
+
+[[package]]
 name = "usk-oplog"
 version = "0.1.0"
 dependencies = [

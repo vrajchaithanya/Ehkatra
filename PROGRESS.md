@@ -127,3 +127,48 @@ Carry into Row 6:
 - Volatiles (`TODAY`/`NOW`) must be *materialized*, never read from an ambient clock: DP-A2 forbids ambient time in kernel paths, and ADR-009 puts them behind the Calculation Authority.
 
 TD-09 (tile promotion granularity, A-002's failure) is still open and still not a prerequisite for Row 6 — but it must land before Q2.
+
+## Session 5 — Row 6: formula engine · DONE
+
+**Row 6 is built and proven** — new kernel crate `usk-formula` (`lexer.rs`, `parse.rs`, `eval.rs`, `functions.rs`) with 33 tests in `crates/usk-formula/tests/formulas.rs`. **71 tests total**, all gates green.
+
+### What shipped
+- **Pipeline**: `text → lexer → Pratt parser → lossless CST → AST → evaluator`, per docs/12.
+- **Lossless CST (ADR-011)** — `Cst::text()` reproduces the input byte for byte, whitespace and all, including inputs the parser could not understand. Spans are retained for error carets.
+- **Excel precedence**, quirks included: unary minus binds tighter than `^` (so `-2^2` is `4`), `^` is right-associative, `%` is postfix.
+- **69 functions** (BOOTSTRAP asks for 60) across aggregation, rounding, logical, error/type predicates, text, lookup, conditional aggregation and date core.
+- Evaluation is total: every malformed input, unknown name, bad reference and undefined operation is an error *value* carrying its origin (DP-A10).
+
+### Evidence worth reading
+- `cst_round_trips_every_input` — the ADR-011 property, over 13 inputs including unterminated strings and pure garbage.
+- `unary_minus_binds_tighter_than_exponent` · `exponent_is_right_associative` — Excel's precedence, not mathematics'.
+- `compat_reproduces_the_1900_leap_year_fiction` — `DAY(60)` is 29 February 1900 under compat and 1 March under strict; the profiles agree before the phantom day.
+- `sum_of_decimals_stays_exact` — 100 × `0.01` sums to exactly `1` through `SUM`, and mixing in an inexact float honestly drops to the float domain.
+- `errors_propagate_with_origin_intact` — a refused coercion five calls deep still knows what it was.
+- `if_evaluates_lazily` — `IF(A1=0,0,1/A1)` does not divide by zero.
+- `catalogue_covers_the_row_6_function_list` — every catalogue name actually dispatches, so the count is not padding.
+
+### Three bugs found by the tests, all real
+1. **CST trivia handling was wrong.** Buffering whitespace in the parser and attaching it to whichever node came next silently *moved* the user's spacing when a lookahead did not match — `"=  SUM( A1 : B2 , 3 )  "` came back as `"= SUM(   A1:  B2,  3)"`. Replaced with non-consuming lookahead, so trivia is emitted exactly once by whoever consumes the token after it. This is the ADR-011 property; a lossless tree that loses bytes is not lossless.
+2. **The date epoch was off by one** — the constant held 1900-01-01 where the code wanted 1899-12-31, shifting every date by a day.
+3. Excel's `MOD` takes the sign of the *divisor*, unlike Rust's `%`.
+
+### DECISIONS (docs/43)
+D-043 dates are serials for now, with `Value::Date` deferred to the format layer and a proven non-breaking upgrade path · D-044 approximate lookup refused rather than guessed · D-045 `match` dispatch instead of docs/12's declarative registry, with the reasons it is not yet load-bearing · D-046 in-crate `powf`/`sqrt` rather than libm, for DP-A2.
+
+### DEBT (docs/44)
+TD-14 exact-match-only lookup (a real compat gap for imported workbooks) · TD-15 fractional-exponent accuracy ~1e-12 · TD-16 range-to-scalar takes top-left instead of implicit intersection, pending Row 7.
+
+### GATES STATUS
+fmt ✓ · clippy 0 warnings ✓ · **tests 71/71 ✓** · no_std wasm32 kernel build (now including usk-formula) ✓ · dep budget 1/5, 10/12, 10/40 ✓ · differential replay native==wasm ✓ · purity + host-isolation greps ✓
+
+Both replay hashes unchanged (`77e5b1bf…`, `e6cc2757…`): Row 6 added a crate but touched no op encoding.
+
+### NEXT (unchanged BOOTSTRAP order)
+**Row 7: dependency graph** — formula groups, range edges via an interval index, incremental dirty → topo → parallel recalc. Proof: a 100k-cell recalc bench recorded in MEASUREMENTS.md (assumption A-003, budget <200 ms on 8 cores).
+
+Carry into Row 7:
+- `usk-formula` deliberately does **not** depend on `usk-state`; it reads through the `eval::Grid` port. Row 7 is where a real implementation over `State` belongs, and where A1 ordinals finally become identity intervals (DP-A6). Until then `Grid` speaks in view ordinals, which is the shortcut Row 8 removes.
+- TD-16 (implicit intersection) needs the evaluating cell's position, which the dep graph supplies — close it there.
+- `Ast::Name` currently evaluates to `#NAME?`; docs/12 wants unresolved names to live-rebind when the name appears, which needs the name table plus dep-graph invalidation.
+- Volatiles are already injected via `Context::{today, now}`; Row 7 must make them dirty-marking so a recalc re-materialises them exactly once per pass (ADR-009).

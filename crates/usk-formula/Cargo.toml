@@ -1,0 +1,8 @@
+[package]
+name = "usk-formula"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+usk-types = { path = "../usk-types" }
