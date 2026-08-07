@@ -39,7 +39,7 @@ jobs:
               --include="*.rs" --include="*.toml" crates ehkatra-cli tools \
             || (echo "Ehkatra must never reference host services or common ports" && exit 1)
       - name: no_std kernel builds without std (DP-A3)
-        run: cargo build -p usk-types -p usk-oplog -p usk-state -p usk-formula -p usk-calc --target wasm32-wasip1
+        run: cargo build -p usk-types -p usk-oplog -p usk-state -p usk-formula -p usk-calc -p usk-reduce --target wasm32-wasip1
       - name: Complexity budget (DP-S2, docs/07 §3)
         run: node tools/dep-budget.mjs
 

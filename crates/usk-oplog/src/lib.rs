@@ -7,6 +7,7 @@
 #![no_std]
 extern crate alloc;
 
+use alloc::string::String;
 use alloc::vec::Vec;
 use usk_types::{ColId, Lamport, OpId, RowId, Value};
 
@@ -19,6 +20,24 @@ pub enum Anchor {
     Start,
     /// Insert immediately after the row/col created by this op id.
     After(OpId),
+}
+
+/// A formula reference bound to identity endpoints, carried inside
+/// `SetFormula` ops.
+///
+/// Binding happens once, at the author, inside the reducer (DP-A7) — the op
+/// then carries identities, so a replica never re-binds `A1` text against its
+/// own (possibly different) view. This is what makes formulas converge under
+/// concurrent structural edits: every replica resolves the same identities.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct RangeBinding {
+    pub row_start: OpId,
+    pub row_end: OpId,
+    pub col_start: OpId,
+    pub col_end: OpId,
+    /// bit 0 = row endpoints absolute, bit 1 = col endpoints absolute
+    /// (`AnchorMode`, docs/11 — resolution ignores it; copy/fill reads it).
+    pub anchors: u8,
 }
 
 /// The closed op payload taxonomy for model version 1 (docs/10).
@@ -44,6 +63,24 @@ pub enum Payload {
     },
     ClearCell {
         row: RowId,
+        col: ColId,
+    },
+    /// Stores a formula: the text as typed (so the CST is recoverable,
+    /// ADR-011) plus one identity binding per reference in the AST, in
+    /// traversal order.
+    SetFormula {
+        row: RowId,
+        col: ColId,
+        source: String,
+        bindings: Vec<RangeBinding>,
+    },
+    /// Restores a deleted row — the inverse half of selective undo for
+    /// `DeleteRow` (docs/11, DP-A12). A new op type rather than a change to
+    /// `DeleteRow`'s meaning, per DP-A5.
+    UndeleteRow {
+        row: RowId,
+    },
+    UndeleteCol {
         col: ColId,
     },
 }
@@ -105,6 +142,37 @@ impl Op {
             Payload::ClearCell { row, col } => {
                 out.push(0x15);
                 encode_opid(&row.0, &mut out);
+                encode_opid(&col.0, &mut out);
+            }
+            // Tags 0x16-0x18 are new in Row 9; 0x10-0x15 keep their bytes,
+            // which the unchanged replay-corpus hashes prove.
+            Payload::SetFormula {
+                row,
+                col,
+                source,
+                bindings,
+            } => {
+                out.push(0x16);
+                encode_opid(&row.0, &mut out);
+                encode_opid(&col.0, &mut out);
+                let b = source.as_bytes();
+                out.extend_from_slice(&(b.len() as u32).to_be_bytes());
+                out.extend_from_slice(b);
+                out.extend_from_slice(&(bindings.len() as u16).to_be_bytes());
+                for binding in bindings {
+                    encode_opid(&binding.row_start, &mut out);
+                    encode_opid(&binding.row_end, &mut out);
+                    encode_opid(&binding.col_start, &mut out);
+                    encode_opid(&binding.col_end, &mut out);
+                    out.push(binding.anchors);
+                }
+            }
+            Payload::UndeleteRow { row } => {
+                out.push(0x17);
+                encode_opid(&row.0, &mut out);
+            }
+            Payload::UndeleteCol { col } => {
+                out.push(0x18);
                 encode_opid(&col.0, &mut out);
             }
         }

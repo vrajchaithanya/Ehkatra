@@ -1,0 +1,12 @@
+[package]
+name = "usk-reduce"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+usk-types = { path = "../usk-types" }
+usk-oplog = { path = "../usk-oplog" }
+usk-state = { path = "../usk-state" }
+usk-formula = { path = "../usk-formula" }
+usk-calc = { path = "../usk-calc" }

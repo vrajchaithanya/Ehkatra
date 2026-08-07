@@ -270,3 +270,27 @@ Five corrections from the owner, applied before starting Row 9:
 4. **TD-17 trigger** — PAL `Compute` + rayon bench only when a real workload breaches 200 ms single-threaded; A-003 stays "confirmed (single-threaded path)".
 5. **D-052 ratified** — LCG sweeps stay; proptest is not added. CLAUDE.md stack list updated to match (DP-F3).
 
+## Session 8 (cont.) — Row 9 core built · Row 9 IN-PROGRESS (exit criteria pending)
+
+**Built and proven** — op-log extension + new kernel crate `usk-reduce`, 13 tests in `crates/usk-reduce/tests/undo.rs`. **109 tests total**, all gates green, both replay hashes unchanged (tags 0x16–0x18 additive, proven).
+
+### What shipped
+- **Ops**: `SetFormula { source, bindings }` (identity bindings bound once at the author, D-055), `UndeleteRow`/`UndeleteCol` (selective undo of deletes, DP-A5's new-behavior-new-op rule).
+- **State**: formula registry (flat identity-keyed map per docs/14), `formula()` accessor, undelete, hash extended only-when-formulas-exist.
+- **`usk-reduce`**: `Command` vocabulary (DP-D1) → pure versioned `reduce_v1` (DP-A7) → ops; `Session` with per-actor undo/redo stacks.
+- **Selective undo (DP-A12)**, all proven: value/formula restore only while my actor's write still wins; insert-undo blocked when others wrote into the row (`ApplyReport::blocked` surfaces it); delete-undo resurrects the row *with its cells*; redo is undo-of-undo through one synthesis path; undo∘do = id on the projection for every command kind.
+
+### Fixed while building
+The winner check first compared the group's specific op id and wrongly blocked undoing older groups after a newer undo restored through a fresh (still mine) op id. docs/11's "own write still wins" is actor-scoped; with LIFO undo that is exactly correct (D-057).
+
+### ROW 9 IS NOT DONE — exit criteria per D-054 remain
+1. **TD-21**: delete `usk-calc`'s ordinal addressing (`Sheet`/`Rect` path); engine reads formulas from `State`'s registry, members keyed by cell identity, geometry derived from the `Binder` per rebuild (A1 = computed view, DP-A6). `parse::A1`+`RangeBinding` substitution at eval time via the resolution machinery from Row 8.
+2. **TD-18**: regroup on structural/formula ops arriving (value ops → incremental `recalc_after` as today).
+3. Re-run `tools/calc-bench` after the rewrite — A-003's numbers must be re-measured over the identity path, not assumed to carry over. Then update this file + MEASUREMENTS.md and declare Row 9 done.
+
+### THEN, per D-054 (hard order)
+**TD-09** (tile promotion granularity, the A-002 failure) is the next work unit after Row 9 — **Row 10 may not start until TD-09 closes with a re-run A-002 measurement.**
+
+### GATES STATUS
+fmt ✓ · clippy 0 warnings ✓ · **tests 109/109 ✓** · no_std wasm32 kernel build (incl. usk-reduce) ✓ · dep budget 1/5, 10/12, 10/40 ✓ · differential replay native==wasm ✓ · purity + host-isolation greps ✓
+

@@ -10,9 +10,10 @@ extern crate alloc;
 pub mod tile;
 
 use alloc::collections::BTreeMap;
+use alloc::string::String;
 use alloc::vec::Vec;
 use tile::{PromotionStats, TileStore};
-use usk_oplog::{Anchor, Op, OpLog, Payload};
+use usk_oplog::{Anchor, Op, OpLog, Payload, RangeBinding};
 use usk_types::{ColId, Lamport, OpId, RowId, Value};
 
 /// One axis (rows or columns) as a neighbor-anchored ordered sequence with
@@ -43,6 +44,14 @@ impl AxisSeq {
 
     fn delete(&mut self, id: OpId) {
         self.tombstones.insert(id, ());
+    }
+
+    /// Removes a tombstone (selective undo of a delete, docs/11). Correctness
+    /// under concurrency comes from replay order: `State::replay` applies ops
+    /// in the canonical total order, so the later of a delete/undelete pair
+    /// deterministically wins on every replica.
+    fn undelete(&mut self, id: OpId) {
+        self.tombstones.remove(&id);
     }
 
     /// Depth-first walk producing the live visual order.
@@ -90,6 +99,14 @@ impl AxisSeq {
     }
 }
 
+/// A stored formula: the source text plus its identity bindings, exactly as
+/// the `SetFormula` op carried them.
+#[derive(Clone, PartialEq, Debug)]
+pub struct FormulaCell {
+    pub source: String,
+    pub bindings: Vec<RangeBinding>,
+}
+
 /// The workbook state (single sheet in v0.1).
 ///
 /// Cells live in the tile store (docs/14, ADR-005), not in a flat per-cell map:
@@ -100,6 +117,11 @@ pub struct State {
     rows: AxisSeq,
     cols: AxisSeq,
     cells: TileStore,
+    /// Formulas, keyed by cell identity — a flat map rather than tile payload
+    /// because docs/14 has formulas *reference* the group table, never packed
+    /// among values. Presence in this map means the formula is the cell's
+    /// winning content; see `apply` for how that invariant is maintained.
+    formulas: BTreeMap<(OpId, OpId), FormulaCell>,
 }
 
 impl State {
@@ -153,21 +175,45 @@ impl State {
         s
     }
 
+    /// Applies one op. Ops arrive in canonical total order (both constructors
+    /// guarantee it), which is what makes the value-vs-formula rule below a
+    /// correct LWW: whichever of `SetCell`/`ClearCell`/`SetFormula` applies
+    /// *last* in that order is the cell's winning content on every replica.
+    /// An incremental merge path (future sync) must carry per-entry stamps
+    /// instead — recorded as TD-22.
     fn apply(&mut self, op: &Op) {
         match &op.payload {
             Payload::InsertRow { anchor } => self.rows.insert(anchor, op.id, op.lamport),
             Payload::DeleteRow { row } => self.rows.delete(row.0),
             Payload::InsertCol { anchor } => self.cols.insert(anchor, op.id, op.lamport),
             Payload::DeleteCol { col } => self.cols.delete(col.0),
+            Payload::UndeleteRow { row } => self.rows.undelete(row.0),
+            Payload::UndeleteCol { col } => self.cols.undelete(col.0),
             Payload::SetCell { row, col, value } => {
+                self.formulas.remove(&(row.0, col.0));
                 self.cells
                     .write(row.0, col.0, op.lamport, op.id, value.clone())
             }
             // A clear is a write of Blank, not an erasure: the cell keeps its
             // identity and its place in the causal history (DP-A1).
             Payload::ClearCell { row, col } => {
+                self.formulas.remove(&(row.0, col.0));
                 self.cells
                     .write(row.0, col.0, op.lamport, op.id, Value::Blank)
+            }
+            Payload::SetFormula {
+                row,
+                col,
+                source,
+                bindings,
+            } => {
+                self.formulas.insert(
+                    (row.0, col.0),
+                    FormulaCell {
+                        source: source.clone(),
+                        bindings: bindings.clone(),
+                    },
+                );
             }
         }
     }
@@ -209,6 +255,11 @@ impl State {
         self.cells.get(&row.0, &col.0)
     }
 
+    /// The winning formula at a cell, if a formula is the winning content.
+    pub fn formula(&self, row: RowId, col: ColId) -> Option<&FormulaCell> {
+        self.formulas.get(&(row.0, col.0))
+    }
+
     /// Retained concurrent losers for conflict surfacing (ADR-006).
     pub fn conflicts(&self, row: RowId, col: ColId) -> &[(Lamport, OpId, Value)] {
         self.cells.losers(&row.0, &col.0)
@@ -245,6 +296,29 @@ impl State {
                 h.update(&buf);
             }
         });
+        // Formulas join the hash only when any exist, so every pre-Row-9
+        // corpus hashes exactly as before — the additive-evolution rule
+        // (docs/10) applied to the hash itself.
+        if !self.formulas.is_empty() {
+            h.update(b"|formulas|");
+            for ((r, c), f) in &self.formulas {
+                if self.rows.is_live(r) && self.cols.is_live(c) {
+                    h.update(&r.actor.0.to_be_bytes());
+                    h.update(&r.counter.to_be_bytes());
+                    h.update(&c.actor.0.to_be_bytes());
+                    h.update(&c.counter.to_be_bytes());
+                    h.update(&(f.source.len() as u32).to_be_bytes());
+                    h.update(f.source.as_bytes());
+                    for b in &f.bindings {
+                        for id in [b.row_start, b.row_end, b.col_start, b.col_end] {
+                            h.update(&id.actor.0.to_be_bytes());
+                            h.update(&id.counter.to_be_bytes());
+                        }
+                        h.update(&[b.anchors]);
+                    }
+                }
+            }
+        }
         h.finalize()
     }
 

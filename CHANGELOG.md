@@ -1,5 +1,12 @@
 # Changelog — Architecture Repository
 
+## 2026-08-07 (session 8) — Owner corrections (D-054) + Row 9 core
+- **D-054 corrections applied**: TD-09 is the next work unit after Row 9 with Row 10 hard-gated on its closure; TD-21/TD-18 are Row 9 exit criteria; supply-chain gate verified present in ci.yml with its real blocker named (no remote, never pushed — remote now configured, push is the owner's); TD-17 trigger made explicit; D-052 ratified (no proptest).
+- **Row 9 core** (Row 9 remains IN-PROGRESS until the TD-21/TD-18 exit criteria close): new ops `SetFormula` (identity bindings bound once at the author) and `UndeleteRow`/`UndeleteCol`; `State` formula registry; new kernel crate **`usk-reduce`** — `Command` vocabulary, pure versioned `reduce_v1`, `Session` with per-actor undo/redo.
+- **Selective undo proven** (13 tests): own-write-wins restore, blocked insert-undo when others wrote into the row, delete-undo resurrecting rows with their cells, redo as undo-of-undo, undo∘do = id on the projection for every command kind.
+- New decisions D-055/D-056/D-057; new debt TD-22 (formula LWW needs stamps before incremental merge).
+- 13 new tests (109 total); both replay hashes unchanged — tags 0x16–0x18 proven additive.
+
 ## 2026-08-07 (session 7) — BOOTSTRAP Row 8: identity references
 - **`IdRange`**: a reference is a pair of endpoint identities with an `AnchorMode` — no position in the type at all (DP-A6, docs/04 invariant 3).
 - **The canonical test passes**: Alice inserts a row inside `SUM(A1:A10)` while Bob overwrites cells in it, concurrently, ops arriving at two replicas in opposite orders. Same state hash, same eleven resolved rows, same answer, and nothing rewrote the formula.

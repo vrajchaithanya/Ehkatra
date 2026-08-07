@@ -11,7 +11,7 @@
 // Usage: node tools/dep-budget.mjs
 import { execFileSync } from 'node:child_process';
 
-const KERNEL = ['usk-types', 'usk-oplog', 'usk-state', 'usk-formula', 'usk-calc'];
+const KERNEL = ['usk-types', 'usk-oplog', 'usk-state', 'usk-formula', 'usk-calc', 'usk-reduce'];
 const KERNEL_DIRECT_MAX = 5; // DP-S2 as written in docs/07 §3
 const KERNEL_CLOSURE_MAX = 12; // D-035; today 10 (blake3's build+SIMD support crates)
 const WORKSPACE_CLOSURE_MAX = 40; // DP-S2

@@ -89,6 +89,19 @@ Comparing every dirty group against every other is O(groups²), and it is what a
 **D-050 — Cycles are read off the level assignment rather than from a separate Tarjan pass.**
 docs/13 names Tarjan SCC on the dirty subgraph. Kahn's algorithm already produces the same fact for free: whatever it cannot place has no valid level, and by definition is in a cycle. Self-references are detected directly, since a group reading its own output produces no edge to detect. Adding a second traversal to learn something the first already proved would be cost without information. If cycle *reporting* later needs the SCC membership (docs/36's workbook health report groups cells by cluster), add Tarjan then — it is a reporting need, not a correctness one.
 
+### Session 8 (2026-08-07) — Row 9 core: reducer, commands, selective undo
+
+**D-055 — `SetFormula` ops carry identity bindings, bound once at the author.**
+The op stores the source text (CST recoverable, ADR-011) plus one `RangeBinding` — four endpoint identities + anchor bits — per reference, in AST traversal order. Re-binding `A1` text on each replica against its own view would diverge under concurrent structural edits; carrying identities is DP-A7 applied to references. Tags 0x16–0x18 are new; 0x10–0x15 byte-identical, proven by the unchanged replay hashes.
+
+**D-056 — Formula-vs-value LWW rides on canonical replay order; stamps deferred (TD-22).**
+`State` keeps formulas in a flat identity-keyed map (docs/14 has formulas *reference* the group table, never packed among values). Whichever of `SetCell`/`ClearCell`/`SetFormula` applies last in canonical total order wins the cell — correct because both `State` constructors replay in that order. An incremental merge path (Row 10 sync) must carry per-entry stamps instead; recorded as TD-22 so sync cannot inherit this silently. The state hash gains a formulas section only when formulas exist, so every pre-Row-9 corpus hashes unchanged.
+
+**D-057 — Undo semantics as implemented, including the two judgment calls.**
+(i) *"Own write still wins" means the actor's write, not one op id.* First implementation compared the group's recorded op id and wrongly blocked undoing older groups after a newer undo had restored through a fresh op id. With LIFO undo order, an actor-scoped check is exactly docs/11's rule; only a foreign winner blocks.
+(ii) *Prior-empty restores as a clear.* Ops cannot un-write history (DP-A1), so undoing the first write to a cell yields `Blank`, whose visible projection equals never-written. Recorded because "the projection is identity" is the undo law actually provable in an op-based store.
+(iii) Undo of a delete emits `UndeleteRow`/`UndeleteCol` — the row returns *with its cells*, since deletion only ever tombstoned the identity. Redo is undo-of-undo through the same synthesis, so the directions cannot drift.
+
 ### Session 8 (2026-08-07) — Owner corrections (directive, recorded verbatim in effect)
 
 **D-054 — Five corrections from the owner, applied before Row 9.**

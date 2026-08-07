@@ -139,6 +139,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "usk-reduce"
+version = "0.1.0"
+dependencies = [
+ "usk-calc",
+ "usk-formula",
+ "usk-oplog",
+ "usk-state",
+ "usk-types",
+]
+
+[[package]]
 name = "usk-state"
 version = "0.1.0"
 dependencies = [

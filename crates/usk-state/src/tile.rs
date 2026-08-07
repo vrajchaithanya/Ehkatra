@@ -704,7 +704,13 @@ pub fn plan_promotions<B: Borrow<Op>, I: Iterator<Item = B>>(ops: I) -> Plan {
                     .or_default()
                     .record(op.id.actor, cell_index(r, c));
             }
-            Payload::DeleteRow { .. } | Payload::DeleteCol { .. } => {}
+            // Formulas live in the flat registry, not in tiles; undeletes
+            // touch axis order only. Neither writes a tile.
+            Payload::DeleteRow { .. }
+            | Payload::DeleteCol { .. }
+            | Payload::SetFormula { .. }
+            | Payload::UndeleteRow { .. }
+            | Payload::UndeleteCol { .. } => {}
         }
     }
 

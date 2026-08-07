@@ -6,6 +6,7 @@ members = [
   "crates/usk-state",
   "crates/usk-formula",
   "crates/usk-calc",
+  "crates/usk-reduce",
   "ehkatra-cli",
   "tools/replay-check",
   "tools/tile-bench",
