@@ -1,18 +1,33 @@
 # MEASUREMENTS.md — every number here is measured, or it isn't here
 
+## Reference machine (docs/38 requires machine context with every number)
+**M1** — Intel Core i7-10750H @ 2.60 GHz, 6 cores / 12 threads, 15.9 GB RAM,
+Windows 11, target `x86_64-pc-windows-gnu`, rustc 1.97.1, `--release`
+(opt-level 3). Every number below is M1 unless stated otherwise.
+
+> **docs/38 rule:** a number without a `W-*` workload id is invalid. Rows
+> predating docs/38 have been mapped to their workload id where one exists;
+> where none exists the number is marked *unspecified workload* and is not
+> quotable until a `W-*` entry is added.
+
 | Claim | Measured | Where | Notes |
 |---|---|---|---|
-| Convergence: 200 random interleavings, 15-op history | 200/200 identical hashes | `randomized_interleavings_converge` | scale to 10^5 interleavings + larger histories in CI next session |
-| Demo end-to-end (build state ×2 replicas + hash ×2, release) | 1.6 ms | timed run ×5, min | trivial workload; real benches arrive with Row 7 |
+| Convergence: 200 random interleavings, 15-op history — *precursor to W-STRUCT-STORM* | 200/200 identical hashes | `randomized_interleavings_converge` | scale to 10^5 interleavings + larger histories in CI next session |
+| Demo end-to-end (build state ×2 replicas + hash ×2, release) — *unspecified workload* | 1.6 ms | timed run ×5, min | trivial workload; real benches arrive with Row 7 |
 | Test suite wall time | <0.1 s | cargo test | |
-| Differential replay: 5,000-op corpus, x86_64 vs wasm32-wasip1 | identical (oplog `77e5b1bf…`, state `4516044e…`) | `tools/replay-check` + `tools/run-wasi.mjs` | DP-A2 gate, CI-enforced |
+| **W-REPLAY-5K** — differential replay, x86_64-pc-windows-gnu vs wasm32-wasip1 | identical: oplog `ef7933e8…`, state `5dbb01c2…` | `tools/replay-check` + `tools/run-wasi.mjs` | DP-A2 gate, CI-enforced. **Hashes changed at session 9** when docs/29's rule ("a new op type joins the generator") was applied — see the W-REPLAY-5K section below. |
 | **Determinism across host + compiler**: same 5,000-op corpus on x86_64-unknown-linux-gnu / rustc "stable" (session 2, cloud) vs x86_64-pc-windows-gnu / rustc 1.97.1 (session 3, Windows host) | byte-identical: oplog `77e5b1bf2489a7a5e964e1284ad7dcc867b01af93a39d59663c9df7ce2ac5089`, state `4516044ed95e844c01b86b0693ea1f5509d970dde1e12856f85dfd2ac8438639` | `tools/gates.ps1` session-3 run vs PROGRESS session-2 record | Stronger than the CI gate: different OS, different libc, different linker (MinGW vs GNU ld), different compiler version — hashes unchanged. This is the first evidence that DP-A2 survives toolchain drift, not just target drift. |
 | Kernel direct dependencies (DP-S2 budget 5) | 1 (`blake3`) | `tools/dep-budget.mjs` | |
 | Kernel dependency **closure** incl. build scripts (D-035 budget 12) | 10 | `tools/dep-budget.mjs` | `blake3` pulls 9 transitively (`arrayref, arrayvec, cc, cfg-if, constant_time_eq, cpufeatures, find-msvc-tools, libc, shlex`). docs/07 §3's "currently 1" counted direct edges only — see D-035. |
 | Workspace dependency closure (DP-S2 budget 40) | 10 | `tools/dep-budget.mjs` | |
-| Full local gate set wall time (cold-cached workspace, warm deps) | ~35 s | `pwsh -File tools/gates.ps1` | fmt + clippy + tests + no_std wasm build + dep budget + differential replay + purity greps |
+| Full local gate set wall time (cold-cached workspace, warm deps) — *unspecified workload* | ~35 s | `pwsh -File tools/gates.ps1` | fmt + clippy + tests + no_std wasm build + dep budget + differential replay + purity greps |
 
-## Row 4 — tile store (`tools/tile-bench`, release, this machine)
+## Row 4 — tile store (`tools/tile-bench`, release, M1)
+
+> **Workload status:** these predate docs/38. The A-001/A-002 numbers are
+> superseded at TD-09 closure by **W-TILE-10M**, whose definition differs
+> (3-actor storm at 1% and 50% overlap). Treat everything in this section as
+> historical once the W-TILE-10M block exists.
 
 Reproduce: `cargo build --release -p tile-bench; ./target/release/tile-bench`.
 Corpus is a pure function of its shape — no clock, no RNG (DP-A2).
@@ -105,11 +120,11 @@ asserts the literal byte sequences.
 | state hash | `e6cc2757e42581c6cacd47cfb0420c3364e5ae76e98d0a081bd7a8efb03f2957` — **new**, superseding `4516044e…`: cells now fold in tile-major order (the tile-Merkle direction docs/10 specifies) instead of flat identity order |
 | native vs wasm32-wasip1 | identical |
 
-## Row 7 — dependency graph and recalculation (`tools/calc-bench`, release)
+## Row 7 — dependency graph and recalculation · **W-CHAIN-100K** (`tools/calc-bench`, release, M1)
 
-Shape: 10,000 rows x 10 chained formula columns = **100,000 dependent formula
-cells**, each reading the column to its left. Reproduce with
-`cargo build --release -p calc-bench; ./target/release/calc-bench`.
+**W-CHAIN-100K** (docs/38): 10,000 rows x 10 chained formula columns =
+**100,000 dependent formula cells**, each reading the column to its left.
+Reproduce with `cargo build --release -p calc-bench; ./target/release/calc-bench`.
 
 ### A-003 — full recalculation · **passes, with a caveat that matters**
 | | |
@@ -163,6 +178,30 @@ Dominated by parsing 100,000 formula strings. docs/31 budgets cold open of a
 1M-cell workbook at <1.5 s for *skeleton + viewport*, which is not this number,
 but a naive 1M-formula build would extrapolate to ~7 s. Filed as TD-19 rather
 than left to be discovered at Row 11.
+
+## W-REPLAY-5K — corpus extended to full payload coverage (session 9)
+
+docs/29 mandates that a new op type joins the replay-check generator, or the
+determinism gate silently stops covering it. Three Row-9 op types
+(`SetFormula`, `UndeleteRow`, `UndeleteCol`) had been added without this, and
+auditing the generator found `ClearCell` and `Value::Decimal` had *never* been
+covered either — the gate had been green over a corpus that exercised 4 of 9
+payload variants and 3 of 6 value variants.
+
+| | Before (4/9 variants) | After (9/9 variants) |
+|---|---|---|
+| oplog hash | `77e5b1bf2489a7a5e964e1284ad7dcc867b01af93a39d59663c9df7ce2ac5089` | `ef7933e808a86335cf77e64a69db781f42b702187a69c3249596498c7279cbac` |
+| state hash | `e6cc2757e42581c6cacd47cfb0420c3364e5ae76e98d0a081bd7a8efb03f2957` | `5dbb01c2575c5ff3976dafafe61fb7227df671c34e41572acf79d981e4120bd1` |
+| native == wasm32 | yes | **yes** |
+
+The new hashes are the reference from session 9 onward. The corpus now
+exercises: InsertRow, InsertCol, DeleteRow, DeleteCol, UndeleteRow,
+UndeleteCol, SetCell, ClearCell, SetFormula (with variable-length identity
+bindings), across Number, Bool, Text, Decimal and Blank values.
+
+That the extended corpus still hashes identically across targets is the
+stronger result: the Row 5 decimal encoding and the Row 9 variable-length
+binding vector are now proven platform-stable, not merely assumed.
 
 ## Not yet measured (targets remain targets — docs/42)
 A-001 memory/10M cells · A-002 promotion rate · A-003 recalc 100k · A-005 wasm32 **in a real browser / Safari** (WASI-under-Node is not a browser and must not be reported as one) · all docs/31 budget rows.

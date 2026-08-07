@@ -3,14 +3,16 @@
 //! replays it, and prints the canonical state hash. CI runs this binary on
 //! native AND wasm32; the printed hashes MUST be identical.
 
-use usk_oplog::{Anchor, Op, OpLog, Payload};
+use usk_oplog::{Anchor, Op, OpLog, Payload, RangeBinding};
 use usk_state::State;
-use usk_types::{ActorId, ColId, OpId, RowId, Value};
+use usk_types::{ActorId, ColId, Decimal, OpId, RowId, Value};
 
 fn main() {
     let mut log = OpLog::new();
     let mut rows: Vec<OpId> = Vec::new();
     let mut cols: Vec<OpId> = Vec::new();
+    let mut deleted_rows: Vec<OpId> = Vec::new();
+    let mut deleted_cols: Vec<OpId> = Vec::new();
     let mut seed: u64 = 0xDEADBEEFCAFEBABE;
     let mut rand = move || {
         seed = seed
@@ -19,7 +21,10 @@ fn main() {
         seed >> 33
     };
 
-    // 3 actors, 5000 ops: structural + cell writes + deletes, fully seeded.
+    // 3 actors, 5000 ops covering **every** payload variant. docs/29 is
+    // explicit: a new op type must join this generator, or the determinism
+    // gate silently stops covering it. Row 9's SetFormula/UndeleteRow/
+    // UndeleteCol — and ClearCell, never covered before — are exercised here.
     for i in 0..5000u64 {
         // Per-op counter is 1-based and advances in lockstep with the loop, so
         // the corpus is a pure function of the seed (DP-A2).
@@ -27,8 +32,8 @@ fn main() {
         let actor = ActorId(1 + (rand() % 3) as u128);
         let id = OpId { actor, counter };
         let lamport = i + 1;
-        let payload = match rand() % 10 {
-            0 => {
+        let payload = match rand() % 16 {
+            0 | 1 => {
                 let anchor = if rows.is_empty() {
                     Anchor::Start
                 } else {
@@ -37,7 +42,7 @@ fn main() {
                 rows.push(id);
                 Payload::InsertRow { anchor }
             }
-            1 => {
+            2 => {
                 let anchor = if cols.is_empty() {
                     Anchor::Start
                 } else {
@@ -46,9 +51,56 @@ fn main() {
                 cols.push(id);
                 Payload::InsertCol { anchor }
             }
-            2 if rows.len() > 4 => {
+            3 if rows.len() > 4 => {
                 let r = rows[(rand() as usize) % rows.len()];
+                deleted_rows.push(r);
                 Payload::DeleteRow { row: RowId(r) }
+            }
+            4 if cols.len() > 4 => {
+                let c = cols[(rand() as usize) % cols.len()];
+                deleted_cols.push(c);
+                Payload::DeleteCol { col: ColId(c) }
+            }
+            // Undeletes: the Row 9 ops. Resurrecting a row that was never
+            // deleted is still a valid op, so the corpus exercises both.
+            5 if !deleted_rows.is_empty() => {
+                let r = deleted_rows[(rand() as usize) % deleted_rows.len()];
+                Payload::UndeleteRow { row: RowId(r) }
+            }
+            6 if !deleted_cols.is_empty() => {
+                let c = deleted_cols[(rand() as usize) % deleted_cols.len()];
+                Payload::UndeleteCol { col: ColId(c) }
+            }
+            7 if !rows.is_empty() && !cols.is_empty() => {
+                let r = rows[(rand() as usize) % rows.len()];
+                let c = cols[(rand() as usize) % cols.len()];
+                Payload::ClearCell {
+                    row: RowId(r),
+                    col: ColId(c),
+                }
+            }
+            // Formulas carry identity bindings, so this arm also exercises the
+            // variable-length binding vector in the canonical encoding.
+            8 | 9 if rows.len() > 2 && cols.len() > 2 => {
+                let r = rows[(rand() as usize) % rows.len()];
+                let c = cols[(rand() as usize) % cols.len()];
+                let n_bindings = 1 + (rand() % 3) as usize;
+                let mut bindings = Vec::with_capacity(n_bindings);
+                for _ in 0..n_bindings {
+                    bindings.push(RangeBinding {
+                        row_start: rows[(rand() as usize) % rows.len()],
+                        row_end: rows[(rand() as usize) % rows.len()],
+                        col_start: cols[(rand() as usize) % cols.len()],
+                        col_end: cols[(rand() as usize) % cols.len()],
+                        anchors: (rand() % 4) as u8,
+                    });
+                }
+                Payload::SetFormula {
+                    row: RowId(r),
+                    col: ColId(c),
+                    source: alloc_formula(rand()),
+                    bindings,
+                }
             }
             _ => {
                 if rows.is_empty() || cols.is_empty() {
@@ -59,10 +111,12 @@ fn main() {
                 } else {
                     let r = rows[(rand() as usize) % rows.len()];
                     let c = cols[(rand() as usize) % cols.len()];
-                    let v = match rand() % 4 {
+                    let v = match rand() % 5 {
                         0 => Value::Number((rand() % 100000) as f64 / 100.0),
                         1 => Value::Bool(rand() % 2 == 0),
                         2 => Value::Text(alloc_text(rand())),
+                        // Row 5's exact-decimal domain, in the gate at last.
+                        3 => Value::Decimal(Decimal::new((rand() % 1_000_000) as i128, -2)),
                         _ => Value::Blank,
                     };
                     Payload::SetCell {
@@ -87,4 +141,8 @@ fn main() {
 
 fn alloc_text(n: u64) -> String {
     format!("cell-{n}")
+}
+
+fn alloc_formula(n: u64) -> String {
+    format!("=SUM(A1:B{})+{}", n % 97 + 1, n % 13)
 }

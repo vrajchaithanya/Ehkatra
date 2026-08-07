@@ -15,6 +15,11 @@ Every document carries a header: `Status: Draft | Approved | Superseded` · `Own
 | 08 | Engineering Handbook (process, self-review, releases) | You | Approved |
 | 25 | UX Architecture (five surfaces, interaction rules) | You | Approved |
 | 26 | Data Model & Container Schema Specs | You | Approved |
+| 27 | State Machine Specifications | You | Approved |
+| 28 | Error Handling Model | You | Approved |
+| 29 | Determinism Verification Guide | You | Approved |
+| 37 | Threat Model (STRIDE per boundary) | You | Approved |
+| 38 | Benchmark Specification (workload ids) | You | Approved |
 | — | templates/ (ADR, RFC) | You | Living |
 
 ## Module architecture (normative)
