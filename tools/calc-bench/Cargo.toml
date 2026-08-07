@@ -1,0 +1,13 @@
+[package]
+name = "calc-bench"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "calc-bench"
+path = "src/main.rs"
+
+[dependencies]
+usk-types = { path = "../../crates/usk-types" }
+usk-formula = { path = "../../crates/usk-formula" }
+usk-calc = { path = "../../crates/usk-calc" }

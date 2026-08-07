@@ -105,5 +105,64 @@ asserts the literal byte sequences.
 | state hash | `e6cc2757e42581c6cacd47cfb0420c3364e5ae76e98d0a081bd7a8efb03f2957` — **new**, superseding `4516044e…`: cells now fold in tile-major order (the tile-Merkle direction docs/10 specifies) instead of flat identity order |
 | native vs wasm32-wasip1 | identical |
 
+## Row 7 — dependency graph and recalculation (`tools/calc-bench`, release)
+
+Shape: 10,000 rows x 10 chained formula columns = **100,000 dependent formula
+cells**, each reading the column to its left. Reproduce with
+`cargo build --release -p calc-bench; ./target/release/calc-bench`.
+
+### A-003 — full recalculation · **passes, with a caveat that matters**
+| | |
+|---|---|
+| Budget (docs/31, A-003) | < 200 ms for 100k dependents **on 8 cores** |
+| Measured | **53.0 ms**, median of 5 |
+| Threads used | **1** |
+| Throughput | 1.89 M cells/s |
+| Graph size | **10 nodes for 100,000 formula cells** (10,000 cells/node) |
+| Topological levels | 10 (chain depth), parallel width ~1 |
+
+The caveat: this is single-threaded, so it clears a budget that *allowed* eight
+cores. That is a stronger result than the budget asked for, but it does not
+validate the "level-parallel via rayon" half of A-003 — rayon sits behind the
+PAL `Compute` trait, which does not exist (DP-A3, docs/10). The bench reports
+level width so the available parallelism is visible: on this shape it is ~1,
+because a chain of 10 columns is inherently 10 deep. A wide model would show
+width, and that is the shape to bench once the PAL lands.
+
+### Incremental recalculation, one edit · **passes**
+| | |
+|---|---|
+| Budget (docs/31, single edit) | < 8 ms |
+| Measured | **0.191 ms**, median of 5 |
+| Cells evaluated | **10** of 100,000 |
+| Speed-up vs full recalc | **278x** |
+
+### What the numbers cost to get right
+Two measured failures on the way, both recorded because the fixed numbers mean
+nothing without them:
+
+1. **Grouping collapsed entirely: 100,000 groups for 100,000 cells**, and the
+   O(groups^2) edge build then hung outright (killed after 10 minutes). All ten
+   chained columns share one R1C1 pattern, so they formed a single group whose
+   read set overlapped its own write set, which split to singletons. Fixed by
+   partitioning a self-overlapping group by column first, and by building edges
+   through the range index instead of comparing every pair.
+2. **Incremental recalc recomputed everything: 53 ms, 100,000 cells, 1x
+   speed-up.** Dirtiness was tracked per *group*, and a group is 10,000 cells.
+   Fixed by carrying a dirty *rectangle* through marking and evaluation. That
+   left a 10.5 ms residue spent re-walking 10,000 member ASTs per group to
+   answer "who reads this rectangle"; precomputing a per-member read bound took
+   it to 0.191 ms.
+
+### Graph construction (not a budgeted number, recorded as a watch item)
+| | |
+|---|---|
+| Graph build, 100k formulas | 699 ms |
+
+Dominated by parsing 100,000 formula strings. docs/31 budgets cold open of a
+1M-cell workbook at <1.5 s for *skeleton + viewport*, which is not this number,
+but a naive 1M-formula build would extrapolate to ~7 s. Filed as TD-19 rather
+than left to be discovered at Row 11.
+
 ## Not yet measured (targets remain targets — docs/42)
 A-001 memory/10M cells · A-002 promotion rate · A-003 recalc 100k · A-005 wasm32 **in a real browser / Safari** (WASI-under-Node is not a browser and must not be reported as one) · all docs/31 budget rows.

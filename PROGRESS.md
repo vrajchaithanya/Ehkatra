@@ -172,3 +172,49 @@ Carry into Row 7:
 - TD-16 (implicit intersection) needs the evaluating cell's position, which the dep graph supplies — close it there.
 - `Ast::Name` currently evaluates to `#NAME?`; docs/12 wants unresolved names to live-rebind when the name appears, which needs the name table plus dep-graph invalidation.
 - Volatiles are already injected via `Context::{today, now}`; Row 7 must make them dirty-marking so a recalc re-materialises them exactly once per pass (ADR-009).
+
+## Session 6 — Row 7: dependency graph and recalculation · DONE
+
+**Row 7 is built and proven** — new kernel crate `usk-calc` (`sheet.rs`, `graph.rs`) with 14 tests in `crates/usk-calc/tests/recalc.rs` and the A-003 harness `tools/calc-bench`. **85 tests total**, all gates green.
+
+### What shipped
+- **Formula groups** — nodes are R1C1 patterns, not cells. Measured: **10 nodes for 100,000 formula cells**.
+- **Range-granular edges** — a group records the rectangles it reads; "who reads what I wrote" is a stab against a band-bucketed index, never a materialised cell-edge set.
+- **Incremental recalc** — dirty *rectangles* propagate transitively with early cutoff, then topo **levels**, then evaluation of only the dirty members.
+- **Cycle detection** → `#CIRC!`, read off the level assignment rather than a separate Tarjan pass.
+- Volatiles read from the engine's materialised bindings (docs/13 T2), never a clock.
+
+### MEASURED (MEASUREMENTS.md) — A-003 passes
+| | Budget | Measured |
+|---|---|---|
+| Full recalc, 100k dependents | <200 ms on 8 cores | **53.0 ms on 1 core** |
+| Single-edit incremental | <8 ms | **0.191 ms** (10 cells of 100,000; 278× faster than full) |
+
+**The caveat that belongs next to the number**: this is single-threaded, so it clears a budget that *allowed* eight cores — a stronger result than asked for, but it does not validate A-003's "level-parallel via rayon" half, because rayon sits behind the unbuilt PAL `Compute` trait. Recorded as TD-17, and A-003 in docs/42 says "confirmed on the single-threaded path" rather than "confirmed".
+
+### Two measured failures on the way — the reason the final numbers mean anything
+1. **Grouping collapsed completely: 100,000 groups for 100,000 cells**, and the O(groups²) edge build then hung outright (killed after 10 minutes). All ten chained columns share one R1C1 pattern, so they formed one group whose reads overlapped its own writes and split to singletons. Fixed by partitioning a self-overlapping group **by column** first (D-047) and by building edges through the range index (D-049).
+2. **Incremental recalc recomputed everything: 53 ms, 100,000 cells, 1× speed-up** — i.e. no incremental behaviour at all. Dirtiness was tracked per *group*, and a group is 10,000 cells. Fixed by carrying a dirty rectangle through marking and evaluation (D-048). That left a 10.5 ms residue re-walking 10,000 member ASTs per group; precomputing a per-member read bound took it to 0.191 ms.
+
+Neither was visible from the tests — all 14 passed throughout. The bench found both.
+
+### DECISIONS (docs/43)
+D-047 self-overlapping groups partition by column before falling back to singletons · D-048 dirtiness is a rectangle inside a group, not the group · D-049 edges come from the range index, never pairwise comparison · D-050 cycles are read off the level assignment rather than a separate Tarjan pass.
+
+### DEBT (docs/44)
+TD-17 recalc is single-threaded (A-003's 8-core half unvalidated) · TD-18 `Engine::build` regroups the whole sheet, so *formula* edits are not yet incremental — only value edits · TD-19 graph build is 699 ms per 100k formulas, dominated by parsing · TD-20 the index is band-bucketed, not the R-tree docs/13 specifies.
+
+### GATES STATUS
+fmt ✓ · clippy 0 warnings ✓ · **tests 85/85 ✓** · no_std wasm32 kernel build (now including usk-calc) ✓ · dep budget 1/5, 10/12, 10/40 ✓ · differential replay native==wasm ✓ · purity + host-isolation greps ✓
+
+Both replay hashes unchanged (`77e5b1bf…`, `e6cc2757…`).
+
+### NEXT (unchanged BOOTSTRAP order)
+**Row 8: identity references** — insert/delete rows shifts ranges correctly, and the canonical test: a concurrent row-insert against `SUM(A1:A10)` converges. Proof: a dedicated regression plus a proptest.
+
+Carry into Row 8:
+- **This is the row that pays off `usk-calc`'s central shortcut.** `Rect` and `CellRef` are view *ordinals*; DP-A6 says references are identity intervals and A1 is a computed view. The seam was kept deliberately narrow — those two types in `sheet.rs`, plus `parse::A1` — so Row 8 is a substitution, not a rewrite.
+- Row 8 also closes **TD-16** (implicit intersection needs the evaluating cell's position, which the engine now has) and gives lookup the sortedness contract **TD-14** waits on.
+- `usk-state` already has the identity-interval machinery (`SlotMap`, `TileKey`); Row 8 is where `usk-calc` starts speaking it, which also means `usk-calc` finally depends on `usk-state` rather than carrying its own `Sheet`.
+- The A-002 tile-promotion redesign (TD-09) is **still open** and must land before Q2.
+

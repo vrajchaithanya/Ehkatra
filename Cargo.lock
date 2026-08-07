@@ -29,6 +29,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "calc-bench"
+version = "0.1.0"
+dependencies = [
+ "usk-calc",
+ "usk-formula",
+ "usk-types",
+]
+
+[[package]]
 name = "cc"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -101,6 +110,14 @@ version = "0.1.0"
 dependencies = [
  "usk-oplog",
  "usk-state",
+ "usk-types",
+]
+
+[[package]]
+name = "usk-calc"
+version = "0.1.0"
+dependencies = [
+ "usk-formula",
  "usk-types",
 ]
 

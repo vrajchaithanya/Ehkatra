@@ -1,5 +1,14 @@
 # Changelog — Architecture Repository
 
+## 2026-08-07 (session 6) — BOOTSTRAP Row 7: dependency graph
+- New kernel crate **`usk-calc`**: formula groups, range-granular edges, incremental recalculation, cycle detection (docs/13).
+- **Formula groups**: nodes are R1C1 patterns, measured at **10 nodes for 100,000 formula cells**.
+- **A-003 passes**: 100k-dependent full recalc in **53.0 ms single-threaded** against a <200 ms/8-core budget; single-edit incremental in **0.191 ms** against <8 ms, evaluating 10 cells of 100,000. The level-parallel half of A-003 is unvalidated — rayon is behind the unbuilt PAL `Compute` trait (TD-17).
+- Two measured failures fixed on the way: grouping collapsed to 100,000 nodes and hung the O(n²) edge build; and incremental recalc recomputed all 100,000 cells for a one-cell edit. Both are recorded in MEASUREMENTS.md, because the final numbers are only meaningful against them.
+- New decisions: D-047 (self-overlapping groups partition by column), D-048 (dirtiness is a rectangle inside a group), D-049 (edges from the range index, not pairwise), D-050 (cycles read off the level assignment).
+- New debt: TD-17 single-threaded recalc, TD-18 no incremental regrouping, TD-19 graph-build parse cost, TD-20 band index vs R-tree.
+- 14 new tests (85 total); both replay hashes unchanged.
+
 ## 2026-08-07 (session 5) — BOOTSTRAP Row 6: formula engine
 - New kernel crate **`usk-formula`**: `text → lexer → Pratt parser → lossless CST → AST → evaluator` (docs/12).
 - **Lossless CST (ADR-011)**: `Cst::text()` reproduces the input byte for byte — whitespace, unterminated strings and unparseable garbage included — with spans retained for error carets.

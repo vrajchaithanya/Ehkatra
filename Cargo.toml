@@ -5,9 +5,11 @@ members = [
   "crates/usk-oplog",
   "crates/usk-state",
   "crates/usk-formula",
+  "crates/usk-calc",
   "ehkatra-cli",
   "tools/replay-check",
   "tools/tile-bench",
+  "tools/calc-bench",
 ]
 
 [workspace.package]

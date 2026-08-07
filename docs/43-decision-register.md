@@ -73,4 +73,20 @@ docs/12 specifies registration carrying arity, per-argument coercion class, vola
 **D-046 — `^`, `SQRT` and friends are implemented in-crate rather than via libm.**
 The kernel is `no_std` (DP-A3) and DP-A2 demands bit-identical results on every target forever. Platform math libraries disagree in the last bits and change between versions, so `powf` uses exact repeated multiplication for integer exponents — the overwhelmingly common spreadsheet case — and a series expansion of `exp(y·ln x)` otherwise; `SQRT` is Newton's method. Accuracy for fractional exponents is therefore "good to ~1e-12", not "correctly rounded". Filed as TD-15 with the oracle corpus as the trigger to tighten it.
 
+### Session 6 (2026-08-07) — Row 7, the dependency graph
+
+**D-047 — A self-overlapping formula group is partitioned by column before falling back to singletons.**
+Members of one R1C1 pattern can depend on each other: `=A1+1` in B1 and `=B1+1` in C1 render identically, so they group together, and evaluating them against one snapshot would silently compute a stale answer. The obvious fix — split any self-overlapping group into singletons — was implemented, measured, and found catastrophic: a chain of ten derived columns became **100,000 nodes for 100,000 cells**, destroying the grouping win in the most ordinary model shape there is, and the O(n²) edge build then hung outright.
+Partitioning by column first makes a horizontal chain one group per column, each reading only the column to its left. Only a partition that still overlaps itself — a vertical running total, which is inherently serial anyway — falls back to singletons. Measured result: 10 nodes for 100,000 cells.
+
+**D-048 — Dirtiness is a rectangle inside a group, not the group.**
+The first implementation marked whole groups dirty. With 10,000-cell groups a single-cell edit recomputed all 100,000 cells in 53 ms against docs/31's 8 ms budget — a 1× speed-up over full recalculation, i.e. no incremental behaviour at all. Marking and evaluation now carry a `Rect`, and only members inside it are evaluated: 10 cells, 0.191 ms, 278× faster than a full pass.
+A second cost surfaced immediately: answering "which members read this rectangle" by re-walking 10,000 member ASTs cost 10.5 ms on its own. Each member's read **bounding rectangle** is now precomputed at build time. A bounding box is a safe over-approximation — it can add an evaluation, never miss one — which is the correct direction for a dirtiness test.
+
+**D-049 — Dependency edges come from the range index, never from pairwise comparison.**
+Comparing every dirty group against every other is O(groups²), and it is what actually hung the first benchmark run. The index already answers "who reads this rectangle"; edges now use it. This is also the shape docs/13 describes — a stab, not a materialised edge set.
+
+**D-050 — Cycles are read off the level assignment rather than from a separate Tarjan pass.**
+docs/13 names Tarjan SCC on the dirty subgraph. Kahn's algorithm already produces the same fact for free: whatever it cannot place has no valid level, and by definition is in a cycle. Self-references are detected directly, since a group reading its own output produces no edge to detect. Adding a second traversal to learn something the first already proved would be cost without information. If cycle *reporting* later needs the SCC membership (docs/36's workbook health report groups cells by cluster), add Tarjan then — it is a reporting need, not a correctness one.
+
 **D-038 — Host toolchain is `x86_64-pc-windows-gnu`, not MSVC.** The build host has no Visual Studio and installing it would be a machine-wide, admin-elevated change — barred by DP-S5. The GNU toolchain is self-contained in `%USERPROFILE%\.rustup`, installed with `--no-modify-path` (no PATH edit, no registry, no service). Uninstall remains "delete the folder". Consequence recorded honestly: the primary local build target now differs from CI's `x86_64-unknown-linux-gnu` — which is a *feature* for DP-A2, and the differential-replay hashes matching across both is the evidence (MEASUREMENTS.md).
