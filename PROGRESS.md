@@ -729,6 +729,90 @@ materialised state image (docs/16's tile image). That is real work, not wiring.
 fmt ✓ · clippy 0 warnings ✓ · **tests 177/177 ✓** · no_std wasm32 kernel build ✓
 · dep budget 1/5, 10/12, **29/40** ✓ · differential replay native==wasm ✓ ·
 purity + host-isolation + loopback greps ✓. Both replay hashes unchanged.
+**CI green on `ubuntu-latest`, both jobs — see below.**
+
+## Session 11 (cont.) — **CI ran for the first time**; the supply-chain gate is finally green (D-077)
+
+The owner waived the no-git boundary for one task and asked for the work to be
+committed and pushed. That push triggered the first CI run this repository has
+ever completed, and it failed.
+
+### Correcting the record first
+Session 8 wrote that the repo *"has no remote and has never been pushed; all of
+CI is equally dead"*, and every session since repeated it. **It was stale.** The
+Actions history shows a run at 07:41 today against `493a6f6` — from an earlier
+session — which also **failed**. So the gate had not been merely unexecuted; it
+had been failing, unnoticed, for hours. Session 3's note at line 84 ("it will
+first run for real on CI's `ubuntu-latest`") is now discharged.
+
+### What the first real run found
+`gates` **passed** on Ubuntu in 43 s — fmt, clippy, tests, `no_std`, dep budget,
+differential replay, every grep. Worth noting on its own: the determinism gate
+now holds across a third OS/toolchain combination.
+
+`supply-chain` **failed, exit 6, with 21 errors — every one of them about this
+workspace rather than a third-party crate**:
+* `error[wildcard]` ×15 — every internal `{ path = "..." }` dependency, because
+  it carries no version. The hazard `wildcards = "deny"` guards is a *crates.io*
+  wildcard, where an upstream release can change your build without you acting;
+  a path dependency resolves inside this repo and nobody else can move it.
+  Separated with `allow-wildcard-paths = true`.
+* `error[unlicensed]` ×6 — our own crates. `"UNLICENSED"` is not a parseable
+  SPDX expression, and six manifests were not inheriting even that.
+
+### The fix (`ced24c7`), and what it deliberately does not do
+`publish = false` now lives in `[workspace.package]`; all 16 members inherit it
+and the licence; `[licenses] private = { ignore = true }` narrows licence
+checking to third-party code. `publish = false` earns its place independently —
+it makes an accidental `cargo publish` of proprietary code something cargo
+itself refuses.
+
+**Nothing was weakened.** Advisories, yanked crates, the banned-crate list
+(postgres/sqlx/diesel, openssl/ring) and the registry allow-list are untouched,
+and third-party licence checking is exactly as strict as before. The gate now
+distinguishes *our* code from *other people's*, which is the distinction it was
+always meant to make. Silencing the unlicensed error with a blanket allowance
+would have been the shorter route and would have stopped checking real
+dependencies.
+
+### Result
+```
+✓ main ci · 31263838366
+  ✓ gates          43 s
+  ✓ supply-chain   27 s   (advisories · licences · bans · sources · RUSTSEC)
+```
+`main` and `origin/main` are in sync at `ced24c7`.
+
+### And then the local blocker turned out to be gone too (D-078)
+Session 3 recorded that `cargo install cargo-deny` fails on this host for want
+of `dlltool.exe`, and said "don't burn time retrying it on Windows". That was
+true then and is **no longer true**: the in-workspace toolchain (D-073) ships a
+real `dlltool` at `.toolchain\mingw64\bin\dlltool.exe`, and with that ahead of
+rustup's stub on `PATH`, cargo-deny builds in 4 m 27 s.
+
+Locally: `advisories ok, bans ok, licenses ok, sources ok`.
+
+**`cargo deny check` is now part of `tools/gates.ps1`**, guarded so it skips
+with a notice when the binary is absent (CI still enforces it regardless). This
+closes the actual gap: for eight sessions the check existed only on CI, which
+meant in practice it ran nowhere and then failed silently on two pushes. It now
+runs *before* a push rather than after one.
+
+The wider lesson is about the note, not the tool: **"don't retry this" aged into
+a false statement the moment an unrelated change (a C toolchain, added for
+SQLite) removed its cause.** A blocker note should name the condition that would
+clear it, so the next session knows what to re-test instead of trusting a
+verdict from three sessions ago.
+
+### The process lesson (D-077)
+This gate sat green-by-absence for eight sessions while PROGRESS.md faithfully
+noted "added but not yet proven" each time — and that note changed nothing,
+because nobody could act on it without a push. **A gate that has never executed
+is not a gate; it is a plan.** It found real problems in under a minute once it
+ran. The same applies to the CI file as a whole, and the standing instruction
+from session 8 ("on the first push, check the Actions run and record the
+supply-chain job's first green here") is hereby discharged: **first green is
+`31263838366`, 2026-08-08.**
 
 ### NEXT
 - **TD-30 first** — a container that cannot survive one corrupt snapshot should

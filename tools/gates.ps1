@@ -22,6 +22,23 @@ Step 'Tests (DP-C4)'             { cargo test --workspace }
 Step 'no_std kernel (DP-A3)'     { cargo build -p usk-types -p usk-oplog -p usk-state -p usk-formula -p usk-calc -p usk-reduce -p usk-sync -p usk-recover --target wasm32-wasip1 }
 Step 'Complexity budget (DP-S2)' { node tools/dep-budget.mjs }
 
+# Supply chain (DP-E8). For eight sessions this ran only on CI - which meant in
+# practice it ran nowhere, and it failed silently on its first two pushes.
+# `cargo-deny` builds here once the in-workspace MinGW `dlltool` is ahead of
+# rustup's stub on PATH (D-078), so the check now happens *before* a push
+# instead of after one.
+Write-Host "`n=== Supply chain (DP-E8) ===" -ForegroundColor Cyan
+$denyBin = Join-Path $env:USERPROFILE '.cargo\bin\cargo-deny.exe'
+if (Test-Path $denyBin) {
+    $mingw = Join-Path (Split-Path $PSScriptRoot -Parent) '.toolchain\mingw64\bin'
+    if (Test-Path $mingw) { $env:PATH = "$mingw;" + $env:PATH }
+    cargo deny check
+    if ($LASTEXITCODE -ne 0) { throw 'GATE FAILED: Supply chain (cargo-deny)' }
+} else {
+    Write-Host '  SKIP  cargo-deny not installed (cargo install cargo-deny --locked)' -ForegroundColor Yellow
+    Write-Host '        CI still enforces this on every push.' -ForegroundColor Yellow
+}
+
 Write-Host "`n=== Differential replay (DP-A2) ===" -ForegroundColor Cyan
 cargo build --release -p replay-check
 if ($LASTEXITCODE -ne 0) { throw 'GATE FAILED: replay-check native build' }

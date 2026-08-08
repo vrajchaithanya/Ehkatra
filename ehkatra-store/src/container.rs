@@ -20,6 +20,7 @@
 //!   [`Container::open`] reads it back through `Op::decode`. The file *is* the
 //!   wire format at rest.
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -28,7 +29,7 @@ use rusqlite::{params, Connection, OpenFlags, Transaction};
 use usk_oplog::{Op, OpLog};
 use usk_recover::machine::{Action, Document, Event};
 use usk_recover::salvage::{recover, Salvaged};
-use usk_recover::snapshot::Snapshot;
+use usk_recover::snapshot::{Snapshot, VerifiedSnapshot};
 use usk_types::{ActorId, OpId};
 
 use crate::schema::{APPLICATION_ID, SCHEMA_V1, USER_VERSION};
@@ -103,6 +104,23 @@ type Result<T> = std::result::Result<T, StoreError>;
 /// docs/16: "Ops are durable locally within 250 ms of typing." The container
 /// batches commits to that cadence rather than committing per op.
 pub const AUTOSAVE_BATCH_MS: u64 = 250;
+
+/// docs/16 §Retention: **keep the last 3 snapshots**.
+///
+/// One is not a fallback. The salvage path promises "the *last valid*
+/// snapshot", which presupposes more than one exists; before this constant
+/// existed the container kept exactly one, and W-OPEN-1M measured what that
+/// costs — corrupting it lost 1,002,000 ops with zero quarantined bytes.
+pub const SNAPSHOTS_RETAINED: usize = 3;
+
+/// docs/16 §Retention consequence 4: ops are pruned only when at least this
+/// many retained snapshots **verify**.
+///
+/// With one snapshot the tail is empty by construction, so a single corruption
+/// is total loss. With two, the guarantee is structural: snapshots are nested,
+/// so whichever one is corrupt, the newest survivor covers at least the floor
+/// and the retained tail covers everything after it.
+pub const MIN_VERIFIED_SNAPSHOTS_TO_PRUNE_OPS: usize = 2;
 
 /// What `open` produced: the document machine in READY, the ops to fold, and —
 /// if anything was wrong — the salvage report the user must see first.
@@ -285,9 +303,28 @@ impl Container {
         self.uncommitted
     }
 
-    /// Stores a snapshot. Content-addressed by its watermark, per docs/26's
-    /// primary key.
+    /// Stores a snapshot, then trims the chain to [`SNAPSHOTS_RETAINED`].
+    /// Content-addressed by its watermark, per docs/26's primary key.
+    ///
+    /// Trimming here touches **snapshots only, never ops** — dropping a
+    /// snapshot can never lose data while the ops it covered are still
+    /// present, so this path is unconditionally safe. Ops are pruned in
+    /// [`Container::compact`] and nowhere else.
     pub fn put_snapshot(&mut self, snapshot: &Snapshot) -> Result<()> {
+        let created = self.next_created()?;
+        self.put_snapshot_at(snapshot, created)?;
+        self.trim_snapshot_chain()?;
+        Ok(())
+    }
+
+    /// Stores a snapshot with an explicit `created` stamp and does *not* trim.
+    ///
+    /// Compaction needs both: it rewrites the chain into a fresh file and must
+    /// preserve each snapshot's age, because "newest first" is what makes
+    /// docs/16's "last valid snapshot" walk mean the right thing. Reusing
+    /// `put_snapshot` there would stamp three snapshots with one clock reading
+    /// and lose the ordering the walk depends on.
+    pub fn put_snapshot_at(&mut self, snapshot: &Snapshot, created_ms: i64) -> Result<()> {
         self.conn.execute(
             "INSERT OR REPLACE INTO snapshots (watermark, state_hash, body, created) \
              VALUES (?1, ?2, ?3, ?4)",
@@ -295,36 +332,71 @@ impl Container {
                 snapshot.watermark.encode(),
                 snapshot.state_hash.to_vec(),
                 snapshot.body.clone(),
-                now_ms() as i64
+                created_ms
             ],
         )?;
         Ok(())
     }
 
+    /// A `created` stamp strictly newer than every stored snapshot. The wall
+    /// clock is the usual source, but a clock that has gone backwards must not
+    /// be able to reorder the chain — age ordering is load-bearing here, so it
+    /// is enforced rather than assumed.
+    fn next_created(&self) -> Result<i64> {
+        let newest: Option<i64> =
+            self.conn
+                .query_row("SELECT max(created) FROM snapshots", [], |r| r.get(0))?;
+        let now = now_ms() as i64;
+        Ok(match newest {
+            Some(prev) if prev >= now => prev + 1,
+            _ => now,
+        })
+    }
+
+    /// Deletes everything past the newest [`SNAPSHOTS_RETAINED`] snapshots.
+    fn trim_snapshot_chain(&mut self) -> Result<usize> {
+        let removed = self.conn.execute(
+            "DELETE FROM snapshots WHERE rowid NOT IN \
+             (SELECT rowid FROM snapshots ORDER BY created DESC, rowid DESC LIMIT ?1)",
+            params![SNAPSHOTS_RETAINED as i64],
+        )?;
+        Ok(removed)
+    }
+
     /// Snapshots newest first — the order docs/16's "last valid snapshot" walk
     /// requires.
     pub fn snapshots(&self) -> Result<Vec<Snapshot>> {
+        Ok(self.snapshot_rows()?.into_iter().map(|(s, _)| s).collect())
+    }
+
+    /// Snapshots newest first, each with the `created` stamp that ordered it.
+    fn snapshot_rows(&self) -> Result<Vec<(Snapshot, i64)>> {
         let mut stmt = self.conn.prepare(
-            "SELECT watermark, state_hash, body FROM snapshots ORDER BY created DESC, rowid DESC",
+            "SELECT watermark, state_hash, body, created FROM snapshots \
+             ORDER BY created DESC, rowid DESC",
         )?;
         let rows = stmt.query_map([], |r| {
             let watermark: Vec<u8> = r.get(0)?;
             let state_hash: Vec<u8> = r.get(1)?;
             let body: Vec<u8> = r.get(2)?;
-            Ok((watermark, state_hash, body))
+            let created: i64 = r.get(3)?;
+            Ok((watermark, state_hash, body, created))
         })?;
         let mut out = Vec::new();
         for row in rows {
-            let (watermark, state_hash, body) = row?;
+            let (watermark, state_hash, body, created) = row?;
             let mut hash = [0u8; 32];
             if state_hash.len() == 32 {
                 hash.copy_from_slice(&state_hash);
             }
-            out.push(Snapshot {
-                watermark: crate::decode_watermark(&watermark),
-                state_hash: hash,
-                body,
-            });
+            out.push((
+                Snapshot {
+                    watermark: crate::decode_watermark(&watermark),
+                    state_hash: hash,
+                    body,
+                },
+                created,
+            ));
         }
         Ok(out)
     }
@@ -411,23 +483,55 @@ impl Container {
     }
 
     /// Compaction: **a new file and an atomic rename**, never an in-place
-    /// rewrite (docs/26, docs/27 §2).
+    /// rewrite (docs/26, docs/27 §2), under docs/16's retention policy.
     ///
     /// Drives the caller's `Document` through COMPACTING so the deferred-ops
     /// rule proven in `usk-recover` runs against the real file: ops arriving
     /// mid-compaction are not written to the old container and are not dropped,
     /// and are flushed once the rename lands.
+    ///
+    /// # Retention (docs/16, TD-30)
+    /// The compacted file carries the newest [`SNAPSHOTS_RETAINED`] snapshots —
+    /// the one this compaction takes, plus the most recent already present —
+    /// and **every op since the oldest retained snapshot**.
+    ///
+    /// Two guards make "a single corrupt snapshot never loses acknowledged ops"
+    /// structural rather than hoped for:
+    /// * the floor is the oldest retained snapshot **that verifies**, so an
+    ///   unreadable snapshot can never authorise deleting the ops it claims to
+    ///   contain;
+    /// * fewer than [`MIN_VERIFIED_SNAPSHOTS_TO_PRUNE_OPS`] verified snapshots
+    ///   prunes nothing at all, because with one snapshot the tail is empty by
+    ///   construction and that one corruption is the whole workbook.
+    ///
+    /// Verification here is a full replay of each retained body. That is the
+    /// expensive option and it is the correct one: this is the single moment
+    /// where the container decides to destroy user data, and a checksum would
+    /// only prove the bytes survived, not that they still mean what they meant.
     pub fn compact(&mut self, doc: &mut Document, keep: &OpLog) -> Result<CompactReport> {
         let actions = doc.step(Event::CompactionTrigger);
         debug_assert!(actions.contains(&Action::WriteCompactedFile));
+
+        let fresh_snapshot = Snapshot::build(keep);
+        let retained = self.retention_chain(fresh_snapshot)?;
+        let floor = Self::prune_floor(&retained);
+        let kept_ops: Vec<Op> = keep
+            .ops()
+            .iter()
+            .filter(|op| !floor.contains(&(op.id.actor.0, op.id.counter)))
+            .cloned()
+            .collect();
+        let ops_pruned = keep.ops().len() - kept_ops.len();
 
         let tmp = self.path.with_extension("compact.tmp");
         let _ = fs::remove_file(&tmp);
         {
             let mut fresh = Container::open_or_create(&tmp)?;
-            let snapshot = Snapshot::build(keep);
-            fresh.put_snapshot(&snapshot)?;
-            fresh.append_ops(keep.ops(), 0)?;
+            // Oldest first, so `created` ties break by rowid in age order.
+            for (snapshot, created) in retained.iter().rev() {
+                fresh.put_snapshot_at(snapshot, *created)?;
+            }
+            fresh.append_ops(&kept_ops, 0)?;
             fresh.maybe_commit(u64::MAX, true)?;
             // Drop the connection before renaming: Windows will not rename a
             // file with an open handle, and a half-renamed container is exactly
@@ -457,9 +561,62 @@ impl Container {
             _ => None,
         });
         Ok(CompactReport {
-            ops_kept: keep.ops().len(),
+            ops_kept: kept_ops.len(),
+            ops_pruned,
+            snapshots_retained: retained.len(),
             deferred_flushed: flushed.unwrap_or(0),
         })
+    }
+
+    /// The snapshot chain the compacted file will carry: the snapshot this
+    /// compaction takes, then the newest already present, newest first, capped
+    /// at [`SNAPSHOTS_RETAINED`].
+    ///
+    /// A stored snapshot whose watermark equals the fresh one is skipped rather
+    /// than kept twice — `snapshots.watermark` is docs/26's primary key, so a
+    /// duplicate would collapse on insert and silently shorten the chain to two
+    /// where the caller was told three.
+    fn retention_chain(&self, fresh: Snapshot) -> Result<Vec<(Snapshot, i64)>> {
+        let stored = self.snapshot_rows()?;
+        let newest_created = stored.first().map(|(_, c)| *c).unwrap_or(i64::MIN);
+        let created = (now_ms() as i64).max(newest_created.saturating_add(1));
+
+        let mut chain = Vec::with_capacity(SNAPSHOTS_RETAINED);
+        chain.push((fresh, created));
+        for (snapshot, created) in stored {
+            if chain.len() == SNAPSHOTS_RETAINED {
+                break;
+            }
+            if snapshot.watermark == chain[0].0.watermark {
+                continue;
+            }
+            chain.push((snapshot, created));
+        }
+        Ok(chain)
+    }
+
+    /// The op ids compaction is permitted to delete: exactly those the oldest
+    /// **verified** retained snapshot proved it contains, and only once
+    /// [`MIN_VERIFIED_SNAPSHOTS_TO_PRUNE_OPS`] of the chain verify.
+    ///
+    /// Returning an empty set means "prune nothing", which is always safe and
+    /// is deliberately the default for every path that is not certain.
+    fn prune_floor(chain: &[(Snapshot, i64)]) -> BTreeSet<(u128, u64)> {
+        let verified: Vec<VerifiedSnapshot> =
+            chain.iter().filter_map(|(s, _)| s.verify().ok()).collect();
+        if verified.len() < MIN_VERIFIED_SNAPSHOTS_TO_PRUNE_OPS {
+            return BTreeSet::new();
+        }
+        // `chain` is newest first, so the last verified entry is the oldest
+        // snapshot that proved itself — docs/16 consequence 2 and 3 together.
+        match verified.last() {
+            Some(oldest) => oldest
+                .ops()
+                .iter()
+                .map(|op| (op.id.actor.0, op.id.counter))
+                .collect(),
+            None => BTreeSet::new(),
+        }
     }
 
     /// Final fsync and close (docs/27 §2: "no other work permitted").
@@ -483,7 +640,15 @@ impl Container {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct CompactReport {
+    /// Ops carried into the compacted file — everything since the oldest
+    /// retained snapshot.
     pub ops_kept: usize,
+    /// Ops the floor snapshot proved it contains, and which were therefore
+    /// dropped. Zero whenever the retention guards declined to prune.
+    pub ops_pruned: usize,
+    /// Length of the retained snapshot chain (docs/16: up to
+    /// [`SNAPSHOTS_RETAINED`]).
+    pub snapshots_retained: usize,
     pub deferred_flushed: usize,
 }
 
