@@ -22,12 +22,26 @@ allow = [
   "Zlib",
 ]
 confidence-threshold = 0.9
+# Our own crates are `publish = false` and licensed "UNLICENSED", which is not a
+# parseable SPDX expression - so every workspace member was reported as
+# `unlicensed` on the gate's first real run. Skipping *unpublished* crates is
+# what this setting is for; it narrows the check to third-party code, which is
+# the only code whose licence we do not already control (D-077).
+private = { ignore = true }
 
 [bans]
 # DP-S1 "one of each hard thing": duplicate major versions of the same crate are
 # the usual way a dependency graph doubles behind your back.
 multiple-versions = "warn"
+# A wildcard version on a *crates.io* dependency is the real hazard: it lets an
+# upstream release change what you build without you doing anything. Kept as a
+# deny for that reason.
 wildcards = "deny"
+# ...but every internal crate is declared `{ path = "..." }` with no version,
+# which is the same syntax and none of the risk: a path dependency resolves
+# inside this repo and cannot be moved by anyone else. Without this the gate
+# reported 15 errors, all of them our own workspace edges (D-077).
+allow-wildcard-paths = true
 deny = [
   # DP-E1/DP-S5: the kernel must have no ambient I/O and must never speak to a
   # database on the host. Denying the clients structurally beats reviewing for it.

@@ -23,6 +23,10 @@ members = [
 version = "0.1.0"
 edition = "2021"
 license = "UNLICENSED"
+# Proprietary: no crate here is ever published. Inherited by every member
+# so an accidental `cargo publish` is refused by cargo itself, and so
+# cargo-deny can tell our own crates from third-party ones (D-077).
+publish = false
 
 [workspace.dependencies]
 blake3 = { version = "1", default-features = false }
