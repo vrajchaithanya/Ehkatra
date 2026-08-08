@@ -1,0 +1,2138 @@
+{
+  "schema": "ehkatra.oracle.vectors/1",
+  "function": "DATE",
+  "group": "dates",
+  "doc": "Rolls over out-of-range months and days, and adds 1900 to any year below 1900. Serial 60 is reachable and is 29 February 1900.",
+  "grid_source": "60-dates.psd1",
+  "provenance": {
+    "source": "excel-com",
+    "oracle": true,
+    "excel_version": "16.0",
+    "excel_build": "20228",
+    "excel_product": "Microsoft Excel",
+    "excel_calc_version": "191029",
+    "date_system": "1904",
+    "ui_language_id": 16393,
+    "list_separator": ",",
+    "decimal_separator": ".",
+    "thousands_separator": ",",
+    "os": "Microsoft Windows 11 Home Single Language 10.0.26200",
+    "powershell": "5.1.26100.8875",
+    "harness_version": "1.0.0",
+    "captured_utc": "2026-08-08T04:01:33Z",
+    "probe_column_width": 80,
+    "catalogue_source": "crates/usk-formula/src/functions.rs CATALOGUE"
+  },
+  "case_count": 30,
+  "cases": [
+    {
+      "id": "DATE/0001",
+      "formula": "=DATE(2024,1,1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 43830,
+        "number_r17": "43830",
+        "general_text": "43830",
+        "display_text": "01-01-2024"
+      }
+    },
+    {
+      "id": "DATE/0002",
+      "formula": "=DATE(1900,1,1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "note": "serial 1, the epoch",
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "DATE/0003",
+      "formula": "=DATE(1900,2,28)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "compat-bug",
+        "boundary"
+      ],
+      "note": "serial 59",
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "DATE/0004",
+      "formula": "=DATE(1900,2,29)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "compat-bug",
+        "boundary"
+      ],
+      "note": "a date that never existed: serial 60",
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "DATE/0005",
+      "formula": "=DATE(1900,3,1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "compat-bug",
+        "boundary"
+      ],
+      "note": "serial 61, one past the phantom day",
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "DATE/0006",
+      "formula": "=DATE(1900,1,0)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "note": "serial 0",
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "DATE/0007",
+      "formula": "=DATE(1900,1,-1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "note": "negative serial",
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "DATE/0008",
+      "formula": "=DATE(1899,12,31)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "compat-bug"
+      ],
+      "note": "year below 1900 gets 1900 added: 3799, not 1899",
+      "observed": {
+        "kind": "number",
+        "number": 692500,
+        "number_r17": "692500",
+        "general_text": "692500",
+        "display_text": "31-12-3799"
+      }
+    },
+    {
+      "id": "DATE/0009",
+      "formula": "=DATE(0,1,1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "compat-bug",
+        "boundary"
+      ],
+      "note": "year 0 becomes 1900",
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "DATE/0010",
+      "formula": "=DATE(100,1,1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "compat-bug"
+      ],
+      "note": "year 100 becomes 2000",
+      "observed": {
+        "kind": "number",
+        "number": 35064,
+        "number_r17": "35064",
+        "general_text": "35064",
+        "display_text": "01-01-2000"
+      }
+    },
+    {
+      "id": "DATE/0011",
+      "formula": "=DATE(1899,1,1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "compat-bug"
+      ],
+      "note": "the last year that gets shifted",
+      "observed": {
+        "kind": "number",
+        "number": 692136,
+        "number_r17": "692136",
+        "general_text": "692136",
+        "display_text": "01-01-3799"
+      }
+    },
+    {
+      "id": "DATE/0012",
+      "formula": "=DATE(1900,0,1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "note": "month 0 rolls back a year",
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "DATE/0013",
+      "formula": "=DATE(2024,13,1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "rollover"
+      ],
+      "note": "month 13 is January 2025",
+      "observed": {
+        "kind": "number",
+        "number": 44196,
+        "number_r17": "44196",
+        "general_text": "44196",
+        "display_text": "01-01-2025"
+      }
+    },
+    {
+      "id": "DATE/0014",
+      "formula": "=DATE(2024,25,1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "rollover"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 44561,
+        "number_r17": "44561",
+        "general_text": "44561",
+        "display_text": "01-01-2026"
+      }
+    },
+    {
+      "id": "DATE/0015",
+      "formula": "=DATE(2024,0,1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "rollover"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 43799,
+        "number_r17": "43799",
+        "general_text": "43799",
+        "display_text": "01-12-2023"
+      }
+    },
+    {
+      "id": "DATE/0016",
+      "formula": "=DATE(2024,-1,1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "rollover"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 43769,
+        "number_r17": "43769",
+        "general_text": "43769",
+        "display_text": "01-11-2023"
+      }
+    },
+    {
+      "id": "DATE/0017",
+      "formula": "=DATE(2024,1,0)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "rollover"
+      ],
+      "note": "day 0 is the last day of the previous month",
+      "observed": {
+        "kind": "number",
+        "number": 43829,
+        "number_r17": "43829",
+        "general_text": "43829",
+        "display_text": "31-12-2023"
+      }
+    },
+    {
+      "id": "DATE/0018",
+      "formula": "=DATE(2024,1,32)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "rollover"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 43861,
+        "number_r17": "43861",
+        "general_text": "43861",
+        "display_text": "01-02-2024"
+      }
+    },
+    {
+      "id": "DATE/0019",
+      "formula": "=DATE(2024,2,30)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "rollover"
+      ],
+      "note": "2024 is a real leap year",
+      "observed": {
+        "kind": "number",
+        "number": 43890,
+        "number_r17": "43890",
+        "general_text": "43890",
+        "display_text": "01-03-2024"
+      }
+    },
+    {
+      "id": "DATE/0020",
+      "formula": "=DATE(2023,2,29)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "rollover"
+      ],
+      "note": "2023 is not",
+      "observed": {
+        "kind": "number",
+        "number": 43524,
+        "number_r17": "43524",
+        "general_text": "43524",
+        "display_text": "01-03-2023"
+      }
+    },
+    {
+      "id": "DATE/0021",
+      "formula": "=DATE(2024,1,-5)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "rollover"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 43824,
+        "number_r17": "43824",
+        "general_text": "43824",
+        "display_text": "26-12-2023"
+      }
+    },
+    {
+      "id": "DATE/0022",
+      "formula": "=DATE(9999,12,31)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "note": "the last representable date",
+      "observed": {
+        "kind": "number",
+        "number": 2957003,
+        "number_r17": "2957003",
+        "general_text": "2957003",
+        "display_text": "31-12-9999"
+      }
+    },
+    {
+      "id": "DATE/0023",
+      "formula": "=DATE(10000,1,1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "boundary",
+        "overflow"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "DATE/0024",
+      "formula": "=DATE(-1,1,1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "error-input",
+        "boundary"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "DATE/0025",
+      "formula": "=DATE(2024,1,1.9)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "note": "fractional day",
+      "observed": {
+        "kind": "number",
+        "number": 43830,
+        "number_r17": "43830",
+        "general_text": "43830",
+        "display_text": "01-01-2024"
+      }
+    },
+    {
+      "id": "DATE/0026",
+      "formula": "=DATE(\"2024\",\"1\",\"1\")",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 43830,
+        "number_r17": "43830",
+        "general_text": "43830",
+        "display_text": "01-01-2024"
+      }
+    },
+    {
+      "id": "DATE/0027",
+      "formula": "=DATE(A1,A1,A1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "blank"
+      ],
+      "note": "all-blank arguments",
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "DATE/0028",
+      "formula": "=DATE(B3,1,1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "error-input"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#N/A",
+        "error_type_code": 7,
+        "cverr": -2146826246,
+        "general_text": "",
+        "display_text": "#N/A"
+      }
+    },
+    {
+      "id": "DATE/0029",
+      "formula": "=DATE(2024,1,1)-DATE(2023,1,1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "note": "day count across a year",
+      "observed": {
+        "kind": "number",
+        "number": 365,
+        "number_r17": "365",
+        "general_text": "365",
+        "display_text": "365"
+      }
+    },
+    {
+      "id": "DATE/0030",
+      "formula": "=DATE(1900,3,1)-DATE(1900,2,28)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "compat-bug"
+      ],
+      "note": "two days apart because of the phantom",
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    }
+  ]
+}

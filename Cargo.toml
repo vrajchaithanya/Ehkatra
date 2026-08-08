@@ -7,10 +7,16 @@ members = [
   "crates/usk-formula",
   "crates/usk-calc",
   "crates/usk-reduce",
+  "crates/usk-sync",
+  "crates/usk-recover",
   "ehkatra-cli",
+  "ehkatra-relay",
+  "ehkatra-store",
   "tools/replay-check",
   "tools/tile-bench",
   "tools/calc-bench",
+  "tools/sync-bench",
+  "tools/open-bench",
 ]
 
 [workspace.package]
@@ -20,3 +26,4 @@ license = "UNLICENSED"
 
 [workspace.dependencies]
 blake3 = { version = "1", default-features = false }
+

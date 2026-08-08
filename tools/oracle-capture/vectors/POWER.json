@@ -1,0 +1,2014 @@
+{
+  "schema": "ehkatra.oracle.vectors/1",
+  "function": "POWER",
+  "group": "math",
+  "grid_source": "10-math.psd1",
+  "provenance": {
+    "source": "excel-com",
+    "oracle": true,
+    "excel_version": "16.0",
+    "excel_build": "20228",
+    "excel_product": "Microsoft Excel",
+    "excel_calc_version": "191029",
+    "date_system": "1900",
+    "ui_language_id": 16393,
+    "list_separator": ",",
+    "decimal_separator": ".",
+    "thousands_separator": ",",
+    "os": "Microsoft Windows 11 Home Single Language 10.0.26200",
+    "powershell": "5.1.26100.8875",
+    "harness_version": "1.0.0",
+    "captured_utc": "2026-08-08T07:29:37Z",
+    "probe_column_width": 80,
+    "catalogue_source": "crates/usk-formula/src/functions.rs CATALOGUE"
+  },
+  "case_count": 14,
+  "cases": [
+    {
+      "id": "POWER/0001",
+      "formula": "=POWER(2,10)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 2
+        },
+        {
+          "ref": "A3",
+          "value": 3
+        },
+        {
+          "ref": "A4",
+          "value": 4
+        },
+        {
+          "ref": "A5",
+          "value": 5
+        },
+        {
+          "ref": "B1",
+          "value": 10
+        },
+        {
+          "ref": "B2",
+          "blank": true
+        },
+        {
+          "ref": "B3",
+          "text": "7"
+        },
+        {
+          "ref": "B4",
+          "value": true
+        },
+        {
+          "ref": "B5",
+          "value": -2
+        },
+        {
+          "ref": "C1",
+          "blank": true
+        },
+        {
+          "ref": "C2",
+          "blank": true
+        },
+        {
+          "ref": "C3",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "D2",
+          "value": 10
+        },
+        {
+          "ref": "D3",
+          "formula": "=1/0"
+        },
+        {
+          "ref": "E1",
+          "value": "abc"
+        },
+        {
+          "ref": "E2",
+          "value": 2.5
+        },
+        {
+          "ref": "E3",
+          "value": 0
+        },
+        {
+          "ref": "F1",
+          "value": 1E+308
+        },
+        {
+          "ref": "F2",
+          "value": 1E+308
+        },
+        {
+          "ref": "F4",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "F5",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "G1",
+          "value": 0.1
+        },
+        {
+          "ref": "G2",
+          "value": 0.2
+        },
+        {
+          "ref": "G3",
+          "value": -0.3
+        },
+        {
+          "ref": "G4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "H1",
+          "text": "1E2"
+        },
+        {
+          "ref": "H2",
+          "text": " 5 "
+        },
+        {
+          "ref": "H3",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "H4",
+          "text": "50%"
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 1024,
+        "number_r17": "1024",
+        "general_text": "1024",
+        "display_text": "1024"
+      }
+    },
+    {
+      "id": "POWER/0002",
+      "formula": "=POWER(2,0)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 2
+        },
+        {
+          "ref": "A3",
+          "value": 3
+        },
+        {
+          "ref": "A4",
+          "value": 4
+        },
+        {
+          "ref": "A5",
+          "value": 5
+        },
+        {
+          "ref": "B1",
+          "value": 10
+        },
+        {
+          "ref": "B2",
+          "blank": true
+        },
+        {
+          "ref": "B3",
+          "text": "7"
+        },
+        {
+          "ref": "B4",
+          "value": true
+        },
+        {
+          "ref": "B5",
+          "value": -2
+        },
+        {
+          "ref": "C1",
+          "blank": true
+        },
+        {
+          "ref": "C2",
+          "blank": true
+        },
+        {
+          "ref": "C3",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "D2",
+          "value": 10
+        },
+        {
+          "ref": "D3",
+          "formula": "=1/0"
+        },
+        {
+          "ref": "E1",
+          "value": "abc"
+        },
+        {
+          "ref": "E2",
+          "value": 2.5
+        },
+        {
+          "ref": "E3",
+          "value": 0
+        },
+        {
+          "ref": "F1",
+          "value": 1E+308
+        },
+        {
+          "ref": "F2",
+          "value": 1E+308
+        },
+        {
+          "ref": "F4",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "F5",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "G1",
+          "value": 0.1
+        },
+        {
+          "ref": "G2",
+          "value": 0.2
+        },
+        {
+          "ref": "G3",
+          "value": -0.3
+        },
+        {
+          "ref": "G4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "H1",
+          "text": "1E2"
+        },
+        {
+          "ref": "H2",
+          "text": " 5 "
+        },
+        {
+          "ref": "H3",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "H4",
+          "text": "50%"
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "POWER/0003",
+      "formula": "=POWER(0,0)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 2
+        },
+        {
+          "ref": "A3",
+          "value": 3
+        },
+        {
+          "ref": "A4",
+          "value": 4
+        },
+        {
+          "ref": "A5",
+          "value": 5
+        },
+        {
+          "ref": "B1",
+          "value": 10
+        },
+        {
+          "ref": "B2",
+          "blank": true
+        },
+        {
+          "ref": "B3",
+          "text": "7"
+        },
+        {
+          "ref": "B4",
+          "value": true
+        },
+        {
+          "ref": "B5",
+          "value": -2
+        },
+        {
+          "ref": "C1",
+          "blank": true
+        },
+        {
+          "ref": "C2",
+          "blank": true
+        },
+        {
+          "ref": "C3",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "D2",
+          "value": 10
+        },
+        {
+          "ref": "D3",
+          "formula": "=1/0"
+        },
+        {
+          "ref": "E1",
+          "value": "abc"
+        },
+        {
+          "ref": "E2",
+          "value": 2.5
+        },
+        {
+          "ref": "E3",
+          "value": 0
+        },
+        {
+          "ref": "F1",
+          "value": 1E+308
+        },
+        {
+          "ref": "F2",
+          "value": 1E+308
+        },
+        {
+          "ref": "F4",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "F5",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "G1",
+          "value": 0.1
+        },
+        {
+          "ref": "G2",
+          "value": 0.2
+        },
+        {
+          "ref": "G3",
+          "value": -0.3
+        },
+        {
+          "ref": "G4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "H1",
+          "text": "1E2"
+        },
+        {
+          "ref": "H2",
+          "text": " 5 "
+        },
+        {
+          "ref": "H3",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "H4",
+          "text": "50%"
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "note": "indeterminate in maths; Excel picks a side",
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "POWER/0004",
+      "formula": "=POWER(0,-1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 2
+        },
+        {
+          "ref": "A3",
+          "value": 3
+        },
+        {
+          "ref": "A4",
+          "value": 4
+        },
+        {
+          "ref": "A5",
+          "value": 5
+        },
+        {
+          "ref": "B1",
+          "value": 10
+        },
+        {
+          "ref": "B2",
+          "blank": true
+        },
+        {
+          "ref": "B3",
+          "text": "7"
+        },
+        {
+          "ref": "B4",
+          "value": true
+        },
+        {
+          "ref": "B5",
+          "value": -2
+        },
+        {
+          "ref": "C1",
+          "blank": true
+        },
+        {
+          "ref": "C2",
+          "blank": true
+        },
+        {
+          "ref": "C3",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "D2",
+          "value": 10
+        },
+        {
+          "ref": "D3",
+          "formula": "=1/0"
+        },
+        {
+          "ref": "E1",
+          "value": "abc"
+        },
+        {
+          "ref": "E2",
+          "value": 2.5
+        },
+        {
+          "ref": "E3",
+          "value": 0
+        },
+        {
+          "ref": "F1",
+          "value": 1E+308
+        },
+        {
+          "ref": "F2",
+          "value": 1E+308
+        },
+        {
+          "ref": "F4",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "F5",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "G1",
+          "value": 0.1
+        },
+        {
+          "ref": "G2",
+          "value": 0.2
+        },
+        {
+          "ref": "G3",
+          "value": -0.3
+        },
+        {
+          "ref": "G4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "H1",
+          "text": "1E2"
+        },
+        {
+          "ref": "H2",
+          "text": " 5 "
+        },
+        {
+          "ref": "H3",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "H4",
+          "text": "50%"
+        }
+      ],
+      "tags": [
+        "error-input",
+        "boundary"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#DIV/0!",
+        "error_type_code": 2,
+        "cverr": -2146826281,
+        "general_text": "",
+        "display_text": "#DIV/0!"
+      }
+    },
+    {
+      "id": "POWER/0005",
+      "formula": "=POWER(2,-1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 2
+        },
+        {
+          "ref": "A3",
+          "value": 3
+        },
+        {
+          "ref": "A4",
+          "value": 4
+        },
+        {
+          "ref": "A5",
+          "value": 5
+        },
+        {
+          "ref": "B1",
+          "value": 10
+        },
+        {
+          "ref": "B2",
+          "blank": true
+        },
+        {
+          "ref": "B3",
+          "text": "7"
+        },
+        {
+          "ref": "B4",
+          "value": true
+        },
+        {
+          "ref": "B5",
+          "value": -2
+        },
+        {
+          "ref": "C1",
+          "blank": true
+        },
+        {
+          "ref": "C2",
+          "blank": true
+        },
+        {
+          "ref": "C3",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "D2",
+          "value": 10
+        },
+        {
+          "ref": "D3",
+          "formula": "=1/0"
+        },
+        {
+          "ref": "E1",
+          "value": "abc"
+        },
+        {
+          "ref": "E2",
+          "value": 2.5
+        },
+        {
+          "ref": "E3",
+          "value": 0
+        },
+        {
+          "ref": "F1",
+          "value": 1E+308
+        },
+        {
+          "ref": "F2",
+          "value": 1E+308
+        },
+        {
+          "ref": "F4",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "F5",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "G1",
+          "value": 0.1
+        },
+        {
+          "ref": "G2",
+          "value": 0.2
+        },
+        {
+          "ref": "G3",
+          "value": -0.3
+        },
+        {
+          "ref": "G4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "H1",
+          "text": "1E2"
+        },
+        {
+          "ref": "H2",
+          "text": " 5 "
+        },
+        {
+          "ref": "H3",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "H4",
+          "text": "50%"
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 0.5,
+        "number_r17": "0.5",
+        "general_text": "0.5",
+        "display_text": "0.5"
+      }
+    },
+    {
+      "id": "POWER/0006",
+      "formula": "=POWER(-8,1/3)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 2
+        },
+        {
+          "ref": "A3",
+          "value": 3
+        },
+        {
+          "ref": "A4",
+          "value": 4
+        },
+        {
+          "ref": "A5",
+          "value": 5
+        },
+        {
+          "ref": "B1",
+          "value": 10
+        },
+        {
+          "ref": "B2",
+          "blank": true
+        },
+        {
+          "ref": "B3",
+          "text": "7"
+        },
+        {
+          "ref": "B4",
+          "value": true
+        },
+        {
+          "ref": "B5",
+          "value": -2
+        },
+        {
+          "ref": "C1",
+          "blank": true
+        },
+        {
+          "ref": "C2",
+          "blank": true
+        },
+        {
+          "ref": "C3",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "D2",
+          "value": 10
+        },
+        {
+          "ref": "D3",
+          "formula": "=1/0"
+        },
+        {
+          "ref": "E1",
+          "value": "abc"
+        },
+        {
+          "ref": "E2",
+          "value": 2.5
+        },
+        {
+          "ref": "E3",
+          "value": 0
+        },
+        {
+          "ref": "F1",
+          "value": 1E+308
+        },
+        {
+          "ref": "F2",
+          "value": 1E+308
+        },
+        {
+          "ref": "F4",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "F5",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "G1",
+          "value": 0.1
+        },
+        {
+          "ref": "G2",
+          "value": 0.2
+        },
+        {
+          "ref": "G3",
+          "value": -0.3
+        },
+        {
+          "ref": "G4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "H1",
+          "text": "1E2"
+        },
+        {
+          "ref": "H2",
+          "text": " 5 "
+        },
+        {
+          "ref": "H3",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "H4",
+          "text": "50%"
+        }
+      ],
+      "tags": [
+        "error-input",
+        "boundary"
+      ],
+      "note": "real cube root of a negative",
+      "observed": {
+        "kind": "number",
+        "number": -1.9999999999999998,
+        "number_r17": "-1.9999999999999998",
+        "general_text": "-2",
+        "display_text": "-2"
+      }
+    },
+    {
+      "id": "POWER/0007",
+      "formula": "=POWER(-2,2)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 2
+        },
+        {
+          "ref": "A3",
+          "value": 3
+        },
+        {
+          "ref": "A4",
+          "value": 4
+        },
+        {
+          "ref": "A5",
+          "value": 5
+        },
+        {
+          "ref": "B1",
+          "value": 10
+        },
+        {
+          "ref": "B2",
+          "blank": true
+        },
+        {
+          "ref": "B3",
+          "text": "7"
+        },
+        {
+          "ref": "B4",
+          "value": true
+        },
+        {
+          "ref": "B5",
+          "value": -2
+        },
+        {
+          "ref": "C1",
+          "blank": true
+        },
+        {
+          "ref": "C2",
+          "blank": true
+        },
+        {
+          "ref": "C3",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "D2",
+          "value": 10
+        },
+        {
+          "ref": "D3",
+          "formula": "=1/0"
+        },
+        {
+          "ref": "E1",
+          "value": "abc"
+        },
+        {
+          "ref": "E2",
+          "value": 2.5
+        },
+        {
+          "ref": "E3",
+          "value": 0
+        },
+        {
+          "ref": "F1",
+          "value": 1E+308
+        },
+        {
+          "ref": "F2",
+          "value": 1E+308
+        },
+        {
+          "ref": "F4",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "F5",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "G1",
+          "value": 0.1
+        },
+        {
+          "ref": "G2",
+          "value": 0.2
+        },
+        {
+          "ref": "G3",
+          "value": -0.3
+        },
+        {
+          "ref": "G4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "H1",
+          "text": "1E2"
+        },
+        {
+          "ref": "H2",
+          "text": " 5 "
+        },
+        {
+          "ref": "H3",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "H4",
+          "text": "50%"
+        }
+      ],
+      "tags": [
+        "negative"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 4,
+        "number_r17": "4",
+        "general_text": "4",
+        "display_text": "4"
+      }
+    },
+    {
+      "id": "POWER/0008",
+      "formula": "=POWER(-2,3)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 2
+        },
+        {
+          "ref": "A3",
+          "value": 3
+        },
+        {
+          "ref": "A4",
+          "value": 4
+        },
+        {
+          "ref": "A5",
+          "value": 5
+        },
+        {
+          "ref": "B1",
+          "value": 10
+        },
+        {
+          "ref": "B2",
+          "blank": true
+        },
+        {
+          "ref": "B3",
+          "text": "7"
+        },
+        {
+          "ref": "B4",
+          "value": true
+        },
+        {
+          "ref": "B5",
+          "value": -2
+        },
+        {
+          "ref": "C1",
+          "blank": true
+        },
+        {
+          "ref": "C2",
+          "blank": true
+        },
+        {
+          "ref": "C3",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "D2",
+          "value": 10
+        },
+        {
+          "ref": "D3",
+          "formula": "=1/0"
+        },
+        {
+          "ref": "E1",
+          "value": "abc"
+        },
+        {
+          "ref": "E2",
+          "value": 2.5
+        },
+        {
+          "ref": "E3",
+          "value": 0
+        },
+        {
+          "ref": "F1",
+          "value": 1E+308
+        },
+        {
+          "ref": "F2",
+          "value": 1E+308
+        },
+        {
+          "ref": "F4",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "F5",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "G1",
+          "value": 0.1
+        },
+        {
+          "ref": "G2",
+          "value": 0.2
+        },
+        {
+          "ref": "G3",
+          "value": -0.3
+        },
+        {
+          "ref": "G4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "H1",
+          "text": "1E2"
+        },
+        {
+          "ref": "H2",
+          "text": " 5 "
+        },
+        {
+          "ref": "H3",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "H4",
+          "text": "50%"
+        }
+      ],
+      "tags": [
+        "negative"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": -8,
+        "number_r17": "-8",
+        "general_text": "-8",
+        "display_text": "-8"
+      }
+    },
+    {
+      "id": "POWER/0009",
+      "formula": "=POWER(10,400)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 2
+        },
+        {
+          "ref": "A3",
+          "value": 3
+        },
+        {
+          "ref": "A4",
+          "value": 4
+        },
+        {
+          "ref": "A5",
+          "value": 5
+        },
+        {
+          "ref": "B1",
+          "value": 10
+        },
+        {
+          "ref": "B2",
+          "blank": true
+        },
+        {
+          "ref": "B3",
+          "text": "7"
+        },
+        {
+          "ref": "B4",
+          "value": true
+        },
+        {
+          "ref": "B5",
+          "value": -2
+        },
+        {
+          "ref": "C1",
+          "blank": true
+        },
+        {
+          "ref": "C2",
+          "blank": true
+        },
+        {
+          "ref": "C3",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "D2",
+          "value": 10
+        },
+        {
+          "ref": "D3",
+          "formula": "=1/0"
+        },
+        {
+          "ref": "E1",
+          "value": "abc"
+        },
+        {
+          "ref": "E2",
+          "value": 2.5
+        },
+        {
+          "ref": "E3",
+          "value": 0
+        },
+        {
+          "ref": "F1",
+          "value": 1E+308
+        },
+        {
+          "ref": "F2",
+          "value": 1E+308
+        },
+        {
+          "ref": "F4",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "F5",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "G1",
+          "value": 0.1
+        },
+        {
+          "ref": "G2",
+          "value": 0.2
+        },
+        {
+          "ref": "G3",
+          "value": -0.3
+        },
+        {
+          "ref": "G4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "H1",
+          "text": "1E2"
+        },
+        {
+          "ref": "H2",
+          "text": " 5 "
+        },
+        {
+          "ref": "H3",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "H4",
+          "text": "50%"
+        }
+      ],
+      "tags": [
+        "overflow",
+        "boundary"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "POWER/0010",
+      "formula": "=POWER(10,-400)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 2
+        },
+        {
+          "ref": "A3",
+          "value": 3
+        },
+        {
+          "ref": "A4",
+          "value": 4
+        },
+        {
+          "ref": "A5",
+          "value": 5
+        },
+        {
+          "ref": "B1",
+          "value": 10
+        },
+        {
+          "ref": "B2",
+          "blank": true
+        },
+        {
+          "ref": "B3",
+          "text": "7"
+        },
+        {
+          "ref": "B4",
+          "value": true
+        },
+        {
+          "ref": "B5",
+          "value": -2
+        },
+        {
+          "ref": "C1",
+          "blank": true
+        },
+        {
+          "ref": "C2",
+          "blank": true
+        },
+        {
+          "ref": "C3",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "D2",
+          "value": 10
+        },
+        {
+          "ref": "D3",
+          "formula": "=1/0"
+        },
+        {
+          "ref": "E1",
+          "value": "abc"
+        },
+        {
+          "ref": "E2",
+          "value": 2.5
+        },
+        {
+          "ref": "E3",
+          "value": 0
+        },
+        {
+          "ref": "F1",
+          "value": 1E+308
+        },
+        {
+          "ref": "F2",
+          "value": 1E+308
+        },
+        {
+          "ref": "F4",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "F5",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "G1",
+          "value": 0.1
+        },
+        {
+          "ref": "G2",
+          "value": 0.2
+        },
+        {
+          "ref": "G3",
+          "value": -0.3
+        },
+        {
+          "ref": "G4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "H1",
+          "text": "1E2"
+        },
+        {
+          "ref": "H2",
+          "text": " 5 "
+        },
+        {
+          "ref": "H3",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "H4",
+          "text": "50%"
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "note": "underflow to zero or an error?",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "POWER/0011",
+      "formula": "=POWER(1.0000001,10000000)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 2
+        },
+        {
+          "ref": "A3",
+          "value": 3
+        },
+        {
+          "ref": "A4",
+          "value": 4
+        },
+        {
+          "ref": "A5",
+          "value": 5
+        },
+        {
+          "ref": "B1",
+          "value": 10
+        },
+        {
+          "ref": "B2",
+          "blank": true
+        },
+        {
+          "ref": "B3",
+          "text": "7"
+        },
+        {
+          "ref": "B4",
+          "value": true
+        },
+        {
+          "ref": "B5",
+          "value": -2
+        },
+        {
+          "ref": "C1",
+          "blank": true
+        },
+        {
+          "ref": "C2",
+          "blank": true
+        },
+        {
+          "ref": "C3",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "D2",
+          "value": 10
+        },
+        {
+          "ref": "D3",
+          "formula": "=1/0"
+        },
+        {
+          "ref": "E1",
+          "value": "abc"
+        },
+        {
+          "ref": "E2",
+          "value": 2.5
+        },
+        {
+          "ref": "E3",
+          "value": 0
+        },
+        {
+          "ref": "F1",
+          "value": 1E+308
+        },
+        {
+          "ref": "F2",
+          "value": 1E+308
+        },
+        {
+          "ref": "F4",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "F5",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "G1",
+          "value": 0.1
+        },
+        {
+          "ref": "G2",
+          "value": 0.2
+        },
+        {
+          "ref": "G3",
+          "value": -0.3
+        },
+        {
+          "ref": "G4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "H1",
+          "text": "1E2"
+        },
+        {
+          "ref": "H2",
+          "text": " 5 "
+        },
+        {
+          "ref": "H3",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "H4",
+          "text": "50%"
+        }
+      ],
+      "tags": [
+        "precision"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 2.7182816939803724,
+        "number_r17": "2.7182816939803724",
+        "general_text": "2.71828169398037",
+        "display_text": "2.718281694"
+      }
+    },
+    {
+      "id": "POWER/0012",
+      "formula": "=POWER(\"2\",\"3\")",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 2
+        },
+        {
+          "ref": "A3",
+          "value": 3
+        },
+        {
+          "ref": "A4",
+          "value": 4
+        },
+        {
+          "ref": "A5",
+          "value": 5
+        },
+        {
+          "ref": "B1",
+          "value": 10
+        },
+        {
+          "ref": "B2",
+          "blank": true
+        },
+        {
+          "ref": "B3",
+          "text": "7"
+        },
+        {
+          "ref": "B4",
+          "value": true
+        },
+        {
+          "ref": "B5",
+          "value": -2
+        },
+        {
+          "ref": "C1",
+          "blank": true
+        },
+        {
+          "ref": "C2",
+          "blank": true
+        },
+        {
+          "ref": "C3",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "D2",
+          "value": 10
+        },
+        {
+          "ref": "D3",
+          "formula": "=1/0"
+        },
+        {
+          "ref": "E1",
+          "value": "abc"
+        },
+        {
+          "ref": "E2",
+          "value": 2.5
+        },
+        {
+          "ref": "E3",
+          "value": 0
+        },
+        {
+          "ref": "F1",
+          "value": 1E+308
+        },
+        {
+          "ref": "F2",
+          "value": 1E+308
+        },
+        {
+          "ref": "F4",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "F5",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "G1",
+          "value": 0.1
+        },
+        {
+          "ref": "G2",
+          "value": 0.2
+        },
+        {
+          "ref": "G3",
+          "value": -0.3
+        },
+        {
+          "ref": "G4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "H1",
+          "text": "1E2"
+        },
+        {
+          "ref": "H2",
+          "text": " 5 "
+        },
+        {
+          "ref": "H3",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "H4",
+          "text": "50%"
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 8,
+        "number_r17": "8",
+        "general_text": "8",
+        "display_text": "8"
+      }
+    },
+    {
+      "id": "POWER/0013",
+      "formula": "=POWER(C1,C2)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 2
+        },
+        {
+          "ref": "A3",
+          "value": 3
+        },
+        {
+          "ref": "A4",
+          "value": 4
+        },
+        {
+          "ref": "A5",
+          "value": 5
+        },
+        {
+          "ref": "B1",
+          "value": 10
+        },
+        {
+          "ref": "B2",
+          "blank": true
+        },
+        {
+          "ref": "B3",
+          "text": "7"
+        },
+        {
+          "ref": "B4",
+          "value": true
+        },
+        {
+          "ref": "B5",
+          "value": -2
+        },
+        {
+          "ref": "C1",
+          "blank": true
+        },
+        {
+          "ref": "C2",
+          "blank": true
+        },
+        {
+          "ref": "C3",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "D2",
+          "value": 10
+        },
+        {
+          "ref": "D3",
+          "formula": "=1/0"
+        },
+        {
+          "ref": "E1",
+          "value": "abc"
+        },
+        {
+          "ref": "E2",
+          "value": 2.5
+        },
+        {
+          "ref": "E3",
+          "value": 0
+        },
+        {
+          "ref": "F1",
+          "value": 1E+308
+        },
+        {
+          "ref": "F2",
+          "value": 1E+308
+        },
+        {
+          "ref": "F4",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "F5",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "G1",
+          "value": 0.1
+        },
+        {
+          "ref": "G2",
+          "value": 0.2
+        },
+        {
+          "ref": "G3",
+          "value": -0.3
+        },
+        {
+          "ref": "G4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "H1",
+          "text": "1E2"
+        },
+        {
+          "ref": "H2",
+          "text": " 5 "
+        },
+        {
+          "ref": "H3",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "H4",
+          "text": "50%"
+        }
+      ],
+      "tags": [
+        "blank",
+        "boundary"
+      ],
+      "note": "blank^blank",
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "POWER/0014",
+      "formula": "=POWER(2,0.5)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 2
+        },
+        {
+          "ref": "A3",
+          "value": 3
+        },
+        {
+          "ref": "A4",
+          "value": 4
+        },
+        {
+          "ref": "A5",
+          "value": 5
+        },
+        {
+          "ref": "B1",
+          "value": 10
+        },
+        {
+          "ref": "B2",
+          "blank": true
+        },
+        {
+          "ref": "B3",
+          "text": "7"
+        },
+        {
+          "ref": "B4",
+          "value": true
+        },
+        {
+          "ref": "B5",
+          "value": -2
+        },
+        {
+          "ref": "C1",
+          "blank": true
+        },
+        {
+          "ref": "C2",
+          "blank": true
+        },
+        {
+          "ref": "C3",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "D2",
+          "value": 10
+        },
+        {
+          "ref": "D3",
+          "formula": "=1/0"
+        },
+        {
+          "ref": "E1",
+          "value": "abc"
+        },
+        {
+          "ref": "E2",
+          "value": 2.5
+        },
+        {
+          "ref": "E3",
+          "value": 0
+        },
+        {
+          "ref": "F1",
+          "value": 1E+308
+        },
+        {
+          "ref": "F2",
+          "value": 1E+308
+        },
+        {
+          "ref": "F4",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "F5",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "G1",
+          "value": 0.1
+        },
+        {
+          "ref": "G2",
+          "value": 0.2
+        },
+        {
+          "ref": "G3",
+          "value": -0.3
+        },
+        {
+          "ref": "G4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "H1",
+          "text": "1E2"
+        },
+        {
+          "ref": "H2",
+          "text": " 5 "
+        },
+        {
+          "ref": "H3",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "H4",
+          "text": "50%"
+        }
+      ],
+      "tags": [
+        "precision"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 1.4142135623730951,
+        "number_r17": "1.4142135623730951",
+        "general_text": "1.4142135623731",
+        "display_text": "1.414213562"
+      }
+    }
+  ]
+}

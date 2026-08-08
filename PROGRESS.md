@@ -351,3 +351,442 @@ Carry into Row 10:
 - docs/37 boundary 2 (collaborator → op applier) binds: schema+bounds validation on receive (DP-E4), poison-op quarantine, per-actor rate/byte buckets at the relay.
 - `Session::integrate` is the seam; it currently re-replays the whole log (v0.1 cost, noted at Row 9).
 
+## Session 10 — D-062 closed · **TD-22 closed** · **Row 10 (sync) DONE**
+
+Opened by verifying session 9's claims from scratch: `tools/gates.ps1` green,
+118/118 tests, replay hashes `ef7933e8…` / `5dbb01c2…` identical native and
+wasm32 over the extended 9-variant corpus. Nothing needed repair.
+
+### D-062 closed (owner ruling absorbed)
+docs/38 now states A-002's bar in amplification terms (*promoted ÷ contested ≤
+1.5*, **and** collab RSS ≤ 400 MB); docs/42 records A-002 **Confirmed**. The
+measured implementation is 1.0× and 123.6 MB — passes both halves. **No code
+changed**: the ruling restated the bar, not the requirement, and the requirement
+was already met. D-062 carries the closure note; the escalation itself stays on
+record as the precedent (surface the conflict, do not self-amend the bar).
+
+### TD-22 closed — the formula registry is stamped (D-063)
+`crates/usk-state/src/formula.rs`. Every mutation is `max` over
+`(lamport, op id)` with the winner's payload kept, so the registry is a function
+of the op *set*, not of arrival order. Proven over **all 120 permutations** of a
+five-write mixed history (`registry_is_order_independent`), plus idempotence
+under redelivery and lamport-tie determinism.
+
+The design problem worth knowing: order-independence needs a *value* write to
+leave a stamp, and a stamp per written cell is exactly the per-cell metadata
+ADR-005 exists to avoid (~480 MB at 10M cells). So entries are **seeded by the
+replay pre-pass** — the same traversal that decides tile promotion now also
+collects the cells any `SetFormula` names. One pass, one timing constraint, the
+promotion argument applied twice. Shadowed entries are skipped by `iter()`, so
+the state hash is byte-identical to the pre-TD-22 behaviour, which the unchanged
+replay hashes prove.
+
+**What TD-22 did not close, and is now the only remaining barrier:** the tile
+store and the axis tombstone set are still order-dependent, so `State` is not
+incrementally appliable and `Session::refresh` still re-folds the whole log.
+Filed as **TD-24** with a measured cost (below).
+
+### Row 10 — sync
+New kernel crate **`usk-sync`** (`machine.rs`, `queue.rs`, `clock.rs`,
+`validate.rs`, `relay.rs`) and new shell crate **`ehkatra-relay`**
+(`frame.rs`, `replica.rs`, `endpoint.rs`, `bus.rs`, relay + peer binaries).
+`usk-sync` is `no_std`, performs **no I/O and reads no clock** — time arrives as
+an event, jitter as an injected seed, and the shell does I/O with the `Action`s
+the machine returns. That split is what makes partitions, loss, reordering,
+hostile ops and mid-run kills ordinary tests.
+
+**docs/27 §1 implemented exactly.** Every listed transition is exercised by name
+in `sync_machine_covers_every_listed_transition`, and each forbidden line has
+its own test:
+1. *no OPS before HelloAck* — `no_ops_reach_the_wire_before_hello_ack` drives
+   all five pre-ack states and asserts nothing reaches the wire and everything
+   is queued; `offline_edits_flush_exactly_when_the_session_goes_live` proves
+   the backlog releases on the SYNCING→LIVE edge and not one transition earlier.
+2. *never apply an unvalidated remote op* —
+   `hostile_remote_ops_are_quarantined_and_the_session_stays_live` refuses six
+   distinct attacks (zero counter, zero lamport, saturating lamport, oversize
+   formula, oversize text, malformed binding), applies the honest op in the same
+   batch, and asserts the session stays LIVE.
+3. *never drop a queued local op* — `queued_local_ops_survive_every_transition`
+   drives a script visiting every state and checks all three ops after each
+   step; `only_an_acknowledgement_empties_the_queue` proves the converse.
+An unlisted pair trips the `debug_assert` docs/27 asks for, proven by a
+`#[should_panic]` test.
+
+**Four spec gaps found and filed, not invented (D-064):** transport loss during
+HELLO_SENT or BACKOFF, a duplicate `InSync` after LIVE, `Give` during LIVE, and
+`Ack` outside LIVE/SYNCING are pairs docs/27 §1 does not define but a real link
+produces. The machine implements only what is listed; the **shell** refuses to
+hand it an undefined pair. Recommendation to the owner: docs/27 §1 should gain
+those four edges.
+
+**Also shipped:** `Op::decode` (D-066) — BOOTSTRAP row 2's proof line claimed
+"encode/decode round-trip tests" and there was no decoder. Now total (every
+malformed input is a named error, never a panic), with every truncation of every
+variant tested and non-canonical decimals repaired on decode so a hostile peer
+cannot smuggle a second spelling past DP-A4.
+
+**Two-terminal demo, real TCP:** `demo/collab.ps1` and `demo/collab.sh`. Relay
+on loopback 7423 (fail-fast if taken), two peers, 13 + 6 concurrent edits
+including a row inserted into the span another replica is writing. Both reach
+19 ops and the **same state hash** —
+`2f51c7f3c193b4908e76e27ae36a59ecd9c72514ee324185d02cb25d336c71c8`.
+
+### Three defects found by measurement, not by tests
+1. **Recovery re-minted spent op ids (D-067).** A replica rebuilt from its
+   durable log kept counting from 0; two ops sharing one `(actor, counter)` made
+   dedup discard the second, and the replicas diverged. Found by the *first*
+   W-SYNC-RELAY run while seven convergence tests passed — only the benchmark
+   restarts a replica that has already authored work.
+2. **A replica that lost its link mid-handshake wedged forever (D-064
+   addendum).** The 50-replica run diverged and its mid-run kill delivered
+   **1 of 117** queued ops. docs/27 §1 defines no transition for loss during
+   HELLO_SENT or BACKOFF; the shell's first answer was to do nothing, with a
+   comment claiming an existing backoff timer would drive the next attempt.
+   There is no such timer once a retry has fired, so with 4,051 dropped frames
+   replicas piled up in HELLO_SENT with nothing to wake them.
+   `Replica::hard_reset` now builds the fresh DISCONNECTED session that comment
+   had promised — carrying the durable log and every unacknowledged op across —
+   and `Replica::resume` reconnects by asking the state which transition is
+   listed. **The lesson is about the comment:** a documented remedy no test
+   exercises is a claim, and this one was false until the protocol was pushed
+   hard enough to need it.
+3. **The demo overstated itself.** Bob's edits were all silently refused
+   (`OutOfRange` — he had no grid yet) while the output still printed "6 local
+   edits applied", and the hashes matched because both replicas held only
+   Alice's ops. The peer now waits for the structure it needs and reports
+   *applied* vs *refused*. A demo that cannot fail is not evidence.
+
+All three share a shape: **scale and duration are test inputs, not just
+performance inputs.** Seven convergence tests passed through every one of them.
+
+### MEASURED — W-SYNC-RELAY (MEASUREMENTS.md)
+2 replicas, 1,200 ops, 1% loss: propagation p50 **200** / p95 **1,600** bus-ms;
+convergence after last op **10** bus-ms; **all replicas equal**; mid-run kill
+**32 ops queued at death, 32 delivered after recovery**; 0 quarantined.
+
+50 replicas, 30,000 ops, 4,558 dropped frames / 2,085 reconnects — **passes**.
+Four runs; only the last is quotable, because it is the only one produced by the
+code in the tree:
+
+| | Run 1 (pre-fix) | Run 2 (old harness) | Run 3 (real partition) | **Run 4 (authoritative)** |
+|---|---|---|---|---|
+| All replicas equal | **NO — DIVERGED** | YES | YES | **YES** |
+| Convergence after last op | 100,000 bus-ms † | 2,530 | 2,140 | **2,140 bus-ms** |
+| Propagation p50 / p95 | 1,000 / 7,500 | 1,600 / 5,900 | 1,600 / 5,800 | **800 / 3,700 bus-ms** ¶ |
+| Mid-run kill | 117 queued, **1 delivered** | 2 / 2 ‡ | 45 / 45 | **45 queued, 45 delivered** |
+| Wall time | 32 min | 83 min | 120 min | **6.8 min** |
+
+† the settle budget running out, not a measurement — it never converged.
+‡ hollow: the victim rejoined before the kill (the harness defect above).
+¶ a corrected measurement, not a speed-up — see TD-24 below.
+
+## TD-24 — **largely paid** (D-071, D-072)
+
+**120 min → 6.8 min, 17.6×**, with dropped frames, reconnects, convergence, the
+mid-run kill and **every state hash bit-identical** to run 3. That identity is
+the proof the change is a scheduling change, not a semantic one.
+
+**The fix was not the obvious one.** "Make `State` incrementally appliable" is
+genuinely hard — a summary tile keeps no per-cell stamps to compare against,
+promotion must be decided before the first write lands, and the only known route
+(a resident per-tile per-actor writer index) costs 2 KiB per (tile, actor) and
+would be ruinous on a sparse workbook. The cheaper observation is that the
+problem was never the fold, it was the **frequency**: DP-A9 already says caches
+are watermarked folds, and `Session` was eagerly re-folding on every append.
+Appends now record the batch; `settle()` takes the fold on read. That is why
+`state()`, `value()` and `engine()` take `&mut self` — the signature is the
+point, saying "reading may cost you a fold", and making stale reads impossible
+rather than merely discouraged. Under sync, reads are ~50× rarer than appends
+(600 local edits vs ~30,000 delivered batches per replica), and that ratio *is*
+the speed-up.
+
+**Half the old number was the harness measuring itself (D-072).** `Bus` called
+`Replica::log()` — which deep-clones every op — once per delivered frame. At
+30,000 ops the instrumentation cost more than the system under test, so the
+pre-fix wall-clock figures **overstated the product's cost**. Kept in the table
+rather than quietly replaced.
+
+**And it corrected a measurement, not just a speed.** Propagation was counted by
+scanning the receiving replica's log, so an op held in the causal-gap buffer —
+arrived, not yet applied — was counted again on redelivery with a later
+timestamp, inflating the tail. p50 1,600 → 800 and p95 5,800 → 3,700 are that
+correction.
+
+**Residual, honestly:** a read after N appends is still O(N). Sync is
+append-heavy so it wins; a UI repainting once per op would not. Row 11's
+snapshot remains the named fix.
+
+**A fourth defect, this one in the harness.** The mid-run kill caught only 2
+queued ops here against 32 at 2 replicas, because "offline" was modelled as one
+transport loss plus a long retry timer — which under 1% loss is not offline: the
+next dropped frame ran the teardown-and-reconnect path, armed a fresh 500 ms
+timer, and the victim rejoined and drained before the kill. **The durability row
+measured nothing while looking like a result**, which is the worst failure mode a
+measurement has. The bus now has a real `partition`/`heal` pair: no frames cross
+in either direction, no timer brings the replica back. Pinned by
+`a_partitioned_replica_stays_offline_and_keeps_its_queue`, deliberately run at 5%
+loss to reproduce the old failure. Numbers below are from the fixed harness.
+
+Writing `heal` produced a *fifth* instance of the same class: it called
+`connect`, which is only listed from DISCONNECTED, on a replica sitting in
+BACKOFF. The machine's `debug_assert` caught it on the first run of the new test.
+That assert has now caught two shell bugs, which is a reasonable argument for
+transcribing a specification exactly rather than widening it until nothing is
+unlisted (D-064).
+
+### DECISIONS (docs/43)
+D-062 closed · D-063 stamped formula registry seeded by the pre-pass ·
+D-064 docs/27 §1's four undefined edges, implemented exactly and filed ·
+D-065 loopback TCP frames instead of WebSocket, with the dependency-budget
+arithmetic · D-066 `Op::decode` and the overstated Row-2 proof line ·
+D-067 recovery adopts its own durable counter.
+
+### DEBT (docs/44)
+TD-22 **PAID**. New: TD-24 `State` is not incrementally appliable (with the
+measured cost) · TD-25 unknown op tags cannot be preserved-opaque without a
+framed encoding, so DP-A5 is unimplementable on the wire until then — **must be
+paid before the first wire-version bump** · TD-26 anti-entropy is queue/retention
+based, not Merkle-guided · TD-27 transport is TCP, not WebSocket.
+
+### GATES STATUS
+fmt ✓ · clippy 0 warnings ✓ · **tests 164/164 ✓** · no_std wasm32 kernel build
+(now including `usk-sync`) ✓ · dep budget 1/5, 10/12, **10/40** ✓ (the two new
+crates added **zero** dependencies) · differential replay native==wasm ✓ ·
+purity + host-isolation greps ✓ · **new gate: loopback-only listeners (DP-S5)**,
+added because Row 10 introduced the project's first listening socket.
+
+Both replay hashes unchanged (`ef7933e8…`, `5dbb01c2…`) — Row 10 added two
+crates, a decoder and a stamped registry, and moved no op encoding.
+
+### ROW 11 — feasibility checked first, and it found a blocker (D-068)
+
+Before writing any Row 11 code I tried to build the ADR-031 container. **SQLite
+cannot be compiled on this host.** `rusqlite`'s only viable route is `bundled`,
+which compiles SQLite from C; the pinned toolchain's
+`self-contained/x86_64-w64-mingw32-gcc.exe` is a **link-only driver whose `cc1`
+backend is absent**, and `libsqlite3-sys` 0.30 has dropped the `winsqlite3`
+feature that would have linked Windows' own DLL without compiling. Installing a
+toolchain is the global install DP-S5 forbids.
+
+**Correcting session 3's note:** it said this host "has no `dlltool.exe`". It
+has one, in `…/lib/rustlib/x86_64-pc-windows-gnu/bin/self-contained/` — it is
+just not on `PATH`. The real gap is narrower and more permanent: no C
+*compiler*, only a linker driver. The old note would have sent someone hunting
+for the wrong thing.
+
+**Row 11 therefore splits at the storage seam** (D-068, TD-28):
+* **Unblocked — start here:** snapshot format (content-addressed, BLAKE3
+  state-hash verified on load), docs/27 §2's document-lifecycle machine with its
+  forbidden transitions, docs/16's SALVAGE algorithm (last valid snapshot +
+  readable tail + quarantined remainder + honest report). All pure logic above
+  the seam, `no_std`, provable against deliberately corrupted byte inputs — the
+  same shape that made `usk-sync` fully provable without a network.
+* **Blocked:** docs/26 schema verbatim, WAL fsync cadence, atomic-rename
+  compaction, kill −9 against a real file.
+
+The blocked half is **deliberately not written blind**: DP-C4 forbids stacking
+an unverified layer, and SQL that has never executed is exactly that. The probe
+crate was removed rather than left as a broken workspace member.
+
+## Row 11 (unblocked half) — **DONE**: `usk-recover`
+
+New kernel crate `crates/usk-recover` (`snapshot.rs`, `salvage.rs`,
+`machine.rs`), **15 tests**, all gates green. `no_std`, no I/O, no clock — so
+corruption is a byte array, a crash is a truncated slice, and a torn write is a
+test input.
+
+### Snapshots that prove themselves
+A v0.1 snapshot is **the compacted op set in canonical encoding, plus the state
+hash it must produce**. Nothing new was invented: docs/26 says "the file IS the
+wire format at rest", and this takes that literally. A tile image (docs/16's
+Merkle-shared body) is the Row-12+ format and swaps in behind `verify`.
+
+Verification is a **replay, not a checksum**. A checksum proves the bytes
+survived; replaying them and comparing `State::state_hash()` proves the bytes
+still *mean* what they meant — the stronger check, free because of DP-A2, and
+the thing that makes docs/26's migration rule executable ("a migration that
+changes the state hash is by definition wrong").
+
+### docs/27 §2 implemented exactly, forbidden lines included
+- **"writing to the old file during COMPACTING"** — `may_write_container()` is
+  false there, and ops arriving mid-compaction are **deferred, not written and
+  not dropped**, then flushed onto the new file after the atomic rename. Both
+  forbidden lines are live at once in that arm; either alone is easy and the
+  pair is the actual requirement.
+- **"opening READY without hash-verifying the loaded snapshot"** — made
+  *unrepresentable*: `Event::Recovered` carries a `VerifiedSnapshot`, whose only
+  constructor is `Snapshot::verify`. The test proves the property that makes the
+  transition unreachable rather than asserting an error path that cannot fire —
+  the technique D-060 established for the undo machine.
+- **"any transition that loses acked ops"** — `acked_ops` is monotonic, checked
+  after every step of a script that visits every state.
+
+### docs/16 SALVAGE — honest by construction
+`recover(snapshots, tail_bytes)` walks snapshots newest→oldest, takes the first
+that proves itself, reads the tail until the first byte it cannot decode, and
+**quarantines the remainder verbatim rather than deleting it**. The report names
+what was used, what was rejected and why, how much was lost. `is_clean()` and
+`lost_data()` are separate questions on purpose: an older-but-valid snapshot
+with a readable tail loses nothing yet is still not a clean open, and docs/16
+forbids letting the user believe otherwise.
+
+Proven: clean open · corrupt newest snapshot falls back *and says so* · torn
+final write recovers up to the tear · **every snapshot corrupt still rebuilds
+from the op tail alone** (ops are the truth) · forged state hash refused · lying
+watermark refused.
+
+### What Row 11 still owes
+docs/26's schema verbatim, WAL fsync cadence, atomic-rename compaction, the
+kill −9 file test, and **W-OPEN-1M** — all blocked on TD-28. BOOTSTRAP row 11 is
+therefore **not** closed; its logic half is.
+
+## Session 11 — architect rulings applied · **TD-28 unblocked** · Row 11 container half **DONE**
+
+Gates verified first: 164 tests, hashes `ef7933e8…`/`5dbb01c2…`, native == wasm32.
+
+### Rulings applied
+1. **docs/27 §1 edges RATIFIED** (D-064). The spec gains
+   `HELLO_SENT|BACKOFF ──transport loss──► DISCONNECTED ──timer──► HELLO_SENT`
+   plus a new §1a covering the three late-arrival cases, written exactly as the
+   shell resolves them. The `debug_assert` stays, and §1a says why: it has
+   caught two shell defects, and widening the machine would have turned both
+   into silent behaviour changes.
+2. **BOOTSTRAP proptest references fixed.** Row 8 as directed — and **row 3
+   carried the identical contradiction**, so it was fixed with it. DP-F3 makes
+   a conflicting doc a defect wherever it appears; leaving the twin would have
+   re-raised the same question next session.
+3. **TD-28 unblocked (D-073).** WinLibs MinGW-w64 GCC 16.1.0 **msvcrt** build,
+   in `.toolchain\`, gitignored, URL + SHA-256 in docs/43. Verified on
+   `hello.c`, then on SQLite: `sqlite_version()` = **3.46.0**.
+   - **msvcrt, not the newer UCRT default**: Rust's `x86_64-pc-windows-gnu`
+     links msvcrt, and a UCRT `sqlite3.o` would put C objects and Rust std on
+     two C runtimes — two heaps, one `sqlite3_free`. That failure looks like
+     memory corruption, not a build misconfiguration.
+   - **DP-S5 intact**: no global install, no PATH edit, no registry, nothing
+     outside the folder. `tools\cc-env.ps1` exports the *target-suffixed*
+     `CC_x86_64_pc_windows_gnu` for one process, so it cannot leak into a
+     cross-compile.
+   - **The bill**: workspace dep closure **10 → 29 of 40**. ADR-031 is frozen
+     and this is its price, but one dependency took nineteen of thirty
+     remaining slots. Kernel closure untouched at 10/12.
+
+### Row 11 container half — `ehkatra-store`
+docs/26's schema **verbatim** (the SQL is copied, not paraphrased, so drift is
+visible), `user_version` + `application_id`, WAL always, `synchronous = FULL`.
+**13 new tests.**
+
+- **Row 11 exit criterion passes**: `save_then_reload_preserves_the_state_hash`,
+  plus the same invariant through a snapshot + tail.
+- **kill −9 is a real kill**: `crash-writer` is a separate binary that prints
+  `COMMITTED <n>` per durability point; the test reads those, terminates the
+  process with no unwinding, reopens, and asserts every acknowledged op
+  survived and replays to the right hash. It asserts *only* docs/16's promise —
+  ops after the last acknowledgement are not claimed.
+- **SALVAGE against real corruption**: a randomised snapshot body, and a
+  payload truncated mid-op (the torn write a power cut leaves).
+- **Compaction** writes a new file and renames, driving `usk-recover`'s
+  COMPACTING machine against the real file; the deferred-ops rule proven in
+  logic now runs on disk.
+- **Migration check implemented, not described**: `migrate::run` captures the
+  state hash, refuses to commit if it moved, and rolls back. The registry is
+  empty at v1 on purpose — the *mechanism* is tested now rather than letting
+  the first real migration be its own first test.
+
+### Two defects the logic half could not have found (D-074)
+1. `NoValidSnapshot` fired on a container that had **never been snapshotted** —
+   every kernel test supplied a snapshot, so "none present" and "none valid"
+   were one branch. A young workbook is not in trouble; it is new.
+2. **The autosave cadence never fired.** `append_ops` stamped the batch from the
+   system clock while `maybe_commit` compared an injected one. Two ends of one
+   interval, two clocks. `append_ops` now takes `now_ms`.
+
+### MEASURED — W-OPEN-1M (MEASUREMENTS.md)
+Cold open to READY **2.10 s**; SALVAGE with a corrupted final page **657 ms**;
+container 108 MB for 1.1M ops. Against docs/31's <1.5 s budget: that budget is
+for *skeleton + viewport*, and this is a full replay — **neither a pass nor a
+breach**, recorded as what it is.
+
+### The finding that matters most (D-075, TD-30)
+The salvage run reported `lost_data = true` with **zero quarantined bytes**.
+Nothing was damaged because nothing was left: the container keeps **one**
+snapshot and stores only the uncovered tail in `ops`, so corrupting the snapshot
+destroyed the 1,002,000 ops it had compacted. docs/16 says "the *last valid*
+snapshot", which presupposes more than one exists — **the salvage path is
+correct and the retention policy above it was never written.** The smaller test,
+which keeps every op, recovers the whole workbook from the same corruption.
+Same code, opposite outcome: **recoverability is a property of the retention
+policy, not of the salvage code.** Filed for docs/16 to decide.
+
+### TD-24's residual did NOT close here (D-076) — correcting the plan
+The handoff expected the snapshot to make `settle()` cheap. It cannot: a v0.1
+snapshot body *is* the compacted op set (D-069) and `verify` proves it by
+replaying it, so opening costs the same as replaying the whole log — which is
+what the 2.10 s measures. The residual closes only when the body becomes a
+materialised state image (docs/16's tile image). That is real work, not wiring.
+
+### GATES STATUS
+fmt ✓ · clippy 0 warnings ✓ · **tests 177/177 ✓** · no_std wasm32 kernel build ✓
+· dep budget 1/5, 10/12, **29/40** ✓ · differential replay native==wasm ✓ ·
+purity + host-isolation + loopback greps ✓. Both replay hashes unchanged.
+
+### NEXT
+- **TD-30 first** — a container that cannot survive one corrupt snapshot should
+  not meet real data. It is a policy decision plus a small change.
+- Row 11 leftovers: none blocking. TD-25 (per-op length framing) is still worth
+  paying before the first wire-version bump; the container and the wire want the
+  same prefix.
+- Then **Row 12 (CSV)**: streaming reader, strict-mode inference report before
+  commit, formula-injection neutralisation on import *and* export (docs/24),
+  sandboxed subprocess from the first line.
+
+### SESSION END
+Row 10 is complete. Row 11's blocker is recorded, and its unblocked half is
+built and proven. **164 tests, all gates green, working tree uncommitted.**
+
+### NEXT SESSION — start here
+1. **TD-28 first, and check it rather than assume it.** If `cc` exists (or CI is
+   the target), write `ehkatra-store`: docs/26's schema verbatim over
+   `usk-recover`'s already-proven logic. The port is deliberately narrow —
+   `Snapshot`, `recover()`, and `Document` are the whole interface, so the
+   adapter is `INSERT`/`SELECT` plus fsync discipline, not new semantics.
+2. Then BOOTSTRAP row 11's kill −9 file test and **W-OPEN-1M**.
+3. **TD-24's residual gets cheap here.** The frequency half is paid (D-071);
+   what remains is that a read after N appends is O(N). A snapshot gives the
+   fold a checkpoint to start from. Land the container, then re-measure
+   W-SYNC-RELAY — do not build a separate incremental applier first, and do not
+   build the resident writer index (2 KiB per tile-actor, ruinous on sparse
+   workbooks).
+4. **TD-25 is worth paying at the same time**: the container and the wire want
+   the same per-op length prefix, and DP-A5 forward preservation is
+   unimplementable without it. Pay it before the first wire-version bump.
+
+The 50-replica benchmark was still running when this was written. Re-run it with
+`cargo build --release -p sync-bench; ./target/release/sync-bench` (or
+`--quick` for the 2-replica case, which takes 262 ms); if it is still the wrong
+shape to wait on, that *is* TD-24's evidence and the entry already says so.
+
+`.checkpoints/01-td22/` holds the pre-TD-22 copies of `usk-state`'s `lib.rs` and
+`tile.rs`.
+
+### NEXT — Row 11 (snapshots + recovery)
+docs/26's container schema **verbatim**, docs/16's SALVAGE machine, and
+docs/27 §2's document lifecycle with its forbidden transitions. Proof: BOOTSTRAP
+row 11's kill −9 mid-write test, and **W-OPEN-1M** (docs/38: 1M-cell workbook +
+100k-op tail; cold open to READY, and SALVAGE path time with a corrupted final
+page).
+
+Carry into Row 11:
+- **Row 11 is where TD-24 gets cheap.** A snapshot gives the fold a checkpoint
+  to start from, which is most of the incremental-apply problem. Do not build a
+  separate incremental applier first — land the snapshot and re-measure.
+- The durability half of never-drop is Row 11's to prove. Session 10 proved the
+  *protocol* half (recovery re-offers unacknowledged ops) against an in-memory
+  log and said so explicitly; the fsync contract is not yet claimed anywhere.
+- `Op::decode` now exists, so the container can store canonical op bytes and
+  read them back. TD-25 (framing for forward preservation) is worth paying
+  *here*, because the container format and the wire format want the same
+  per-op length prefix.
+- TD-19 (699 ms graph build, dominated by parsing) is repaid by persisting
+  parsed formulas in the snapshot — Row 11 is its named trigger.
+

@@ -1,0 +1,12 @@
+[package]
+name = "open-bench"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ehkatra-store = { path = "../../ehkatra-store" }
+usk-oplog = { path = "../../crates/usk-oplog" }
+usk-state = { path = "../../crates/usk-state" }
+usk-recover = { path = "../../crates/usk-recover" }
+usk-types = { path = "../../crates/usk-types" }

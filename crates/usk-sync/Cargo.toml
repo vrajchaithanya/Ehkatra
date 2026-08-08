@@ -1,0 +1,9 @@
+[package]
+name = "usk-sync"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+usk-types = { path = "../usk-types" }
+usk-oplog = { path = "../usk-oplog" }

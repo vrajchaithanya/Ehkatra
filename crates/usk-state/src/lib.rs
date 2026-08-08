@@ -7,13 +7,15 @@
 #![no_std]
 extern crate alloc;
 
+pub mod formula;
 pub mod tile;
 
 use alloc::collections::BTreeMap;
-use alloc::string::String;
 use alloc::vec::Vec;
+pub use formula::FormulaCell;
+use formula::FormulaRegistry;
 use tile::{PromotionStats, TileStore};
-use usk_oplog::{Anchor, Op, OpLog, Payload, RangeBinding};
+use usk_oplog::{Anchor, Op, OpLog, Payload};
 use usk_types::{ColId, Lamport, OpId, RowId, Value};
 
 /// One axis (rows or columns) as a neighbor-anchored ordered sequence with
@@ -99,14 +101,6 @@ impl AxisSeq {
     }
 }
 
-/// A stored formula: the source text plus its identity bindings, exactly as
-/// the `SetFormula` op carried them.
-#[derive(Clone, PartialEq, Debug)]
-pub struct FormulaCell {
-    pub source: String,
-    pub bindings: Vec<RangeBinding>,
-}
-
 /// The workbook state (single sheet in v0.1).
 ///
 /// Cells live in the tile store (docs/14, ADR-005), not in a flat per-cell map:
@@ -117,11 +111,11 @@ pub struct State {
     rows: AxisSeq,
     cols: AxisSeq,
     cells: TileStore,
-    /// Formulas, keyed by cell identity — a flat map rather than tile payload
-    /// because docs/14 has formulas *reference* the group table, never packed
-    /// among values. Presence in this map means the formula is the cell's
-    /// winning content; see `apply` for how that invariant is maintained.
-    formulas: BTreeMap<(OpId, OpId), FormulaCell>,
+    /// Formulas, keyed by cell identity. A **stamped** LWW register per cell
+    /// (TD-22): formula-vs-value is decided by `(lamport, op id)`, not by the
+    /// order ops happen to be applied in, so an incremental merge cannot
+    /// resolve it differently from a full replay. See `formula.rs`.
+    formulas: FormulaRegistry,
 }
 
 impl State {
@@ -137,14 +131,23 @@ impl State {
         // Total order: applying in this order is equivalent to any causal
         // order because every apply_* below is commutative for concurrent ops.
         ops.sort_by_key(|o| (o.lamport, o.id.actor, o.id.counter));
-        let mut s = State {
-            cells: TileStore::from_plan(tile::plan_promotions(ops.iter().copied())),
-            ..Default::default()
-        };
+        let mut s = State::from_plan(tile::plan_promotions(ops.iter().copied()));
         for op in ops {
             s.apply(op);
         }
         s
+    }
+
+    /// Builds the empty state the pre-pass planned: tiles that know which cells
+    /// are contested, and a formula registry that knows which cells a formula
+    /// will ever name.
+    fn from_plan(mut plan: tile::Plan) -> Self {
+        let formulas = FormulaRegistry::seeded(core::mem::take(&mut plan.formula_cells));
+        State {
+            cells: TileStore::from_plan(plan),
+            formulas,
+            ..Default::default()
+        }
     }
 
     /// Replays ops that are **already** in canonical total order, without ever
@@ -165,22 +168,24 @@ impl State {
         F: FnMut() -> I,
         I: Iterator<Item = Op>,
     {
-        let mut s = State {
-            cells: TileStore::from_plan(tile::plan_promotions(source())),
-            ..Default::default()
-        };
+        let mut s = State::from_plan(tile::plan_promotions(source()));
         for op in source() {
             s.apply(&op);
         }
         s
     }
 
-    /// Applies one op. Ops arrive in canonical total order (both constructors
-    /// guarantee it), which is what makes the value-vs-formula rule below a
-    /// correct LWW: whichever of `SetCell`/`ClearCell`/`SetFormula` applies
-    /// *last* in that order is the cell's winning content on every replica.
-    /// An incremental merge path (future sync) must carry per-entry stamps
-    /// instead — recorded as TD-22.
+    /// Applies one op.
+    ///
+    /// Formula-vs-value at a cell is decided by the op's **stamp**, not by when
+    /// it happens to be applied (TD-22, closed): the registry takes the greater
+    /// of `(lamport, op id)`, so a value write that arrives after a newer
+    /// formula loses, exactly as it would in a full replay.
+    ///
+    /// The *tile* store still requires canonical order — a summary tile keeps
+    /// no per-cell stamps to compare against, which is ADR-005's memory
+    /// argument. Both constructors sort, so the precondition holds here; it is
+    /// the remaining barrier to a genuinely incremental apply (TD-11, TD-24).
     fn apply(&mut self, op: &Op) {
         match &op.payload {
             Payload::InsertRow { anchor } => self.rows.insert(anchor, op.id, op.lamport),
@@ -190,14 +195,16 @@ impl State {
             Payload::UndeleteRow { row } => self.rows.undelete(row.0),
             Payload::UndeleteCol { col } => self.cols.undelete(col.0),
             Payload::SetCell { row, col, value } => {
-                self.formulas.remove(&(row.0, col.0));
+                self.formulas
+                    .note_value_write(*row, *col, (op.lamport, op.id));
                 self.cells
                     .write(row.0, col.0, op.lamport, op.id, value.clone())
             }
             // A clear is a write of Blank, not an erasure: the cell keeps its
             // identity and its place in the causal history (DP-A1).
             Payload::ClearCell { row, col } => {
-                self.formulas.remove(&(row.0, col.0));
+                self.formulas
+                    .note_value_write(*row, *col, (op.lamport, op.id));
                 self.cells
                     .write(row.0, col.0, op.lamport, op.id, Value::Blank)
             }
@@ -207,8 +214,10 @@ impl State {
                 source,
                 bindings,
             } => {
-                self.formulas.insert(
-                    (row.0, col.0),
+                self.formulas.set_formula(
+                    *row,
+                    *col,
+                    (op.lamport, op.id),
                     FormulaCell {
                         source: source.clone(),
                         bindings: bindings.clone(),
@@ -257,15 +266,13 @@ impl State {
 
     /// The winning formula at a cell, if a formula is the winning content.
     pub fn formula(&self, row: RowId, col: ColId) -> Option<&FormulaCell> {
-        self.formulas.get(&(row.0, col.0))
+        self.formulas.get(row, col)
     }
 
     /// Every formula in the workbook, keyed by cell identity, in identity
     /// order. The calc engine's source of truth for what to evaluate.
     pub fn formulas(&self) -> impl Iterator<Item = (RowId, ColId, &FormulaCell)> {
-        self.formulas
-            .iter()
-            .map(|((r, c), f)| (RowId(*r), ColId(*c), f))
+        self.formulas.iter()
     }
 
     /// Retained concurrent losers for conflict surfacing (ADR-006).
@@ -306,10 +313,14 @@ impl State {
         });
         // Formulas join the hash only when any exist, so every pre-Row-9
         // corpus hashes exactly as before — the additive-evolution rule
-        // (docs/10) applied to the hash itself.
-        if !self.formulas.is_empty() {
+        // (docs/10) applied to the hash itself. Shadowed registry entries are
+        // bookkeeping, not content: `iter()` skips them, so a cell whose
+        // formula lost to a later value write hashes exactly as it did when
+        // the entry was deleted outright (pre-TD-22).
+        if !self.formulas.has_no_formulas() {
             h.update(b"|formulas|");
-            for ((r, c), f) in &self.formulas {
+            for (r, c, f) in self.formulas.iter() {
+                let (r, c) = (&r.0, &c.0);
                 if self.rows.is_live(r) && self.cols.is_live(c) {
                     h.update(&r.actor.0.to_be_bytes());
                     h.update(&r.counter.to_be_bytes());

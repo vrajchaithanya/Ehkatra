@@ -1,0 +1,1791 @@
+{
+  "schema": "ehkatra.oracle.vectors/1",
+  "function": "LEN",
+  "group": "text",
+  "doc": "Counts UTF-16 code units, not scalar values. The astral cases decide whether every string offset in the engine is byte-, char- or code-unit-based.",
+  "grid_source": "40-text.psd1",
+  "provenance": {
+    "source": "excel-com",
+    "oracle": true,
+    "excel_version": "16.0",
+    "excel_build": "20228",
+    "excel_product": "Microsoft Excel",
+    "excel_calc_version": "191029",
+    "date_system": "1900",
+    "ui_language_id": 16393,
+    "list_separator": ",",
+    "decimal_separator": ".",
+    "thousands_separator": ",",
+    "os": "Microsoft Windows 11 Home Single Language 10.0.26200",
+    "powershell": "5.1.26100.8875",
+    "harness_version": "1.0.0",
+    "captured_utc": "2026-08-08T07:29:37Z",
+    "probe_column_width": 80,
+    "catalogue_source": "crates/usk-formula/src/functions.rs CATALOGUE"
+  },
+  "case_count": 18,
+  "cases": [
+    {
+      "id": "LEN/0001",
+      "formula": "=LEN(\"abc\")",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": "Hello"
+        },
+        {
+          "ref": "A2",
+          "value": "world"
+        },
+        {
+          "ref": "A3",
+          "blank": true
+        },
+        {
+          "ref": "A4",
+          "value": 123
+        },
+        {
+          "ref": "A5",
+          "value": true
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "  padded  "
+        },
+        {
+          "ref": "B3",
+          "text": "1E2"
+        },
+        {
+          "ref": "B4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "B5",
+          "text": "50%"
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "value": 0.1
+        },
+        {
+          "ref": "C3",
+          "formula": "=1/3"
+        },
+        {
+          "ref": "C4",
+          "value": 1234567890123456
+        },
+        {
+          "ref": "C5",
+          "formula": "=DATE(2024,3,15)"
+        },
+        {
+          "ref": "D1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "D2",
+          "text": "  7  "
+        },
+        {
+          "ref": "D3",
+          "text": "(5)"
+        },
+        {
+          "ref": "D4",
+          "text": "1 2"
+        },
+        {
+          "ref": "D5",
+          "text": "1e2"
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 3,
+        "number_r17": "3",
+        "general_text": "3",
+        "display_text": "3"
+      }
+    },
+    {
+      "id": "LEN/0002",
+      "formula": "=LEN(\"\")",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": "Hello"
+        },
+        {
+          "ref": "A2",
+          "value": "world"
+        },
+        {
+          "ref": "A3",
+          "blank": true
+        },
+        {
+          "ref": "A4",
+          "value": 123
+        },
+        {
+          "ref": "A5",
+          "value": true
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "  padded  "
+        },
+        {
+          "ref": "B3",
+          "text": "1E2"
+        },
+        {
+          "ref": "B4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "B5",
+          "text": "50%"
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "value": 0.1
+        },
+        {
+          "ref": "C3",
+          "formula": "=1/3"
+        },
+        {
+          "ref": "C4",
+          "value": 1234567890123456
+        },
+        {
+          "ref": "C5",
+          "formula": "=DATE(2024,3,15)"
+        },
+        {
+          "ref": "D1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "D2",
+          "text": "  7  "
+        },
+        {
+          "ref": "D3",
+          "text": "(5)"
+        },
+        {
+          "ref": "D4",
+          "text": "1 2"
+        },
+        {
+          "ref": "D5",
+          "text": "1e2"
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "LEN/0003",
+      "formula": "=LEN(A3)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": "Hello"
+        },
+        {
+          "ref": "A2",
+          "value": "world"
+        },
+        {
+          "ref": "A3",
+          "blank": true
+        },
+        {
+          "ref": "A4",
+          "value": 123
+        },
+        {
+          "ref": "A5",
+          "value": true
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "  padded  "
+        },
+        {
+          "ref": "B3",
+          "text": "1E2"
+        },
+        {
+          "ref": "B4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "B5",
+          "text": "50%"
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "value": 0.1
+        },
+        {
+          "ref": "C3",
+          "formula": "=1/3"
+        },
+        {
+          "ref": "C4",
+          "value": 1234567890123456
+        },
+        {
+          "ref": "C5",
+          "formula": "=DATE(2024,3,15)"
+        },
+        {
+          "ref": "D1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "D2",
+          "text": "  7  "
+        },
+        {
+          "ref": "D3",
+          "text": "(5)"
+        },
+        {
+          "ref": "D4",
+          "text": "1 2"
+        },
+        {
+          "ref": "D5",
+          "text": "1e2"
+        }
+      ],
+      "tags": [
+        "blank"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "LEN/0004",
+      "formula": "=LEN(B1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": "Hello"
+        },
+        {
+          "ref": "A2",
+          "value": "world"
+        },
+        {
+          "ref": "A3",
+          "blank": true
+        },
+        {
+          "ref": "A4",
+          "value": 123
+        },
+        {
+          "ref": "A5",
+          "value": true
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "  padded  "
+        },
+        {
+          "ref": "B3",
+          "text": "1E2"
+        },
+        {
+          "ref": "B4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "B5",
+          "text": "50%"
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "value": 0.1
+        },
+        {
+          "ref": "C3",
+          "formula": "=1/3"
+        },
+        {
+          "ref": "C4",
+          "value": 1234567890123456
+        },
+        {
+          "ref": "C5",
+          "formula": "=DATE(2024,3,15)"
+        },
+        {
+          "ref": "D1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "D2",
+          "text": "  7  "
+        },
+        {
+          "ref": "D3",
+          "text": "(5)"
+        },
+        {
+          "ref": "D4",
+          "text": "1 2"
+        },
+        {
+          "ref": "D5",
+          "text": "1e2"
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "note": "the =\"\" cell",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "LEN/0005",
+      "formula": "=LEN(A4)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": "Hello"
+        },
+        {
+          "ref": "A2",
+          "value": "world"
+        },
+        {
+          "ref": "A3",
+          "blank": true
+        },
+        {
+          "ref": "A4",
+          "value": 123
+        },
+        {
+          "ref": "A5",
+          "value": true
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "  padded  "
+        },
+        {
+          "ref": "B3",
+          "text": "1E2"
+        },
+        {
+          "ref": "B4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "B5",
+          "text": "50%"
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "value": 0.1
+        },
+        {
+          "ref": "C3",
+          "formula": "=1/3"
+        },
+        {
+          "ref": "C4",
+          "value": 1234567890123456
+        },
+        {
+          "ref": "C5",
+          "formula": "=DATE(2024,3,15)"
+        },
+        {
+          "ref": "D1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "D2",
+          "text": "  7  "
+        },
+        {
+          "ref": "D3",
+          "text": "(5)"
+        },
+        {
+          "ref": "D4",
+          "text": "1 2"
+        },
+        {
+          "ref": "D5",
+          "text": "1e2"
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "note": "a number coerced to text",
+      "observed": {
+        "kind": "number",
+        "number": 3,
+        "number_r17": "3",
+        "general_text": "3",
+        "display_text": "3"
+      }
+    },
+    {
+      "id": "LEN/0006",
+      "formula": "=LEN(A5)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": "Hello"
+        },
+        {
+          "ref": "A2",
+          "value": "world"
+        },
+        {
+          "ref": "A3",
+          "blank": true
+        },
+        {
+          "ref": "A4",
+          "value": 123
+        },
+        {
+          "ref": "A5",
+          "value": true
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "  padded  "
+        },
+        {
+          "ref": "B3",
+          "text": "1E2"
+        },
+        {
+          "ref": "B4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "B5",
+          "text": "50%"
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "value": 0.1
+        },
+        {
+          "ref": "C3",
+          "formula": "=1/3"
+        },
+        {
+          "ref": "C4",
+          "value": 1234567890123456
+        },
+        {
+          "ref": "C5",
+          "formula": "=DATE(2024,3,15)"
+        },
+        {
+          "ref": "D1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "D2",
+          "text": "  7  "
+        },
+        {
+          "ref": "D3",
+          "text": "(5)"
+        },
+        {
+          "ref": "D4",
+          "text": "1 2"
+        },
+        {
+          "ref": "D5",
+          "text": "1e2"
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "note": "TRUE is four characters",
+      "observed": {
+        "kind": "number",
+        "number": 4,
+        "number_r17": "4",
+        "general_text": "4",
+        "display_text": "4"
+      }
+    },
+    {
+      "id": "LEN/0007",
+      "formula": "=LEN(C2)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": "Hello"
+        },
+        {
+          "ref": "A2",
+          "value": "world"
+        },
+        {
+          "ref": "A3",
+          "blank": true
+        },
+        {
+          "ref": "A4",
+          "value": 123
+        },
+        {
+          "ref": "A5",
+          "value": true
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "  padded  "
+        },
+        {
+          "ref": "B3",
+          "text": "1E2"
+        },
+        {
+          "ref": "B4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "B5",
+          "text": "50%"
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "value": 0.1
+        },
+        {
+          "ref": "C3",
+          "formula": "=1/3"
+        },
+        {
+          "ref": "C4",
+          "value": 1234567890123456
+        },
+        {
+          "ref": "C5",
+          "formula": "=DATE(2024,3,15)"
+        },
+        {
+          "ref": "D1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "D2",
+          "text": "  7  "
+        },
+        {
+          "ref": "D3",
+          "text": "(5)"
+        },
+        {
+          "ref": "D4",
+          "text": "1 2"
+        },
+        {
+          "ref": "D5",
+          "text": "1e2"
+        }
+      ],
+      "tags": [
+        "coercion",
+        "precision"
+      ],
+      "note": "0.1 as text -- how many digits",
+      "observed": {
+        "kind": "number",
+        "number": 3,
+        "number_r17": "3",
+        "general_text": "3",
+        "display_text": "3"
+      }
+    },
+    {
+      "id": "LEN/0008",
+      "formula": "=LEN(C3)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": "Hello"
+        },
+        {
+          "ref": "A2",
+          "value": "world"
+        },
+        {
+          "ref": "A3",
+          "blank": true
+        },
+        {
+          "ref": "A4",
+          "value": 123
+        },
+        {
+          "ref": "A5",
+          "value": true
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "  padded  "
+        },
+        {
+          "ref": "B3",
+          "text": "1E2"
+        },
+        {
+          "ref": "B4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "B5",
+          "text": "50%"
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "value": 0.1
+        },
+        {
+          "ref": "C3",
+          "formula": "=1/3"
+        },
+        {
+          "ref": "C4",
+          "value": 1234567890123456
+        },
+        {
+          "ref": "C5",
+          "formula": "=DATE(2024,3,15)"
+        },
+        {
+          "ref": "D1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "D2",
+          "text": "  7  "
+        },
+        {
+          "ref": "D3",
+          "text": "(5)"
+        },
+        {
+          "ref": "D4",
+          "text": "1 2"
+        },
+        {
+          "ref": "D5",
+          "text": "1e2"
+        }
+      ],
+      "tags": [
+        "coercion",
+        "precision"
+      ],
+      "note": "1/3 as text -- the 15-digit rule made countable",
+      "observed": {
+        "kind": "number",
+        "number": 17,
+        "number_r17": "17",
+        "general_text": "17",
+        "display_text": "17"
+      }
+    },
+    {
+      "id": "LEN/0009",
+      "formula": "=LEN(C4)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": "Hello"
+        },
+        {
+          "ref": "A2",
+          "value": "world"
+        },
+        {
+          "ref": "A3",
+          "blank": true
+        },
+        {
+          "ref": "A4",
+          "value": 123
+        },
+        {
+          "ref": "A5",
+          "value": true
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "  padded  "
+        },
+        {
+          "ref": "B3",
+          "text": "1E2"
+        },
+        {
+          "ref": "B4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "B5",
+          "text": "50%"
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "value": 0.1
+        },
+        {
+          "ref": "C3",
+          "formula": "=1/3"
+        },
+        {
+          "ref": "C4",
+          "value": 1234567890123456
+        },
+        {
+          "ref": "C5",
+          "formula": "=DATE(2024,3,15)"
+        },
+        {
+          "ref": "D1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "D2",
+          "text": "  7  "
+        },
+        {
+          "ref": "D3",
+          "text": "(5)"
+        },
+        {
+          "ref": "D4",
+          "text": "1 2"
+        },
+        {
+          "ref": "D5",
+          "text": "1e2"
+        }
+      ],
+      "tags": [
+        "coercion",
+        "precision"
+      ],
+      "note": "a 16-digit integer",
+      "observed": {
+        "kind": "number",
+        "number": 16,
+        "number_r17": "16",
+        "general_text": "16",
+        "display_text": "16"
+      }
+    },
+    {
+      "id": "LEN/0010",
+      "formula": "=LEN(C5)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": "Hello"
+        },
+        {
+          "ref": "A2",
+          "value": "world"
+        },
+        {
+          "ref": "A3",
+          "blank": true
+        },
+        {
+          "ref": "A4",
+          "value": 123
+        },
+        {
+          "ref": "A5",
+          "value": true
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "  padded  "
+        },
+        {
+          "ref": "B3",
+          "text": "1E2"
+        },
+        {
+          "ref": "B4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "B5",
+          "text": "50%"
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "value": 0.1
+        },
+        {
+          "ref": "C3",
+          "formula": "=1/3"
+        },
+        {
+          "ref": "C4",
+          "value": 1234567890123456
+        },
+        {
+          "ref": "C5",
+          "formula": "=DATE(2024,3,15)"
+        },
+        {
+          "ref": "D1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "D2",
+          "text": "  7  "
+        },
+        {
+          "ref": "D3",
+          "text": "(5)"
+        },
+        {
+          "ref": "D4",
+          "text": "1 2"
+        },
+        {
+          "ref": "D5",
+          "text": "1e2"
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "note": "a date cell -- serial or formatted text",
+      "observed": {
+        "kind": "number",
+        "number": 5,
+        "number_r17": "5",
+        "general_text": "5",
+        "display_text": "5"
+      }
+    },
+    {
+      "id": "LEN/0011",
+      "formula": "=LEN(UNICHAR(233))",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": "Hello"
+        },
+        {
+          "ref": "A2",
+          "value": "world"
+        },
+        {
+          "ref": "A3",
+          "blank": true
+        },
+        {
+          "ref": "A4",
+          "value": 123
+        },
+        {
+          "ref": "A5",
+          "value": true
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "  padded  "
+        },
+        {
+          "ref": "B3",
+          "text": "1E2"
+        },
+        {
+          "ref": "B4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "B5",
+          "text": "50%"
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "value": 0.1
+        },
+        {
+          "ref": "C3",
+          "formula": "=1/3"
+        },
+        {
+          "ref": "C4",
+          "value": 1234567890123456
+        },
+        {
+          "ref": "C5",
+          "formula": "=DATE(2024,3,15)"
+        },
+        {
+          "ref": "D1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "D2",
+          "text": "  7  "
+        },
+        {
+          "ref": "D3",
+          "text": "(5)"
+        },
+        {
+          "ref": "D4",
+          "text": "1 2"
+        },
+        {
+          "ref": "D5",
+          "text": "1e2"
+        }
+      ],
+      "tags": [
+        "unicode"
+      ],
+      "note": "e-acute, one code unit",
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "LEN/0012",
+      "formula": "=LEN(UNICHAR(101)&UNICHAR(769))",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": "Hello"
+        },
+        {
+          "ref": "A2",
+          "value": "world"
+        },
+        {
+          "ref": "A3",
+          "blank": true
+        },
+        {
+          "ref": "A4",
+          "value": 123
+        },
+        {
+          "ref": "A5",
+          "value": true
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "  padded  "
+        },
+        {
+          "ref": "B3",
+          "text": "1E2"
+        },
+        {
+          "ref": "B4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "B5",
+          "text": "50%"
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "value": 0.1
+        },
+        {
+          "ref": "C3",
+          "formula": "=1/3"
+        },
+        {
+          "ref": "C4",
+          "value": 1234567890123456
+        },
+        {
+          "ref": "C5",
+          "formula": "=DATE(2024,3,15)"
+        },
+        {
+          "ref": "D1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "D2",
+          "text": "  7  "
+        },
+        {
+          "ref": "D3",
+          "text": "(5)"
+        },
+        {
+          "ref": "D4",
+          "text": "1 2"
+        },
+        {
+          "ref": "D5",
+          "text": "1e2"
+        }
+      ],
+      "tags": [
+        "unicode"
+      ],
+      "note": "e plus combining acute -- two code units, one grapheme",
+      "observed": {
+        "kind": "number",
+        "number": 2,
+        "number_r17": "2",
+        "general_text": "2",
+        "display_text": "2"
+      }
+    },
+    {
+      "id": "LEN/0013",
+      "formula": "=LEN(UNICHAR(128512))",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": "Hello"
+        },
+        {
+          "ref": "A2",
+          "value": "world"
+        },
+        {
+          "ref": "A3",
+          "blank": true
+        },
+        {
+          "ref": "A4",
+          "value": 123
+        },
+        {
+          "ref": "A5",
+          "value": true
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "  padded  "
+        },
+        {
+          "ref": "B3",
+          "text": "1E2"
+        },
+        {
+          "ref": "B4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "B5",
+          "text": "50%"
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "value": 0.1
+        },
+        {
+          "ref": "C3",
+          "formula": "=1/3"
+        },
+        {
+          "ref": "C4",
+          "value": 1234567890123456
+        },
+        {
+          "ref": "C5",
+          "formula": "=DATE(2024,3,15)"
+        },
+        {
+          "ref": "D1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "D2",
+          "text": "  7  "
+        },
+        {
+          "ref": "D3",
+          "text": "(5)"
+        },
+        {
+          "ref": "D4",
+          "text": "1 2"
+        },
+        {
+          "ref": "D5",
+          "text": "1e2"
+        }
+      ],
+      "tags": [
+        "unicode",
+        "astral"
+      ],
+      "note": "emoji: 2 in UTF-16, 1 Unicode scalar, 4 UTF-8 bytes",
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "LEN/0014",
+      "formula": "=LEN(UNICHAR(160))",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": "Hello"
+        },
+        {
+          "ref": "A2",
+          "value": "world"
+        },
+        {
+          "ref": "A3",
+          "blank": true
+        },
+        {
+          "ref": "A4",
+          "value": 123
+        },
+        {
+          "ref": "A5",
+          "value": true
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "  padded  "
+        },
+        {
+          "ref": "B3",
+          "text": "1E2"
+        },
+        {
+          "ref": "B4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "B5",
+          "text": "50%"
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "value": 0.1
+        },
+        {
+          "ref": "C3",
+          "formula": "=1/3"
+        },
+        {
+          "ref": "C4",
+          "value": 1234567890123456
+        },
+        {
+          "ref": "C5",
+          "formula": "=DATE(2024,3,15)"
+        },
+        {
+          "ref": "D1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "D2",
+          "text": "  7  "
+        },
+        {
+          "ref": "D3",
+          "text": "(5)"
+        },
+        {
+          "ref": "D4",
+          "text": "1 2"
+        },
+        {
+          "ref": "D5",
+          "text": "1e2"
+        }
+      ],
+      "tags": [
+        "unicode"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "LEN/0015",
+      "formula": "=LEN(UNICHAR(20320)&UNICHAR(22909))",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": "Hello"
+        },
+        {
+          "ref": "A2",
+          "value": "world"
+        },
+        {
+          "ref": "A3",
+          "blank": true
+        },
+        {
+          "ref": "A4",
+          "value": 123
+        },
+        {
+          "ref": "A5",
+          "value": true
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "  padded  "
+        },
+        {
+          "ref": "B3",
+          "text": "1E2"
+        },
+        {
+          "ref": "B4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "B5",
+          "text": "50%"
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "value": 0.1
+        },
+        {
+          "ref": "C3",
+          "formula": "=1/3"
+        },
+        {
+          "ref": "C4",
+          "value": 1234567890123456
+        },
+        {
+          "ref": "C5",
+          "formula": "=DATE(2024,3,15)"
+        },
+        {
+          "ref": "D1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "D2",
+          "text": "  7  "
+        },
+        {
+          "ref": "D3",
+          "text": "(5)"
+        },
+        {
+          "ref": "D4",
+          "text": "1 2"
+        },
+        {
+          "ref": "D5",
+          "text": "1e2"
+        }
+      ],
+      "tags": [
+        "unicode"
+      ],
+      "note": "two CJK characters",
+      "observed": {
+        "kind": "number",
+        "number": 2,
+        "number_r17": "2",
+        "general_text": "2",
+        "display_text": "2"
+      }
+    },
+    {
+      "id": "LEN/0016",
+      "formula": "=LEN(B2)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": "Hello"
+        },
+        {
+          "ref": "A2",
+          "value": "world"
+        },
+        {
+          "ref": "A3",
+          "blank": true
+        },
+        {
+          "ref": "A4",
+          "value": 123
+        },
+        {
+          "ref": "A5",
+          "value": true
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "  padded  "
+        },
+        {
+          "ref": "B3",
+          "text": "1E2"
+        },
+        {
+          "ref": "B4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "B5",
+          "text": "50%"
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "value": 0.1
+        },
+        {
+          "ref": "C3",
+          "formula": "=1/3"
+        },
+        {
+          "ref": "C4",
+          "value": 1234567890123456
+        },
+        {
+          "ref": "C5",
+          "formula": "=DATE(2024,3,15)"
+        },
+        {
+          "ref": "D1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "D2",
+          "text": "  7  "
+        },
+        {
+          "ref": "D3",
+          "text": "(5)"
+        },
+        {
+          "ref": "D4",
+          "text": "1 2"
+        },
+        {
+          "ref": "D5",
+          "text": "1e2"
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 10,
+        "number_r17": "10",
+        "general_text": "10",
+        "display_text": "10"
+      }
+    },
+    {
+      "id": "LEN/0017",
+      "formula": "=LEN(C1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": "Hello"
+        },
+        {
+          "ref": "A2",
+          "value": "world"
+        },
+        {
+          "ref": "A3",
+          "blank": true
+        },
+        {
+          "ref": "A4",
+          "value": 123
+        },
+        {
+          "ref": "A5",
+          "value": true
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "  padded  "
+        },
+        {
+          "ref": "B3",
+          "text": "1E2"
+        },
+        {
+          "ref": "B4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "B5",
+          "text": "50%"
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "value": 0.1
+        },
+        {
+          "ref": "C3",
+          "formula": "=1/3"
+        },
+        {
+          "ref": "C4",
+          "value": 1234567890123456
+        },
+        {
+          "ref": "C5",
+          "formula": "=DATE(2024,3,15)"
+        },
+        {
+          "ref": "D1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "D2",
+          "text": "  7  "
+        },
+        {
+          "ref": "D3",
+          "text": "(5)"
+        },
+        {
+          "ref": "D4",
+          "text": "1 2"
+        },
+        {
+          "ref": "D5",
+          "text": "1e2"
+        }
+      ],
+      "tags": [
+        "error-input"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#N/A",
+        "error_type_code": 7,
+        "cverr": -2146826246,
+        "general_text": "",
+        "display_text": "#N/A"
+      }
+    },
+    {
+      "id": "LEN/0018",
+      "formula": "=LEN(REPT(\"a\",1000))",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": "Hello"
+        },
+        {
+          "ref": "A2",
+          "value": "world"
+        },
+        {
+          "ref": "A3",
+          "blank": true
+        },
+        {
+          "ref": "A4",
+          "value": 123
+        },
+        {
+          "ref": "A5",
+          "value": true
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "  padded  "
+        },
+        {
+          "ref": "B3",
+          "text": "1E2"
+        },
+        {
+          "ref": "B4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "B5",
+          "text": "50%"
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "value": 0.1
+        },
+        {
+          "ref": "C3",
+          "formula": "=1/3"
+        },
+        {
+          "ref": "C4",
+          "value": 1234567890123456
+        },
+        {
+          "ref": "C5",
+          "formula": "=DATE(2024,3,15)"
+        },
+        {
+          "ref": "D1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "D2",
+          "text": "  7  "
+        },
+        {
+          "ref": "D3",
+          "text": "(5)"
+        },
+        {
+          "ref": "D4",
+          "text": "1 2"
+        },
+        {
+          "ref": "D5",
+          "text": "1e2"
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 1000,
+        "number_r17": "1000",
+        "general_text": "1000",
+        "display_text": "1000"
+      }
+    }
+  ]
+}

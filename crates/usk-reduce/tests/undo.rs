@@ -143,13 +143,13 @@ fn undo_restores_the_prior_value() {
 
     let rows = s.state().row_order();
     let cols = s.state().col_order();
-    let at = |s: &Session| s.state().cell(rows[0], cols[1]);
+    let at = |s: &mut Session| s.state().cell(rows[0], cols[1]);
 
-    assert_eq!(at(&s), Some(num(2.0)));
+    assert_eq!(at(&mut s), Some(num(2.0)));
     s.apply(Command::Undo).expect("undo second");
-    assert_eq!(at(&s), Some(num(1.0)), "prior value, not blank");
+    assert_eq!(at(&mut s), Some(num(1.0)), "prior value, not blank");
     s.apply(Command::Undo).expect("undo first");
-    assert_eq!(at(&s), Some(Value::Blank), "back to blank");
+    assert_eq!(at(&mut s), Some(Value::Blank), "back to blank");
 }
 
 /// Undoing a formula write restores the formula that was there before.

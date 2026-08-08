@@ -1,0 +1,1769 @@
+{
+  "schema": "ehkatra.oracle.vectors/1",
+  "function": "__compat_coercion",
+  "group": "compat-catalog",
+  "doc": "The implicit conversions of the compat profile (docs/12). An operator context coerces text and logicals; a range context skips them. These vectors are the specification of Profile::Compat::to_number.",
+  "grid_source": "90-compat-catalog.psd1",
+  "provenance": {
+    "source": "excel-com",
+    "oracle": true,
+    "excel_version": "16.0",
+    "excel_build": "20228",
+    "excel_product": "Microsoft Excel",
+    "excel_calc_version": "191029",
+    "date_system": "1900",
+    "ui_language_id": 16393,
+    "list_separator": ",",
+    "decimal_separator": ".",
+    "thousands_separator": ",",
+    "os": "Microsoft Windows 11 Home Single Language 10.0.26200",
+    "powershell": "5.1.26100.8875",
+    "harness_version": "1.0.0",
+    "captured_utc": "2026-08-08T07:29:37Z",
+    "probe_column_width": 80,
+    "catalogue_source": "crates/usk-formula/src/functions.rs CATALOGUE"
+  },
+  "case_count": 30,
+  "cases": [
+    {
+      "id": "__compat_coercion/0001",
+      "formula": "=\"1\"+1",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "note": "text plus number",
+      "observed": {
+        "kind": "number",
+        "number": 2,
+        "number_r17": "2",
+        "general_text": "2",
+        "display_text": "2"
+      }
+    },
+    {
+      "id": "__compat_coercion/0002",
+      "formula": "=\"1\"&1",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "note": "concatenation never coerces",
+      "observed": {
+        "kind": "text",
+        "text": "11",
+        "general_text": "11",
+        "display_text": "11"
+      }
+    },
+    {
+      "id": "__compat_coercion/0003",
+      "formula": "=1&1",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "observed": {
+        "kind": "text",
+        "text": "11",
+        "general_text": "11",
+        "display_text": "11"
+      }
+    },
+    {
+      "id": "__compat_coercion/0004",
+      "formula": "=\"1\"*\"2\"",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 2,
+        "number_r17": "2",
+        "general_text": "2",
+        "display_text": "2"
+      }
+    },
+    {
+      "id": "__compat_coercion/0005",
+      "formula": "=TRUE+1",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 2,
+        "number_r17": "2",
+        "general_text": "2",
+        "display_text": "2"
+      }
+    },
+    {
+      "id": "__compat_coercion/0006",
+      "formula": "=FALSE+1",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "__compat_coercion/0007",
+      "formula": "=TRUE*2",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 2,
+        "number_r17": "2",
+        "general_text": "2",
+        "display_text": "2"
+      }
+    },
+    {
+      "id": "__compat_coercion/0008",
+      "formula": "=TRUE&\"\"",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "note": "how a logical spells itself as text",
+      "observed": {
+        "kind": "text",
+        "text": "TRUE",
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_coercion/0009",
+      "formula": "=\"\"+1",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion",
+        "boundary"
+      ],
+      "note": "an empty string is not zero",
+      "observed": {
+        "kind": "error",
+        "error": "#VALUE!",
+        "error_type_code": 3,
+        "cverr": -2146826273,
+        "general_text": "",
+        "display_text": "#VALUE!"
+      }
+    },
+    {
+      "id": "__compat_coercion/0010",
+      "formula": "=\" \"+1",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion",
+        "boundary"
+      ],
+      "note": "a single space",
+      "observed": {
+        "kind": "error",
+        "error": "#VALUE!",
+        "error_type_code": 3,
+        "cverr": -2146826273,
+        "general_text": "",
+        "display_text": "#VALUE!"
+      }
+    },
+    {
+      "id": "__compat_coercion/0011",
+      "formula": "=A1+1",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion",
+        "blank"
+      ],
+      "note": "a blank cell IS zero",
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "__compat_coercion/0012",
+      "formula": "=B5+1",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion",
+        "boundary"
+      ],
+      "note": "a formula-produced empty string",
+      "observed": {
+        "kind": "error",
+        "error": "#VALUE!",
+        "error_type_code": 3,
+        "cverr": -2146826273,
+        "general_text": "",
+        "display_text": "#VALUE!"
+      }
+    },
+    {
+      "id": "__compat_coercion/0013",
+      "formula": "=A2*1",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion",
+        "compat-bug"
+      ],
+      "note": "the gene-symbol mangling: text 1E2 as a number",
+      "observed": {
+        "kind": "number",
+        "number": 100,
+        "number_r17": "100",
+        "general_text": "100",
+        "display_text": "100"
+      }
+    },
+    {
+      "id": "__compat_coercion/0014",
+      "formula": "=A3*1",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "note": "surrounding spaces are tolerated",
+      "observed": {
+        "kind": "number",
+        "number": 5,
+        "number_r17": "5",
+        "general_text": "5",
+        "display_text": "5"
+      }
+    },
+    {
+      "id": "__compat_coercion/0015",
+      "formula": "=A4*1",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "note": "currency symbol and thousands separator",
+      "observed": {
+        "kind": "error",
+        "error": "#VALUE!",
+        "error_type_code": 3,
+        "cverr": -2146826273,
+        "general_text": "",
+        "display_text": "#VALUE!"
+      }
+    },
+    {
+      "id": "__compat_coercion/0016",
+      "formula": "=A5*1",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "note": "percent divides by 100",
+      "observed": {
+        "kind": "number",
+        "number": 0.5,
+        "number_r17": "0.5",
+        "general_text": "0.5",
+        "display_text": "0.5"
+      }
+    },
+    {
+      "id": "__compat_coercion/0017",
+      "formula": "=B1+0",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "note": "a date string becomes its serial",
+      "observed": {
+        "kind": "number",
+        "number": 45323,
+        "number_r17": "45323",
+        "general_text": "45323",
+        "display_text": "45323"
+      }
+    },
+    {
+      "id": "__compat_coercion/0018",
+      "formula": "=B2*1",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "note": "parenthesised negative",
+      "observed": {
+        "kind": "number",
+        "number": -5,
+        "number_r17": "-5",
+        "general_text": "-5",
+        "display_text": "-5"
+      }
+    },
+    {
+      "id": "__compat_coercion/0019",
+      "formula": "=B3*1",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion",
+        "error-input"
+      ],
+      "note": "a space between digits is not numeric",
+      "observed": {
+        "kind": "error",
+        "error": "#VALUE!",
+        "error_type_code": 3,
+        "cverr": -2146826273,
+        "general_text": "",
+        "display_text": "#VALUE!"
+      }
+    },
+    {
+      "id": "__compat_coercion/0020",
+      "formula": "=B4+0",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "note": "the text TRUE in arithmetic",
+      "observed": {
+        "kind": "error",
+        "error": "#VALUE!",
+        "error_type_code": 3,
+        "cverr": -2146826273,
+        "general_text": "",
+        "display_text": "#VALUE!"
+      }
+    },
+    {
+      "id": "__compat_coercion/0021",
+      "formula": "=-\"1\"",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "note": "unary minus on text",
+      "observed": {
+        "kind": "number",
+        "number": -1,
+        "number_r17": "-1",
+        "general_text": "-1",
+        "display_text": "-1"
+      }
+    },
+    {
+      "id": "__compat_coercion/0022",
+      "formula": "=+\"1\"",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "observed": {
+        "kind": "text",
+        "text": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "__compat_coercion/0023",
+      "formula": "=\"1\"=\"1.0\"",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion",
+        "comparison"
+      ],
+      "note": "text comparison does not normalise numbers",
+      "observed": {
+        "kind": "logical",
+        "logical": false,
+        "general_text": "FALSE",
+        "display_text": "FALSE"
+      }
+    },
+    {
+      "id": "__compat_coercion/0024",
+      "formula": "=1=\"1\"",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion",
+        "comparison"
+      ],
+      "note": "a number never equals text",
+      "observed": {
+        "kind": "logical",
+        "logical": false,
+        "general_text": "FALSE",
+        "display_text": "FALSE"
+      }
+    },
+    {
+      "id": "__compat_coercion/0025",
+      "formula": "=\"abc\"+0",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion",
+        "error-input"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#VALUE!",
+        "error_type_code": 3,
+        "cverr": -2146826273,
+        "general_text": "",
+        "display_text": "#VALUE!"
+      }
+    },
+    {
+      "id": "__compat_coercion/0026",
+      "formula": "=A1&\"x\"",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion",
+        "blank"
+      ],
+      "note": "a blank concatenates as nothing",
+      "observed": {
+        "kind": "text",
+        "text": "x",
+        "general_text": "x",
+        "display_text": "x"
+      }
+    },
+    {
+      "id": "__compat_coercion/0027",
+      "formula": "=N(\"1\")",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "note": "the explicit numeric coercion function",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_coercion/0028",
+      "formula": "=T(1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "note": "the explicit text coercion function",
+      "observed": {
+        "kind": "text",
+        "text": "",
+        "general_text": "",
+        "display_text": ""
+      }
+    },
+    {
+      "id": "__compat_coercion/0029",
+      "formula": "=T(\"1\")",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "observed": {
+        "kind": "text",
+        "text": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "__compat_coercion/0030",
+      "formula": "=--\"1E2\"",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "text": "1E2"
+        },
+        {
+          "ref": "A3",
+          "text": " 5 "
+        },
+        {
+          "ref": "A4",
+          "text": "$1,234.50"
+        },
+        {
+          "ref": "A5",
+          "text": "50%"
+        },
+        {
+          "ref": "B1",
+          "text": "1/2/2024"
+        },
+        {
+          "ref": "B2",
+          "text": "(5)"
+        },
+        {
+          "ref": "B3",
+          "text": "1 2"
+        },
+        {
+          "ref": "B4",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B5",
+          "formula": "=\"\""
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "note": "the double-unary idiom",
+      "observed": {
+        "kind": "number",
+        "number": 100,
+        "number_r17": "100",
+        "general_text": "100",
+        "display_text": "100"
+      }
+    }
+  ]
+}

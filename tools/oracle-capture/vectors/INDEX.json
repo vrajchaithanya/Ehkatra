@@ -1,0 +1,2576 @@
+{
+  "schema": "ehkatra.oracle.vectors/1",
+  "function": "INDEX",
+  "group": "lookup",
+  "doc": "Zero means \"the whole row/column\", which in a single cell collapses via implicit intersection rather than erroring. That collapse is the part an engine gets wrong.",
+  "grid_source": "50-lookup.psd1",
+  "provenance": {
+    "source": "excel-com",
+    "oracle": true,
+    "excel_version": "16.0",
+    "excel_build": "20228",
+    "excel_product": "Microsoft Excel",
+    "excel_calc_version": "191029",
+    "date_system": "1900",
+    "ui_language_id": 16393,
+    "list_separator": ",",
+    "decimal_separator": ".",
+    "thousands_separator": ",",
+    "os": "Microsoft Windows 11 Home Single Language 10.0.26200",
+    "powershell": "5.1.26100.8875",
+    "harness_version": "1.0.0",
+    "captured_utc": "2026-08-08T07:29:37Z",
+    "probe_column_width": 80,
+    "catalogue_source": "crates/usk-formula/src/functions.rs CATALOGUE"
+  },
+  "case_count": 15,
+  "cases": [
+    {
+      "id": "INDEX/0001",
+      "formula": "=INDEX(A1:B5,3,2)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "observed": {
+        "kind": "text",
+        "text": "thirty",
+        "general_text": "thirty",
+        "display_text": "thirty"
+      }
+    },
+    {
+      "id": "INDEX/0002",
+      "formula": "=INDEX(A1:B5,3,1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 30,
+        "number_r17": "30",
+        "general_text": "30",
+        "display_text": "30"
+      }
+    },
+    {
+      "id": "INDEX/0003",
+      "formula": "=INDEX(A1:A5,3)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "note": "single column, one coordinate",
+      "observed": {
+        "kind": "number",
+        "number": 30,
+        "number_r17": "30",
+        "general_text": "30",
+        "display_text": "30"
+      }
+    },
+    {
+      "id": "INDEX/0004",
+      "formula": "=INDEX(A1:E1,3)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "note": "single row, one coordinate",
+      "observed": {
+        "kind": "number",
+        "number": 30,
+        "number_r17": "30",
+        "general_text": "30",
+        "display_text": "30"
+      }
+    },
+    {
+      "id": "INDEX/0005",
+      "formula": "=INDEX(A1:B5,0,2)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "note": "row 0 means the whole column",
+      "observed": {
+        "kind": "text",
+        "text": "fifty",
+        "general_text": "fifty",
+        "display_text": "fifty"
+      }
+    },
+    {
+      "id": "INDEX/0006",
+      "formula": "=INDEX(A1:B5,3,0)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "note": "column 0 means the whole row",
+      "observed": {
+        "kind": "error",
+        "error": "#VALUE!",
+        "error_type_code": 3,
+        "cverr": -2146826273,
+        "general_text": "",
+        "display_text": "#VALUE!"
+      }
+    },
+    {
+      "id": "INDEX/0007",
+      "formula": "=INDEX(A1:B5,0,0)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#VALUE!",
+        "error_type_code": 3,
+        "cverr": -2146826273,
+        "general_text": "",
+        "display_text": "#VALUE!"
+      }
+    },
+    {
+      "id": "INDEX/0008",
+      "formula": "=INDEX(A1:B5,6,1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "error-input"
+      ],
+      "note": "past the last row",
+      "observed": {
+        "kind": "error",
+        "error": "#REF!",
+        "error_type_code": 4,
+        "cverr": -2146826265,
+        "general_text": "",
+        "display_text": "#REF!"
+      }
+    },
+    {
+      "id": "INDEX/0009",
+      "formula": "=INDEX(A1:B5,1,3)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "error-input"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#REF!",
+        "error_type_code": 4,
+        "cverr": -2146826265,
+        "general_text": "",
+        "display_text": "#REF!"
+      }
+    },
+    {
+      "id": "INDEX/0010",
+      "formula": "=INDEX(A1:B5,-1,1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "error-input"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#VALUE!",
+        "error_type_code": 3,
+        "cverr": -2146826273,
+        "general_text": "",
+        "display_text": "#VALUE!"
+      }
+    },
+    {
+      "id": "INDEX/0011",
+      "formula": "=INDEX(A1:B5,2.9,1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 20,
+        "number_r17": "20",
+        "general_text": "20",
+        "display_text": "20"
+      }
+    },
+    {
+      "id": "INDEX/0012",
+      "formula": "=INDEX(A1:B5,3)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "argcount"
+      ],
+      "note": "two-dimensional source, one coordinate",
+      "observed": {
+        "kind": "error",
+        "error": "#REF!",
+        "error_type_code": 4,
+        "cverr": -2146826265,
+        "general_text": "",
+        "display_text": "#REF!"
+      }
+    },
+    {
+      "id": "INDEX/0013",
+      "formula": "=SUM(INDEX(A1:B5,0,1))",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "note": "the whole-column form consumed as an array",
+      "observed": {
+        "kind": "number",
+        "number": 150,
+        "number_r17": "150",
+        "general_text": "150",
+        "display_text": "150"
+      }
+    },
+    {
+      "id": "INDEX/0014",
+      "formula": "=INDEX(C1:D5,5,2)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "note": "the row whose key is blank",
+      "observed": {
+        "kind": "text",
+        "text": "c-blank",
+        "general_text": "c-blank",
+        "display_text": "c-blank"
+      }
+    },
+    {
+      "id": "INDEX/0015",
+      "formula": "=INDEX(A1:B5,G3,1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "error-input"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#N/A",
+        "error_type_code": 7,
+        "cverr": -2146826246,
+        "general_text": "",
+        "display_text": "#N/A"
+      }
+    }
+  ]
+}

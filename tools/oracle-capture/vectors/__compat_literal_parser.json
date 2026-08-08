@@ -1,0 +1,493 @@
+{
+  "schema": "ehkatra.oracle.vectors/1",
+  "function": "__compat_literal_parser",
+  "group": "compat-catalog",
+  "doc": "What Excel does to a numeric literal before evaluating it. Read the stored_formula field of each case, not only the observed value.",
+  "grid_source": "91-literal-parser.psd1",
+  "provenance": {
+    "source": "excel-com",
+    "oracle": true,
+    "excel_version": "16.0",
+    "excel_build": "20228",
+    "excel_product": "Microsoft Excel",
+    "excel_calc_version": "191029",
+    "date_system": "1900",
+    "ui_language_id": 16393,
+    "list_separator": ",",
+    "decimal_separator": ".",
+    "thousands_separator": ",",
+    "os": "Microsoft Windows 11 Home Single Language 10.0.26200",
+    "powershell": "5.1.26100.8875",
+    "harness_version": "1.0.0",
+    "captured_utc": "2026-08-08T07:29:37Z",
+    "probe_column_width": 80,
+    "catalogue_source": "crates/usk-formula/src/functions.rs CATALOGUE"
+  },
+  "case_count": 29,
+  "cases": [
+    {
+      "id": "__compat_literal_parser/0001",
+      "formula": "=999999999999999",
+      "block": 1,
+      "tags": [
+        "literal-parser",
+        "precision"
+      ],
+      "note": "15 nines survive intact",
+      "observed": {
+        "kind": "number",
+        "number": 999999999999999,
+        "number_r17": "999999999999999",
+        "general_text": "999999999999999",
+        "display_text": "1E+15"
+      }
+    },
+    {
+      "id": "__compat_literal_parser/0002",
+      "formula": "=9999999999999999",
+      "block": 1,
+      "tags": [
+        "literal-parser",
+        "precision"
+      ],
+      "note": "16 nines do not",
+      "stored_formula": "=9999999999999990",
+      "observed": {
+        "kind": "number",
+        "number": 9.99999999999999E+15,
+        "number_r17": "9.99999999999999E+15",
+        "general_text": "9999999999999990",
+        "display_text": "1E+16"
+      }
+    },
+    {
+      "id": "__compat_literal_parser/0003",
+      "formula": "=123456789012345678",
+      "block": 1,
+      "tags": [
+        "literal-parser",
+        "precision"
+      ],
+      "note": "18 digits in, 15 significant digits stored",
+      "stored_formula": "=123456789012345000",
+      "observed": {
+        "kind": "number",
+        "number": 1.23456789012345E+17,
+        "number_r17": "1.23456789012345E+17",
+        "general_text": "123456789012345000",
+        "display_text": "1.23457E+17"
+      }
+    },
+    {
+      "id": "__compat_literal_parser/0004",
+      "formula": "=1234567890123456789",
+      "block": 1,
+      "tags": [
+        "literal-parser",
+        "precision"
+      ],
+      "stored_formula": "=1234567890123450000",
+      "observed": {
+        "kind": "number",
+        "number": 1.23456789012345E+18,
+        "number_r17": "1.23456789012345E+18",
+        "general_text": "1234567890123450000",
+        "display_text": "1.23457E+18"
+      }
+    },
+    {
+      "id": "__compat_literal_parser/0005",
+      "formula": "=1.234567890123456789",
+      "block": 1,
+      "tags": [
+        "literal-parser",
+        "precision"
+      ],
+      "note": "truncation on the fractional side too",
+      "stored_formula": "=1.23456789012345",
+      "observed": {
+        "kind": "number",
+        "number": 1.23456789012345,
+        "number_r17": "1.23456789012345",
+        "general_text": "1.23456789012345",
+        "display_text": "1.23456789"
+      }
+    },
+    {
+      "id": "__compat_literal_parser/0006",
+      "formula": "=0.1234567890123456789",
+      "block": 1,
+      "tags": [
+        "literal-parser",
+        "precision"
+      ],
+      "stored_formula": "=0.123456789012345",
+      "observed": {
+        "kind": "number",
+        "number": 0.123456789012345,
+        "number_r17": "0.123456789012345",
+        "general_text": "0.123456789012345",
+        "display_text": "0.123456789"
+      }
+    },
+    {
+      "id": "__compat_literal_parser/0007",
+      "formula": "=1E307",
+      "block": 1,
+      "tags": [
+        "literal-parser",
+        "boundary"
+      ],
+      "note": "the largest exponent the parser accepts",
+      "stored_formula": "=1E+307",
+      "observed": {
+        "kind": "number",
+        "number": 1E+307,
+        "number_r17": "1E+307",
+        "general_text": "1E+307",
+        "display_text": "1E+307"
+      }
+    },
+    {
+      "id": "__compat_literal_parser/0008",
+      "formula": "=1E308",
+      "block": 1,
+      "tags": [
+        "literal-parser",
+        "boundary"
+      ],
+      "note": "rejected, though it is a finite double",
+      "observed": null,
+      "observed_status": "rejected-by-excel",
+      "reject_reason": "Exception from HRESULT: 0x800A03EC"
+    },
+    {
+      "id": "__compat_literal_parser/0009",
+      "formula": "=1E+308",
+      "block": 1,
+      "tags": [
+        "literal-parser",
+        "boundary"
+      ],
+      "note": "rejected with an explicit sign as well",
+      "observed": null,
+      "observed_status": "rejected-by-excel",
+      "reject_reason": "Exception from HRESULT: 0x800A03EC"
+    },
+    {
+      "id": "__compat_literal_parser/0010",
+      "formula": "=1.5E308",
+      "block": 1,
+      "tags": [
+        "literal-parser",
+        "boundary"
+      ],
+      "note": "rejected",
+      "observed": null,
+      "observed_status": "rejected-by-excel",
+      "reject_reason": "Exception from HRESULT: 0x800A03EC"
+    },
+    {
+      "id": "__compat_literal_parser/0011",
+      "formula": "=-1E308",
+      "block": 1,
+      "tags": [
+        "literal-parser",
+        "boundary"
+      ],
+      "note": "rejected on the negative side too",
+      "observed": null,
+      "observed_status": "rejected-by-excel",
+      "reject_reason": "Exception from HRESULT: 0x800A03EC"
+    },
+    {
+      "id": "__compat_literal_parser/0012",
+      "formula": "=1E309",
+      "block": 1,
+      "tags": [
+        "literal-parser",
+        "boundary"
+      ],
+      "observed": null,
+      "observed_status": "rejected-by-excel",
+      "reject_reason": "Exception from HRESULT: 0x800A03EC"
+    },
+    {
+      "id": "__compat_literal_parser/0013",
+      "formula": "=1E-300",
+      "block": 1,
+      "tags": [
+        "literal-parser",
+        "boundary"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 1E-300,
+        "number_r17": "1E-300",
+        "general_text": "1E-300",
+        "display_text": "1E-300"
+      }
+    },
+    {
+      "id": "__compat_literal_parser/0014",
+      "formula": "=1E-307",
+      "block": 1,
+      "tags": [
+        "literal-parser",
+        "boundary"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 1E-307,
+        "number_r17": "1E-307",
+        "general_text": "1E-307",
+        "display_text": "1E-307"
+      }
+    },
+    {
+      "id": "__compat_literal_parser/0015",
+      "formula": "=1E-308",
+      "block": 1,
+      "tags": [
+        "literal-parser",
+        "boundary"
+      ],
+      "note": "accepted, then silently stored as 0 -- a normal double erased at parse time",
+      "stored_formula": "=0",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_literal_parser/0016",
+      "formula": "=1E-309",
+      "block": 1,
+      "tags": [
+        "literal-parser",
+        "boundary"
+      ],
+      "stored_formula": "=0",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_literal_parser/0017",
+      "formula": "=1E-310",
+      "block": 1,
+      "tags": [
+        "literal-parser",
+        "boundary"
+      ],
+      "note": "rejected",
+      "observed": null,
+      "observed_status": "rejected-by-excel",
+      "reject_reason": "Exception from HRESULT: 0x800A03EC"
+    },
+    {
+      "id": "__compat_literal_parser/0018",
+      "formula": "=1E-320",
+      "block": 1,
+      "tags": [
+        "literal-parser",
+        "boundary"
+      ],
+      "note": "rejected",
+      "observed": null,
+      "observed_status": "rejected-by-excel",
+      "reject_reason": "Exception from HRESULT: 0x800A03EC"
+    },
+    {
+      "id": "__compat_literal_parser/0019",
+      "formula": "=-0.0",
+      "block": 1,
+      "tags": [
+        "literal-parser",
+        "boundary"
+      ],
+      "note": "negative zero is normalised away in the stored text",
+      "stored_formula": "=0",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_literal_parser/0020",
+      "formula": "=-0",
+      "block": 1,
+      "tags": [
+        "literal-parser",
+        "boundary"
+      ],
+      "stored_formula": "=0",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_literal_parser/0021",
+      "formula": "=0*-1",
+      "block": 1,
+      "tags": [
+        "literal-parser",
+        "boundary"
+      ],
+      "note": "can negative zero be reached by arithmetic instead",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_literal_parser/0022",
+      "formula": "=1/(0*-1)",
+      "block": 1,
+      "tags": [
+        "literal-parser",
+        "boundary"
+      ],
+      "note": "if it could, IEEE would give -inf here rather than an error",
+      "observed": {
+        "kind": "error",
+        "error": "#DIV/0!",
+        "error_type_code": 2,
+        "cverr": -2146826281,
+        "general_text": "",
+        "display_text": "#DIV/0!"
+      }
+    },
+    {
+      "id": "__compat_literal_parser/0023",
+      "formula": "=SIGN(0*-1)",
+      "block": 1,
+      "tags": [
+        "literal-parser",
+        "boundary"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_literal_parser/0024",
+      "formula": "=2.0",
+      "block": 1,
+      "tags": [
+        "literal-parser"
+      ],
+      "note": "a trailing zero is dropped from the stored text",
+      "stored_formula": "=2",
+      "observed": {
+        "kind": "number",
+        "number": 2,
+        "number_r17": "2",
+        "general_text": "2",
+        "display_text": "2"
+      }
+    },
+    {
+      "id": "__compat_literal_parser/0025",
+      "formula": "=1E15",
+      "block": 1,
+      "tags": [
+        "literal-parser"
+      ],
+      "note": "exponent notation expands to plain digits when stored",
+      "stored_formula": "=1000000000000000",
+      "observed": {
+        "kind": "number",
+        "number": 1E+15,
+        "number_r17": "1E+15",
+        "general_text": "1000000000000000",
+        "display_text": "1E+15"
+      }
+    },
+    {
+      "id": "__compat_literal_parser/0026",
+      "formula": "=1E20",
+      "block": 1,
+      "tags": [
+        "literal-parser"
+      ],
+      "note": "where does the expansion stop",
+      "stored_formula": "=100000000000000000000",
+      "observed": {
+        "kind": "number",
+        "number": 1E+20,
+        "number_r17": "1E+20",
+        "general_text": "1E+20",
+        "display_text": "1E+20"
+      }
+    },
+    {
+      "id": "__compat_literal_parser/0027",
+      "formula": "=1E25",
+      "block": 1,
+      "tags": [
+        "literal-parser"
+      ],
+      "stored_formula": "=1E+25",
+      "observed": {
+        "kind": "number",
+        "number": 1E+25,
+        "number_r17": "1E+25",
+        "general_text": "1E+25",
+        "display_text": "1E+25"
+      }
+    },
+    {
+      "id": "__compat_literal_parser/0028",
+      "formula": "=0.000000000000001",
+      "block": 1,
+      "tags": [
+        "literal-parser"
+      ],
+      "note": "and small values contract back into exponent form",
+      "observed": {
+        "kind": "number",
+        "number": 1E-15,
+        "number_r17": "1E-15",
+        "general_text": "0.000000000000001",
+        "display_text": "1E-15"
+      }
+    },
+    {
+      "id": "__compat_literal_parser/0029",
+      "formula": "=0.00001",
+      "block": 1,
+      "tags": [
+        "literal-parser"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 1E-05,
+        "number_r17": "1E-05",
+        "general_text": "0.00001",
+        "display_text": "0.00001"
+      }
+    }
+  ]
+}

@@ -17,7 +17,7 @@
 //! convergence property depends on the value of a slot, only on its determinism.
 
 use alloc::boxed::Box;
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 use core::borrow::Borrow;
 use core::mem::size_of;
@@ -441,13 +441,21 @@ pub struct TileStore {
     contested: BTreeMap<TileKey, [u64; PRESENCE_WORDS]>,
 }
 
-/// Result of the replay pre-pass: the slot assignment and the set of tiles that
-/// must start promoted.
+/// Result of the replay pre-pass.
+///
+/// One traversal answers every question that must be settled *before the first
+/// write lands*: which slot each identity gets, which cells are contested (so
+/// their tile starts stamped), and which cells a formula ever names (so the
+/// formula registry can stamp value writes there — TD-22, see `formula.rs`).
+/// They share a pass because they share that timing constraint, and because a
+/// second traversal of a 10M-cell import is not free.
 pub struct Plan {
     pub rows: SlotMap,
     pub cols: SlotMap,
     /// Contested cell indices per tile.
     pub contested: BTreeMap<TileKey, [u64; PRESENCE_WORDS]>,
+    /// Cells named by any `SetFormula` op — the formula registry's seed set.
+    pub formula_cells: BTreeSet<(OpId, OpId)>,
 }
 
 impl TileStore {
@@ -783,6 +791,7 @@ pub fn plan_promotions<B: Borrow<Op>, I: Iterator<Item = B>>(ops: I) -> Plan {
     let mut rows = SlotMap::default();
     let mut cols = SlotMap::default();
     let mut writers: BTreeMap<TileKey, TileWriters> = BTreeMap::new();
+    let mut formula_cells: BTreeSet<(OpId, OpId)> = BTreeSet::new();
 
     for op in ops {
         let op = op.borrow();
@@ -802,11 +811,15 @@ pub fn plan_promotions<B: Borrow<Op>, I: Iterator<Item = B>>(ops: I) -> Plan {
                     .or_default()
                     .record(op.id.actor, cell_index(r, c));
             }
-            // Formulas live in the flat registry, not in tiles; undeletes
-            // touch axis order only. Neither writes a tile.
+            // Formulas live in the flat registry, not in tiles, so they claim
+            // no slot and contest no cell — but the registry must know which
+            // cells they name before any value write reaches one (TD-22).
+            Payload::SetFormula { row, col, .. } => {
+                formula_cells.insert((row.0, col.0));
+            }
+            // Undeletes touch axis order only.
             Payload::DeleteRow { .. }
             | Payload::DeleteCol { .. }
-            | Payload::SetFormula { .. }
             | Payload::UndeleteRow { .. }
             | Payload::UndeleteCol { .. } => {}
         }
@@ -820,5 +833,6 @@ pub fn plan_promotions<B: Borrow<Op>, I: Iterator<Item = B>>(ops: I) -> Plan {
         rows,
         cols,
         contested,
+        formula_cells,
     }
 }

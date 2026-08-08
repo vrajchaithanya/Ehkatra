@@ -1,0 +1,13 @@
+[package]
+name = "ehkatra-store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+usk-types = { path = "../crates/usk-types" }
+usk-oplog = { path = "../crates/usk-oplog" }
+usk-state = { path = "../crates/usk-state" }
+usk-recover = { path = "../crates/usk-recover" }
+blake3 = { workspace = true }
+rusqlite = { version = "0.32", features = ["bundled"] }

@@ -4,6 +4,11 @@
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
 $env:PATH = "$env:USERPROFILE\.cargo\bin;" + $env:PATH
+# ehkatra-store compiles SQLite from C (ADR-031). On this host the compiler
+# lives inside the workspace; on CI it is the runner's own cc. Sourcing this is
+# a no-op when .toolchain\ is absent, so the gate set stays one command either
+# way (docs/07: a check that is not one command does not get run).
+. (Join-Path $PSScriptRoot 'cc-env.ps1')
 
 function Step($name, [scriptblock]$body) {
     Write-Host "`n=== $name ===" -ForegroundColor Cyan
@@ -14,7 +19,7 @@ function Step($name, [scriptblock]$body) {
 Step 'Format (DP-C1)'            { cargo fmt --all -- --check }
 Step 'Clippy (DP-C1)'            { cargo clippy --workspace --all-targets -- -D warnings }
 Step 'Tests (DP-C4)'             { cargo test --workspace }
-Step 'no_std kernel (DP-A3)'     { cargo build -p usk-types -p usk-oplog -p usk-state -p usk-formula -p usk-calc -p usk-reduce --target wasm32-wasip1 }
+Step 'no_std kernel (DP-A3)'     { cargo build -p usk-types -p usk-oplog -p usk-state -p usk-formula -p usk-calc -p usk-reduce -p usk-sync -p usk-recover --target wasm32-wasip1 }
 Step 'Complexity budget (DP-S2)' { node tools/dep-budget.mjs }
 
 Write-Host "`n=== Differential replay (DP-A2) ===" -ForegroundColor Cyan
@@ -39,7 +44,10 @@ $kernelSrc = Get-ChildItem -Directory 'crates' | ForEach-Object { Join-Path $_.F
 $greps = @(
     @{ Name = 'std leaked into kernel (DP-A3)'; Pattern = 'use std::'; Path = $kernelSrc },
     @{ Name = 'target_os cfg in kernel (DP-C2)'; Pattern = 'cfg\(target_os'; Path = $kernelSrc },
-    @{ Name = 'host service reference (DP-S5)'; Pattern = 'postgres://|:5432|localhost:3000|:8080'; Path = 'crates', 'ehkatra-cli', 'tools' }
+    @{ Name = 'host service reference (DP-S5)'; Pattern = 'postgres://|:5432|localhost:3000|:8080'; Path = 'crates', 'ehkatra-cli', 'ehkatra-relay', 'tools' },
+    # Row 10 introduced the first listening socket in the project. DP-S5 says
+    # loopback-only, so "loopback-only" becomes a gate rather than a promise.
+    @{ Name = 'listener outside loopback (DP-S5)'; Pattern = '0\.0\.0\.0|Ipv4Addr::UNSPECIFIED|\[::\]'; Path = 'crates', 'ehkatra-cli', 'ehkatra-relay', 'tools' }
 )
 foreach ($g in $greps) {
     $hits = Get-ChildItem -Recurse -Include *.rs, *.toml -Path $g.Path |

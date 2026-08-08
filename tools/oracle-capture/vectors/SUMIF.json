@@ -1,0 +1,3421 @@
+{
+  "schema": "ehkatra.oracle.vectors/1",
+  "function": "SUMIF",
+  "group": "lookup",
+  "doc": "Criteria are a small expression language in a string. The sum_range may be a different shape from the criteria range, in which case Excel resizes it silently from its top-left corner.",
+  "grid_source": "50-lookup.psd1",
+  "provenance": {
+    "source": "excel-com",
+    "oracle": true,
+    "excel_version": "16.0",
+    "excel_build": "20228",
+    "excel_product": "Microsoft Excel",
+    "excel_calc_version": "191029",
+    "date_system": "1900",
+    "ui_language_id": 16393,
+    "list_separator": ",",
+    "decimal_separator": ".",
+    "thousands_separator": ",",
+    "os": "Microsoft Windows 11 Home Single Language 10.0.26200",
+    "powershell": "5.1.26100.8875",
+    "harness_version": "1.0.0",
+    "captured_utc": "2026-08-08T07:29:37Z",
+    "probe_column_width": 80,
+    "catalogue_source": "crates/usk-formula/src/functions.rs CATALOGUE"
+  },
+  "case_count": 20,
+  "cases": [
+    {
+      "id": "SUMIF/0001",
+      "formula": "=SUMIF(A1:A5,\">25\")",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "note": "no sum_range: sum the criteria range itself",
+      "observed": {
+        "kind": "number",
+        "number": 120,
+        "number_r17": "120",
+        "general_text": "120",
+        "display_text": "120"
+      }
+    },
+    {
+      "id": "SUMIF/0002",
+      "formula": "=SUMIF(A1:A5,\">25\",H1:H5)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 350,
+        "number_r17": "350",
+        "general_text": "350",
+        "display_text": "350"
+      }
+    },
+    {
+      "id": "SUMIF/0003",
+      "formula": "=SUMIF(A1:A5,30,H1:H5)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "note": "a bare number as criteria",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "SUMIF/0004",
+      "formula": "=SUMIF(A1:A5,\"30\",H1:H5)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "note": "numeric text as criteria",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "SUMIF/0005",
+      "formula": "=SUMIF(A1:A5,\"=30\",H1:H5)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "SUMIF/0006",
+      "formula": "=SUMIF(A1:A5,\"<>30\",H1:H5)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 650,
+        "number_r17": "650",
+        "general_text": "650",
+        "display_text": "650"
+      }
+    },
+    {
+      "id": "SUMIF/0007",
+      "formula": "=SUMIF(A1:A5,\">=30\",H1:H5)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 350,
+        "number_r17": "350",
+        "general_text": "350",
+        "display_text": "350"
+      }
+    },
+    {
+      "id": "SUMIF/0008",
+      "formula": "=SUMIF(A1:A5,\"<10\",H1:H5)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "note": "no matches",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "SUMIF/0009",
+      "formula": "=SUMIF(A1:A5,\">\"&25,H1:H5)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "note": "criteria built by concatenation",
+      "observed": {
+        "kind": "number",
+        "number": 350,
+        "number_r17": "350",
+        "general_text": "350",
+        "display_text": "350"
+      }
+    },
+    {
+      "id": "SUMIF/0010",
+      "formula": "=SUMIF(A1:A5,\">\"&A2,H1:H5)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "note": "criteria from a cell",
+      "observed": {
+        "kind": "number",
+        "number": 350,
+        "number_r17": "350",
+        "general_text": "350",
+        "display_text": "350"
+      }
+    },
+    {
+      "id": "SUMIF/0011",
+      "formula": "=SUMIF(E1:E5,\"a*\",F1:F5)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "wildcard"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 6,
+        "number_r17": "6",
+        "general_text": "6",
+        "display_text": "6"
+      }
+    },
+    {
+      "id": "SUMIF/0012",
+      "formula": "=SUMIF(E1:E5,\"?anana\",F1:F5)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "wildcard"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 2,
+        "number_r17": "2",
+        "general_text": "2",
+        "display_text": "2"
+      }
+    },
+    {
+      "id": "SUMIF/0013",
+      "formula": "=SUMIF(E1:E5,\"a~*c\",F1:F5)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "wildcard"
+      ],
+      "note": "literal asterisk via the tilde escape",
+      "observed": {
+        "kind": "number",
+        "number": 5,
+        "number_r17": "5",
+        "general_text": "5",
+        "display_text": "5"
+      }
+    },
+    {
+      "id": "SUMIF/0014",
+      "formula": "=SUMIF(E1:E5,\"BANANA\",F1:F5)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "note": "case-insensitive criteria",
+      "observed": {
+        "kind": "number",
+        "number": 2,
+        "number_r17": "2",
+        "general_text": "2",
+        "display_text": "2"
+      }
+    },
+    {
+      "id": "SUMIF/0015",
+      "formula": "=SUMIF(A1:A5,\">25\",H1:H3)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "note": "sum_range smaller than criteria range",
+      "observed": {
+        "kind": "number",
+        "number": 350,
+        "number_r17": "350",
+        "general_text": "350",
+        "display_text": "350"
+      }
+    },
+    {
+      "id": "SUMIF/0016",
+      "formula": "=SUMIF(A1:A5,\">25\",H1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "note": "sum_range given as a single cell",
+      "observed": {
+        "kind": "number",
+        "number": 350,
+        "number_r17": "350",
+        "general_text": "350",
+        "display_text": "350"
+      }
+    },
+    {
+      "id": "SUMIF/0017",
+      "formula": "=SUMIF(A1:A5,\">25\",H1:H5)+0",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 350,
+        "number_r17": "350",
+        "general_text": "350",
+        "display_text": "350"
+      }
+    },
+    {
+      "id": "SUMIF/0018",
+      "formula": "=SUMIF(C1:C5,\"\",D1:D5)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "blank"
+      ],
+      "note": "empty-string criteria against a blank key",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "SUMIF/0019",
+      "formula": "=SUMIF(C1:C5,\"<>\",D1:D5)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "blank"
+      ],
+      "note": "the not-blank idiom",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "SUMIF/0020",
+      "formula": "=SUMIF(A1:A5,\">25\",A1:A5)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 120,
+        "number_r17": "120",
+        "general_text": "120",
+        "display_text": "120"
+      }
+    }
+  ]
+}

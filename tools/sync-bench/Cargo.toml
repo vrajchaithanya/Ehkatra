@@ -1,0 +1,11 @@
+[package]
+name = "sync-bench"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ehkatra-relay = { path = "../../ehkatra-relay" }
+usk-reduce = { path = "../../crates/usk-reduce" }
+usk-types = { path = "../../crates/usk-types" }
+usk-oplog = { path = "../../crates/usk-oplog" }

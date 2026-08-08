@@ -534,6 +534,16 @@ pub struct Session {
     lamport: u64,
     undo_stack: Vec<Group>,
     redo_stack: Vec<Group>,
+    /// Ops appended to the log but not yet folded into `state` (TD-24).
+    ///
+    /// State is a fold over the log, and DP-A9 says caches are watermarked
+    /// folds — so the fold is taken **when the state is read**, not when the
+    /// log grows. Sync made the difference measurable: a 50-replica relay
+    /// delivers ~30,000 batches to each replica, and folding per batch made
+    /// W-SYNC-RELAY cost 120 minutes of wall clock for 60 seconds of simulated
+    /// session. Reads are what actually need the answer, and there are two
+    /// orders of magnitude fewer of them.
+    pending: Vec<Op>,
 }
 
 impl Session {
@@ -549,34 +559,90 @@ impl Session {
             lamport: 0,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
+            pending: Vec::new(),
         }
     }
 
-    pub fn state(&self) -> &State {
+    /// Takes the outstanding fold, if any. Idempotent and cheap when nothing is
+    /// pending, which is the common case for a reader in a loop.
+    ///
+    /// Every accessor below calls this, so a caller cannot observe stale state:
+    /// the `&mut` on those accessors is not an inconvenience, it is the type
+    /// system saying "reading may cost you a fold".
+    pub fn settle(&mut self) {
+        if self.pending.is_empty() {
+            return;
+        }
+        let batch = core::mem::take(&mut self.pending);
+        self.state = State::replay(&self.log);
+        self.engine.observe(&self.state, &batch);
+    }
+
+    pub fn state(&mut self) -> &State {
+        self.settle();
         &self.state
     }
 
-    pub fn engine(&self) -> &Engine {
+    pub fn engine(&mut self) -> &Engine {
+        self.settle();
         &self.engine
     }
 
     /// What a reader sees at a cell: the computed formula result if the cell
     /// holds a formula, otherwise the stored value.
-    pub fn value(&self, row: RowId, col: ColId) -> Option<Value> {
+    pub fn value(&mut self, row: RowId, col: ColId) -> Option<Value> {
+        self.settle();
         self.engine.value(&self.state, row, col)
+    }
+
+    pub fn actor(&self) -> ActorId {
+        self.actor
     }
 
     /// Integrates a remote op (another actor's edit arriving via sync).
     pub fn integrate(&mut self, op: Op) {
-        if op.lamport > self.lamport {
-            self.lamport = op.lamport;
+        self.integrate_batch(alloc::vec![op]);
+    }
+
+    /// Integrates a batch of remote ops as one unit.
+    ///
+    /// Sync delivers ops in batches, and folding once per batch rather than
+    /// once per op is the difference between O(n) and O(n²) over a session's
+    /// history. Ops already held are skipped, so a relay redelivery costs
+    /// nothing — merge is idempotent (DP-A8).
+    pub fn integrate_batch(&mut self, ops: Vec<Op>) {
+        let mut fresh = Vec::with_capacity(ops.len());
+        for op in ops {
+            if self.log.ops().iter().any(|o| o.id == op.id) {
+                continue;
+            }
+            if op.lamport > self.lamport {
+                self.lamport = op.lamport;
+            }
+            // Ops this actor authored may arrive here rather than through
+            // `apply` — a restart replaying its own durable log, or the relay
+            // echoing our work back. The mint must never re-issue a counter it
+            // has already spent: `(actor, counter)` is the globally unique op
+            // identity, and two different ops sharing one id would make the
+            // log's own merge rule silently discard the second (DP-A4).
+            if op.id.actor == self.actor && op.id.counter > self.counter {
+                self.counter = op.id.counter;
+            }
+            fresh.push(op);
         }
-        let batch = alloc::vec![op.clone()];
-        self.log.append(op);
-        self.refresh(&batch);
+        if fresh.is_empty() {
+            return;
+        }
+        for op in &fresh {
+            self.log.append(op.clone());
+        }
+        self.refresh(&fresh);
     }
 
     pub fn apply(&mut self, cmd: Command) -> Result<ApplyReport, CommandError> {
+        // The reducer binds view ordinals to identities against *current*
+        // state, so a deferred fold must be taken before a command is compiled.
+        self.settle();
         match cmd {
             Command::Undo => Ok(self.undo()),
             Command::Redo => Ok(self.redo()),
@@ -617,6 +683,9 @@ impl Session {
     }
 
     fn run_inverse(&mut self, group: &Group, into_redo: bool) -> ApplyReport {
+        // Undo is an inverse synthesized against current state (docs/11), so
+        // "current" has to mean folded.
+        self.settle();
         let mut mint = Mint {
             actor: self.actor,
             counter: self.counter,
@@ -644,14 +713,17 @@ impl Session {
         }
     }
 
-    /// State is a fold over the log; the fold is rerun after every append.
-    /// v0.1 cost, acceptable at CLI scale — incremental apply arrives with
-    /// sync (Row 10), which needs it for remote ops anyway.
+    /// Records that the log has grown; the fold itself happens in [`settle`].
     ///
-    /// The calc graph is then handed the batch that caused the change, so it
-    /// can pick regroup-vs-incremental itself (TD-18).
+    /// The batch is remembered rather than applied because the calc graph needs
+    /// it: `observe` routes structural/formula ops to a regroup and value ops
+    /// to incremental recalc (TD-18), so deferred batches accumulate and are
+    /// handed over together. Their union routes exactly as the individual
+    /// batches would have — a structural op anywhere in the union forces the
+    /// regroup that the same op alone would have forced.
+    ///
+    /// [`settle`]: Session::settle
     fn refresh(&mut self, applied: &[Op]) {
-        self.state = State::replay(&self.log);
-        self.engine.observe(&self.state, applied);
+        self.pending.extend_from_slice(applied);
     }
 }

@@ -213,22 +213,30 @@ pattern, only a measurement; recorded as a fact, not smoothed. If a real
 workload ever looks like this, the answer is compact stamps (TD-10's causal
 `deps` would let most of them not exist at all), not a bigger budget.
 
-### A-002 · **amplification fixed; the bar as written cannot be met — doc defect filed**
-docs/38's bar: *<1% promotion at the collab pattern*. Measured: **exactly
-1.000%**.
+### A-002 · **CONFIRMED** (bar restated by the owner per D-062, 2026-08-08)
+docs/38 now states the bar in amplification terms: *promoted ÷ contested ≤ 1.5*,
+**and** collab RSS ≤ 400 MB. Measured **1.0×** (the correctness floor) and
+**123.6 MB** — passes on both halves. docs/42 records A-002 as Confirmed. No
+code changed as a result: the ruling restated the bar, not the requirement.
 
-That is the **floor, not a near-miss**. The collab pattern contests 1% of cells
-by definition, and a contested cell *must* carry metadata — it has to name the
-winner and retain the loser (ADR-006). So promoted ≥ contested = 1% for **any**
-correct implementation, and "<1% at 1% overlap" is unachievable by
-construction, not by this design.
+The original escalation is kept below, because the reasoning is the reusable
+part — an implementer who cannot meet a normative bar surfaces the conflict
+rather than editing the bar.
 
-The engineering goal behind A-002 — *promotion must not amplify* — is met, and
-measurably: 16,384× → 1×. The bar needs restating in terms of amplification
-rather than an absolute rate (e.g. "promoted cells ≤ contested cells", or "<1%
-promotion at ≤0.1% contested"). **Left for the owner: docs/38 is normative and
-loosening a bar I just measured against myself is not mine to do.** Filed per
-docs/00's rule that conflicting documents are defects.
+> docs/38's original bar: *<1% promotion at the collab pattern*. Measured:
+> **exactly 1.000%**.
+
+> That is the **floor, not a near-miss**. The collab pattern contests 1% of
+> cells by definition, and a contested cell *must* carry metadata — it has to
+> name the winner and retain the loser (ADR-006). So promoted ≥ contested = 1%
+> for **any** correct implementation, and "<1% at 1% overlap" is unachievable by
+> construction, not by this design.
+>
+> The engineering goal behind A-002 — *promotion must not amplify* — is met, and
+> measurably: 16,384× → 1×. The bar needs restating in terms of amplification
+> rather than an absolute rate. **Left for the owner: docs/38 is normative and
+> loosening a bar I just measured against myself is not mine to do.** Filed per
+> docs/00's rule that conflicting documents are defects.
 
 ### Compaction ratio — not yet measurable
 docs/38 lists it among W-TILE-10M's measures. Compaction lands with the
@@ -286,6 +294,211 @@ bindings), across Number, Bool, Text, Decimal and Blank values.
 That the extended corpus still hashes identically across targets is the
 stronger result: the Row 5 decimal encoding and the Row 9 variable-length
 binding vector are now proven platform-stable, not merely assumed.
+
+## W-SYNC-RELAY (docs/38) — Row 10 acceptance · M1
+
+**Definition (docs/38):** 2 and 50 replicas through one relay, each replica
+10 ops/s for 60 s, 1% simulated packet loss. Measures propagation p95,
+convergence time after the last op, and queued-op durability across a mid-run
+kill. Reproduce: `cargo build --release -p sync-bench; ./target/release/sync-bench`
+(add `--quick` for the 2-replica case only).
+
+### Units, stated before the numbers
+Propagation and convergence are in **bus milliseconds** — the simulated clock of
+the deterministic transport, where one link hop costs 5 ms. That is deliberate:
+they are properties of the *protocol* (how many round trips a fact needs to
+reach every replica), and timing them against a wall clock would report this
+laptop's memcpy speed instead. **Wall time is reported separately** and is a
+statement about the implementation, not the protocol. Everything is seeded
+(D-052), so any run is reproducible from its seed.
+
+### 2 replicas · **passes**
+| | |
+|---|---|
+| Ops authored | 1,200 (600 each, 10 ops/s × 60 s) |
+| Frames dropped / reconnects | 72 / 40 |
+| Propagation p50 | **200 bus-ms** |
+| Propagation p95 | **1,600 bus-ms** |
+| Convergence after last op | **10 bus-ms** |
+| All replicas equal (state hash) | **YES** |
+| Mid-run kill durability | **32 ops queued at death, 32 delivered after recovery** |
+| Quarantined remote ops | 0 |
+| Wall time | 97 ms (was 564 ms before TD-24 was paid) |
+
+*Frames dropped counts partitioned frames too, which is why it rose from 43 to
+72 when the kill harness gained a real partition — the partition window
+deliberately swallows everything crossing that link.*
+
+**Reading the propagation numbers.** p50 is 200 bus-ms against a 10 ms
+round trip, because a replica authors one op per 100 ms tick and the bus
+delivers on tick boundaries — the tick, not the link, is the floor. The p95 of
+1,600 ms is the reconnect tail: 1% frame loss tears the connection down, and
+recovery costs a backoff (500 ms base, jittered) plus a HELLO/NEED/GIVE round
+trip. That tail is the cost of docs/27's recovery path being real rather than
+assumed, and it is visible precisely because loss is modelled as a broken
+connection instead of a vanishing frame.
+
+**The durability line is the one that matters.** The victim is taken offline,
+edits for 30 ticks, and is then destroyed — every in-memory structure discarded,
+only its op log surviving. `Replica::recover` rebuilds it, and all 32
+unacknowledged ops reach the peer. Nothing was lost, which is docs/15's
+published never-drop contract, measured rather than asserted.
+
+*Caveat, stated because it limits the claim:* the "durable log" here is an
+in-memory vector, not an fsync'd container file. This measures the **protocol**
+half of durability — that recovery re-offers unacknowledged work — and not the
+storage half, which is Row 11's to prove and is not claimed here.
+
+### Two defects this workload found — both invisible to the test suite
+**1. Recovery re-minted spent op identities (D-067).** The 2-replica run
+diverged on its first execution: a replica rebuilt from its durable log kept
+minting counters from 0 and re-issued identities it had already spent, so two
+different ops shared one `(actor, counter)` and the log's dedup discarded the
+second. Fixed in `Session::integrate_batch`.
+
+**2. A replica that lost its link mid-handshake wedged forever (D-064).** The
+50-replica run **diverged**, and the mid-run kill delivered **1 of 117** queued
+ops. Cause: docs/27 §1 defines no transition for transport loss during
+HELLO_SENT or BACKOFF, and the shell's first answer to that gap was to do
+nothing, on the theory that an existing backoff timer would drive the next
+attempt. There is no such timer once a retry has already fired — so with 4,051
+dropped frames, replicas piled up in HELLO_SENT with nothing left to wake them.
+Fixed by implementing the remedy D-064 had already *documented* but not built:
+tear the session down and rebuild it from DISCONNECTED, carrying the durable log
+and every unacknowledged op across, then reconnect via whichever transition the
+current state actually lists (`Replica::hard_reset` / `resume`).
+
+Both defects share a shape worth naming: **seven convergence tests passed
+throughout**, because only the benchmark restarts a replica that has already
+authored work and only the benchmark loses enough frames to exhaust a handshake.
+Scale and duration are test inputs, not just performance inputs.
+
+### 50 replicas · **passes**
+
+Three runs, because the first two were wrong in ways worth keeping on the
+record. Only the last column is quotable — it is the only one produced by the
+code that is in the tree.
+
+| | Run 1 (pre-D-064 fix) | Run 2 (fix, old harness) | Run 3 (real partition) | **Run 4 (authoritative)** |
+|---|---|---|---|---|
+| Ops authored | 30,000 | 30,000 | 30,000 | **30,000** |
+| Frames dropped / reconnects | 4,051 / 1,542 | 4,202 / 2,066 | 4,558 / 2,085 | **4,558 / 2,085** |
+| Propagation p50 | 1,000 bus-ms | 1,600 | 1,600 | **800 bus-ms** ¶ |
+| Propagation p95 | 7,500 bus-ms | 5,900 | 5,800 | **3,700 bus-ms** ¶ |
+| Convergence after last op | 100,000 bus-ms † | 2,530 | 2,140 | **2,140 bus-ms** |
+| All replicas equal | **NO — DIVERGED** | YES | YES | **YES** |
+| Mid-run kill | 117 queued, **1 delivered** | 2 / 2 ‡ | 45 / 45 | **45 queued, 45 delivered** |
+| Quarantined remote ops | 0 | 0 | 0 | **0** |
+| Wall time | 32 min | 83 min | 120 min | **6.8 min** |
+
+† Not a measurement — the settle budget running out. The run never converged.
+‡ Not a measurement either — see the harness defect below.
+¶ A *corrected* measurement, not a speed-up — see "the propagation columns" below.
+
+**Run 4 is run 3 with TD-24 paid (D-071) and the harness's own overhead removed
+(D-072).** Every protocol figure is **bit-identical** to run 3 — dropped frames,
+reconnects, convergence, the mid-run kill, and every state hash. That identity
+is the evidence that lazy folding is a scheduling change and not a semantic one;
+a 17.6× speed-up that also moved a convergence figure would have meant something
+had broken.
+
+**Why 120 min → 6.8 min**, separated because only one cause is about the product:
+(1) `Session` re-folded the whole log on every *append*; it now folds on every
+*read*, and under sync reads are ~50× rarer (600 local edits versus ~30,000
+delivered batches per replica). (2) The harness called `Replica::log()` — which
+deep-clones every op — once per delivered frame, so at 30,000 ops the
+instrumentation cost more than the system it was instrumenting. **The pre-fix
+wall-clock numbers therefore overstated the product's cost**, and are kept above
+rather than quietly replaced.
+
+**The propagation columns moved because the definition was wrong, not because
+anything got faster.** Arrivals were counted by scanning the receiving replica's
+log, so an op sitting in the causal-gap buffer — arrived but not yet applied —
+was counted again on redelivery with a later timestamp, inflating the tail.
+Run 4 counts first delivery, which is what "propagated" means.
+
+**What each run cost to learn.**
+*Run 1 diverged* because a replica that lost its link mid-handshake wedged in
+HELLO_SENT forever (D-064's teardown branch was documented and never built).
+*Run 2 converged but its durability row was hollow*: the harness took its victim
+offline with one transport loss plus a long retry timer, which under 1% loss is
+not offline — the next dropped frame ran the teardown-and-reconnect path, armed
+a fresh 500 ms timer, and the victim rejoined and drained before the kill
+landed. It reported 2 ops where it should have reported tens. **A durability
+measurement that measures nothing while looking like a result is worse than one
+that fails.** Fixed with a real `partition`/`heal` on the bus — no frames cross,
+no timer returns the replica — and pinned by
+`a_partitioned_replica_stays_offline_and_keeps_its_queue`, which runs at 5% loss
+specifically to reproduce the old failure rather than merely avoid it.
+*Run 3* is the one that means something: **45 ops queued at the kill, 45
+delivered after recovery**, at 50 replicas, through 4,558 dropped frames.
+
+**Why the numbers move in the direction they do.** Reconnects climbed across all
+three runs (1,542 → 2,066 → 2,085) and wall time nearly quadrupled (32 → 120
+min). Both are the fixes working: replicas that used to wedge silently now tear
+down and reconnect, the partition window forces a genuine catch-up, and every
+reconnect runs an anti-entropy exchange whose ops are folded into state.
+
+**Cost, after TD-24.** 6.8 minutes of wall clock for 60 seconds of simulated
+session across 50 replicas and 30,000 ops. The old finding — *the protocol is
+not the bottleneck; the state fold is* — was correct and is now acted on rather
+than merely recorded. The residual is honest: a read after N appends is still
+O(N), which sync tolerates because it is append-heavy and a repainting UI would
+not. Row 11's snapshot remains the named fix. It is why TD-24 carries a measured
+justification rather than a suspicion.
+
+## W-OPEN-1M (docs/38) — Row 11 acceptance · M1 · **unblocked and measured**
+
+1,000,000 cells (1000 × 1000) + a 100,000-op tail = 1,102,000 ops. The snapshot
+covers everything but the tail. Reproduce:
+`cargo build --release -p open-bench; ./target/release/open-bench`.
+The container is written, dropped, and reopened, so "cold" means from a file
+this process did not hold open — the OS page cache is still warm, and that is
+stated rather than worked around, because a genuinely cold figure needs a
+reboot this session cannot perform.
+
+| | |
+|---|---|
+| Corpus | 1,102,000 ops |
+| Snapshot body | 90,115,952 B (uncompressed — TD-29) |
+| Container on disk | 107,720,704 B |
+| Write (snapshot + 100k tail + commit) | 5.02 s |
+| **Cold open to READY** | **2.10 s** (1,002,000 snapshot ops + 100,000 tail, clean) |
+| **SALVAGE, corrupted final page** | **657 ms** (1 snapshot rejected, 100,000 tail ops read) |
+
+**Against docs/31's budget, carefully.** docs/31 budgets cold open of a 1M-cell
+workbook at <1.5 s for **skeleton + viewport** — a partial load. The 2.10 s here
+is a *full* replay of every op to a complete `State`, which is strictly more
+work than the budgeted thing. It is therefore **neither a pass nor a breach of
+that budget**, and is recorded as what it is: the cost of the total path. A
+skeleton+viewport figure needs partial materialisation, which does not exist
+yet.
+
+### The salvage number is the interesting one, and not for its speed
+657 ms, one snapshot rejected, 100,000 tail ops recovered — and **zero
+quarantined bytes** with `lost_data = true`. Nothing was damaged, because there
+was nothing left to damage: the container keeps one snapshot and stores only the
+uncovered tail in `ops`, so corrupting the snapshot destroyed the 1,002,000 ops
+it had compacted.
+
+**The salvage path did exactly what docs/16 specifies. The retention policy
+above it did not exist.** docs/16's phrase is "the *last valid* snapshot", which
+presupposes there is more than one. Filed as **TD-30** (D-075), with the choice
+— keep N ≥ 2 snapshots, or retain compacted ops until a second one verifies —
+left to docs/16, since it trades file size against recoverability.
+
+Worth putting the two results side by side: `a_corrupted_snapshot_opens_through_salvage_and_reports_it`
+keeps every op in `ops` and recovers the *whole* workbook from the same
+corruption. Same code, opposite outcome. **Recoverability is a property of the
+retention policy, not of the salvage code.**
+
+### What this measurement did *not* buy
+TD-24's residual, which the plan expected to close here. A v0.1 snapshot body is
+the compacted op set (D-069) and `verify` proves it by replaying it, so opening
+costs replay(snapshot) + replay(tail) — the same work as replaying the whole
+log, which is precisely what the 2.10 s is. A snapshot becomes a fold checkpoint
+only when its body is a materialised state image. Corrected in D-076 rather than
+reported as closed.
 
 ## Not yet measured (targets remain targets — docs/42)
 A-001 memory/10M cells · A-002 promotion rate · A-003 recalc 100k · A-005 wasm32 **in a real browser / Safari** (WASI-under-Node is not a browser and must not be reported as one) · all docs/31 budget rows.

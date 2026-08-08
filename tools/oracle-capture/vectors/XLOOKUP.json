@@ -1,0 +1,2569 @@
+{
+  "schema": "ehkatra.oracle.vectors/1",
+  "function": "XLOOKUP",
+  "group": "lookup",
+  "doc": "The modern replacement: an explicit not-found value, match modes -1/0/1/2 and search modes 1/-1/2/-2. On a build without native XLOOKUP the stored formula gains an _xlfn prefix, which the vector records.",
+  "grid_source": "50-lookup.psd1",
+  "provenance": {
+    "source": "excel-com",
+    "oracle": true,
+    "excel_version": "16.0",
+    "excel_build": "20228",
+    "excel_product": "Microsoft Excel",
+    "excel_calc_version": "191029",
+    "date_system": "1900",
+    "ui_language_id": 16393,
+    "list_separator": ",",
+    "decimal_separator": ".",
+    "thousands_separator": ",",
+    "os": "Microsoft Windows 11 Home Single Language 10.0.26200",
+    "powershell": "5.1.26100.8875",
+    "harness_version": "1.0.0",
+    "captured_utc": "2026-08-08T07:29:37Z",
+    "probe_column_width": 80,
+    "catalogue_source": "crates/usk-formula/src/functions.rs CATALOGUE"
+  },
+  "case_count": 15,
+  "cases": [
+    {
+      "id": "XLOOKUP/0001",
+      "formula": "=XLOOKUP(30,A1:A5,B1:B5)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "observed": {
+        "kind": "text",
+        "text": "thirty",
+        "general_text": "thirty",
+        "display_text": "thirty"
+      }
+    },
+    {
+      "id": "XLOOKUP/0002",
+      "formula": "=XLOOKUP(35,A1:A5,B1:B5)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "note": "not found, no fallback given",
+      "observed": {
+        "kind": "error",
+        "error": "#N/A",
+        "error_type_code": 7,
+        "cverr": -2146826246,
+        "general_text": "",
+        "display_text": "#N/A"
+      }
+    },
+    {
+      "id": "XLOOKUP/0003",
+      "formula": "=XLOOKUP(35,A1:A5,B1:B5,\"none\")",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "note": "the explicit not-found value",
+      "observed": {
+        "kind": "text",
+        "text": "none",
+        "general_text": "none",
+        "display_text": "none"
+      }
+    },
+    {
+      "id": "XLOOKUP/0004",
+      "formula": "=XLOOKUP(35,A1:A5,B1:B5,\"none\",-1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "approximate"
+      ],
+      "note": "next smaller",
+      "observed": {
+        "kind": "text",
+        "text": "thirty",
+        "general_text": "thirty",
+        "display_text": "thirty"
+      }
+    },
+    {
+      "id": "XLOOKUP/0005",
+      "formula": "=XLOOKUP(35,A1:A5,B1:B5,\"none\",1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "approximate"
+      ],
+      "note": "next larger",
+      "observed": {
+        "kind": "text",
+        "text": "forty",
+        "general_text": "forty",
+        "display_text": "forty"
+      }
+    },
+    {
+      "id": "XLOOKUP/0006",
+      "formula": "=XLOOKUP(\"a*\",E1:E5,F1:F5,\"none\",2)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "wildcard"
+      ],
+      "note": "match mode 2 enables wildcards",
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "XLOOKUP/0007",
+      "formula": "=XLOOKUP(\"a*\",E1:E5,F1:F5,\"none\",0)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "wildcard"
+      ],
+      "note": "match mode 0 does not",
+      "observed": {
+        "kind": "text",
+        "text": "none",
+        "general_text": "none",
+        "display_text": "none"
+      }
+    },
+    {
+      "id": "XLOOKUP/0008",
+      "formula": "=XLOOKUP(10,C1:C5,D1:D5,\"none\",0,1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "search-mode"
+      ],
+      "note": "first to last over a duplicated key",
+      "observed": {
+        "kind": "text",
+        "text": "c-ten-first",
+        "general_text": "c-ten-first",
+        "display_text": "c-ten-first"
+      }
+    },
+    {
+      "id": "XLOOKUP/0009",
+      "formula": "=XLOOKUP(10,C1:C5,D1:D5,\"none\",0,-1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "search-mode"
+      ],
+      "note": "last to first: the other duplicate",
+      "observed": {
+        "kind": "text",
+        "text": "c-ten-second",
+        "general_text": "c-ten-second",
+        "display_text": "c-ten-second"
+      }
+    },
+    {
+      "id": "XLOOKUP/0010",
+      "formula": "=XLOOKUP(99,A1:A5,B1:B5,\"none\",-1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "observed": {
+        "kind": "text",
+        "text": "fifty",
+        "general_text": "fifty",
+        "display_text": "fifty"
+      }
+    },
+    {
+      "id": "XLOOKUP/0011",
+      "formula": "=XLOOKUP(5,A1:A5,B1:B5,\"none\",-1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "note": "below every key with next-smaller",
+      "observed": {
+        "kind": "text",
+        "text": "none",
+        "general_text": "none",
+        "display_text": "none"
+      }
+    },
+    {
+      "id": "XLOOKUP/0012",
+      "formula": "=XLOOKUP(30,A1:A5,B1:B4)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "error-input"
+      ],
+      "note": "mismatched array lengths",
+      "observed": {
+        "kind": "error",
+        "error": "#VALUE!",
+        "error_type_code": 3,
+        "cverr": -2146826273,
+        "general_text": "",
+        "display_text": "#VALUE!"
+      }
+    },
+    {
+      "id": "XLOOKUP/0013",
+      "formula": "=XLOOKUP(G3,A1:A5,B1:B5,\"none\")",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "error-input"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#N/A",
+        "error_type_code": 7,
+        "cverr": -2146826246,
+        "general_text": "",
+        "display_text": "#N/A"
+      }
+    },
+    {
+      "id": "XLOOKUP/0014",
+      "formula": "=XLOOKUP(\"banana\",E1:E5,F1:F5)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "note": "case-insensitive",
+      "observed": {
+        "kind": "number",
+        "number": 2,
+        "number_r17": "2",
+        "general_text": "2",
+        "display_text": "2"
+      }
+    },
+    {
+      "id": "XLOOKUP/0015",
+      "formula": "=XLOOKUP(C5,C1:C5,D1:D5,\"none\")",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 10
+        },
+        {
+          "ref": "A2",
+          "value": 20
+        },
+        {
+          "ref": "A3",
+          "value": 30
+        },
+        {
+          "ref": "A4",
+          "value": 40
+        },
+        {
+          "ref": "A5",
+          "value": 50
+        },
+        {
+          "ref": "B1",
+          "value": "ten"
+        },
+        {
+          "ref": "B2",
+          "value": "twenty"
+        },
+        {
+          "ref": "B3",
+          "value": "thirty"
+        },
+        {
+          "ref": "B4",
+          "value": "forty"
+        },
+        {
+          "ref": "B5",
+          "value": "fifty"
+        },
+        {
+          "ref": "C1",
+          "value": 30
+        },
+        {
+          "ref": "C2",
+          "value": 10
+        },
+        {
+          "ref": "C3",
+          "value": 50
+        },
+        {
+          "ref": "C4",
+          "value": 10
+        },
+        {
+          "ref": "C5",
+          "blank": true
+        },
+        {
+          "ref": "D1",
+          "value": "c-thirty"
+        },
+        {
+          "ref": "D2",
+          "value": "c-ten-first"
+        },
+        {
+          "ref": "D3",
+          "value": "c-fifty"
+        },
+        {
+          "ref": "D4",
+          "value": "c-ten-second"
+        },
+        {
+          "ref": "D5",
+          "value": "c-blank"
+        },
+        {
+          "ref": "E1",
+          "value": "apple"
+        },
+        {
+          "ref": "E2",
+          "value": "Banana"
+        },
+        {
+          "ref": "E3",
+          "value": "cherry"
+        },
+        {
+          "ref": "E4",
+          "text": "7"
+        },
+        {
+          "ref": "E5",
+          "value": "a*c"
+        },
+        {
+          "ref": "F1",
+          "value": 1
+        },
+        {
+          "ref": "F2",
+          "value": 2
+        },
+        {
+          "ref": "F3",
+          "value": 3
+        },
+        {
+          "ref": "F4",
+          "value": 4
+        },
+        {
+          "ref": "F5",
+          "value": 5
+        },
+        {
+          "ref": "G1",
+          "value": 10
+        },
+        {
+          "ref": "G2",
+          "value": "g-ten"
+        },
+        {
+          "ref": "G3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "H1",
+          "value": 100
+        },
+        {
+          "ref": "H2",
+          "value": 200
+        },
+        {
+          "ref": "H3",
+          "text": "300"
+        },
+        {
+          "ref": "H4",
+          "value": 400
+        },
+        {
+          "ref": "H5",
+          "value": -50
+        }
+      ],
+      "tags": [
+        "blank"
+      ],
+      "note": "looking up a blank",
+      "observed": {
+        "kind": "text",
+        "text": "c-blank",
+        "general_text": "c-blank",
+        "display_text": "c-blank"
+      }
+    }
+  ]
+}

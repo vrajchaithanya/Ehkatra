@@ -1,0 +1,1560 @@
+{
+  "schema": "ehkatra.oracle.vectors/1",
+  "function": "WEEKDAY",
+  "group": "dates",
+  "doc": "Serial 1 is a Sunday in Excel-s calendar. The phantom day shifts the weekday of everything before 1 March 1900 relative to a real calendar, and the return-type argument has seven documented spellings.",
+  "grid_source": "60-dates.psd1",
+  "provenance": {
+    "source": "excel-com",
+    "oracle": true,
+    "excel_version": "16.0",
+    "excel_build": "20228",
+    "excel_product": "Microsoft Excel",
+    "excel_calc_version": "191029",
+    "date_system": "1900",
+    "ui_language_id": 16393,
+    "list_separator": ",",
+    "decimal_separator": ".",
+    "thousands_separator": ",",
+    "os": "Microsoft Windows 11 Home Single Language 10.0.26200",
+    "powershell": "5.1.26100.8875",
+    "harness_version": "1.0.0",
+    "captured_utc": "2026-08-08T07:29:37Z",
+    "probe_column_width": 80,
+    "catalogue_source": "crates/usk-formula/src/functions.rs CATALOGUE"
+  },
+  "case_count": 22,
+  "cases": [
+    {
+      "id": "WEEKDAY/0001",
+      "formula": "=WEEKDAY(1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "note": "serial 1: Sunday, return type 1",
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "WEEKDAY/0002",
+      "formula": "=WEEKDAY(2)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 2,
+        "number_r17": "2",
+        "general_text": "2",
+        "display_text": "2"
+      }
+    },
+    {
+      "id": "WEEKDAY/0003",
+      "formula": "=WEEKDAY(A2)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "compat-bug"
+      ],
+      "note": "serial 59",
+      "observed": {
+        "kind": "number",
+        "number": 3,
+        "number_r17": "3",
+        "general_text": "3",
+        "display_text": "3"
+      }
+    },
+    {
+      "id": "WEEKDAY/0004",
+      "formula": "=WEEKDAY(A3)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "compat-bug"
+      ],
+      "note": "the phantom day has a weekday too",
+      "observed": {
+        "kind": "number",
+        "number": 4,
+        "number_r17": "4",
+        "general_text": "4",
+        "display_text": "4"
+      }
+    },
+    {
+      "id": "WEEKDAY/0005",
+      "formula": "=WEEKDAY(A4)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "compat-bug"
+      ],
+      "note": "serial 61",
+      "observed": {
+        "kind": "number",
+        "number": 5,
+        "number_r17": "5",
+        "general_text": "5",
+        "display_text": "5"
+      }
+    },
+    {
+      "id": "WEEKDAY/0006",
+      "formula": "=WEEKDAY(45292)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "note": "1 January 2024 was a Monday",
+      "observed": {
+        "kind": "number",
+        "number": 2,
+        "number_r17": "2",
+        "general_text": "2",
+        "display_text": "2"
+      }
+    },
+    {
+      "id": "WEEKDAY/0007",
+      "formula": "=WEEKDAY(45292,1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 2,
+        "number_r17": "2",
+        "general_text": "2",
+        "display_text": "2"
+      }
+    },
+    {
+      "id": "WEEKDAY/0008",
+      "formula": "=WEEKDAY(45292,2)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "note": "Monday is 1",
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "WEEKDAY/0009",
+      "formula": "=WEEKDAY(45292,3)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "note": "Monday is 0",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "WEEKDAY/0010",
+      "formula": "=WEEKDAY(45292,11)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "WEEKDAY/0011",
+      "formula": "=WEEKDAY(45292,12)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 7,
+        "number_r17": "7",
+        "general_text": "7",
+        "display_text": "7"
+      }
+    },
+    {
+      "id": "WEEKDAY/0012",
+      "formula": "=WEEKDAY(45292,13)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 6,
+        "number_r17": "6",
+        "general_text": "6",
+        "display_text": "6"
+      }
+    },
+    {
+      "id": "WEEKDAY/0013",
+      "formula": "=WEEKDAY(45292,14)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 5,
+        "number_r17": "5",
+        "general_text": "5",
+        "display_text": "5"
+      }
+    },
+    {
+      "id": "WEEKDAY/0014",
+      "formula": "=WEEKDAY(45292,15)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 4,
+        "number_r17": "4",
+        "general_text": "4",
+        "display_text": "4"
+      }
+    },
+    {
+      "id": "WEEKDAY/0015",
+      "formula": "=WEEKDAY(45292,16)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 3,
+        "number_r17": "3",
+        "general_text": "3",
+        "display_text": "3"
+      }
+    },
+    {
+      "id": "WEEKDAY/0016",
+      "formula": "=WEEKDAY(45292,17)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 2,
+        "number_r17": "2",
+        "general_text": "2",
+        "display_text": "2"
+      }
+    },
+    {
+      "id": "WEEKDAY/0017",
+      "formula": "=WEEKDAY(45292,4)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "error-input",
+        "boundary"
+      ],
+      "note": "not a valid return type",
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "WEEKDAY/0018",
+      "formula": "=WEEKDAY(45292,0)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "error-input"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "WEEKDAY/0019",
+      "formula": "=WEEKDAY(0)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 7,
+        "number_r17": "7",
+        "general_text": "7",
+        "display_text": "7"
+      }
+    },
+    {
+      "id": "WEEKDAY/0020",
+      "formula": "=WEEKDAY(C2)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "error-input"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "WEEKDAY/0021",
+      "formula": "=WEEKDAY(A1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "blank"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 7,
+        "number_r17": "7",
+        "general_text": "7",
+        "display_text": "7"
+      }
+    },
+    {
+      "id": "WEEKDAY/0022",
+      "formula": "=WEEKDAY(B3)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "error-input"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#N/A",
+        "error_type_code": 7,
+        "cverr": -2146826246,
+        "general_text": "",
+        "display_text": "#N/A"
+      }
+    }
+  ]
+}

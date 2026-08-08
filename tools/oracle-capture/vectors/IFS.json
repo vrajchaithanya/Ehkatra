@@ -1,0 +1,963 @@
+{
+  "schema": "ehkatra.oracle.vectors/1",
+  "function": "IFS",
+  "group": "logic",
+  "doc": "No else branch: falling off the end is #N/A.",
+  "grid_source": "30-logic.psd1",
+  "provenance": {
+    "source": "excel-com",
+    "oracle": true,
+    "excel_version": "16.0",
+    "excel_build": "20228",
+    "excel_product": "Microsoft Excel",
+    "excel_calc_version": "191029",
+    "date_system": "1900",
+    "ui_language_id": 16393,
+    "list_separator": ",",
+    "decimal_separator": ".",
+    "thousands_separator": ",",
+    "os": "Microsoft Windows 11 Home Single Language 10.0.26200",
+    "powershell": "5.1.26100.8875",
+    "harness_version": "1.0.0",
+    "captured_utc": "2026-08-08T07:29:37Z",
+    "probe_column_width": 80,
+    "catalogue_source": "crates/usk-formula/src/functions.rs CATALOGUE"
+  },
+  "case_count": 10,
+  "cases": [
+    {
+      "id": "IFS/0001",
+      "formula": "=IFS(TRUE,1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": 1
+        },
+        {
+          "ref": "A4",
+          "value": true
+        },
+        {
+          "ref": "A5",
+          "value": false
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "abc"
+        },
+        {
+          "ref": "B3",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B4",
+          "text": "0"
+        },
+        {
+          "ref": "B5",
+          "value": " "
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "formula": "=1/0"
+        },
+        {
+          "ref": "C3",
+          "formula": "=SQRT(-1)"
+        },
+        {
+          "ref": "D1",
+          "value": true
+        },
+        {
+          "ref": "D2",
+          "value": "x"
+        },
+        {
+          "ref": "D3",
+          "blank": true
+        },
+        {
+          "ref": "D4",
+          "value": false
+        },
+        {
+          "ref": "E1",
+          "value": "p"
+        },
+        {
+          "ref": "E2",
+          "value": "q"
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "IFS/0002",
+      "formula": "=IFS(FALSE,1,TRUE,2)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": 1
+        },
+        {
+          "ref": "A4",
+          "value": true
+        },
+        {
+          "ref": "A5",
+          "value": false
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "abc"
+        },
+        {
+          "ref": "B3",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B4",
+          "text": "0"
+        },
+        {
+          "ref": "B5",
+          "value": " "
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "formula": "=1/0"
+        },
+        {
+          "ref": "C3",
+          "formula": "=SQRT(-1)"
+        },
+        {
+          "ref": "D1",
+          "value": true
+        },
+        {
+          "ref": "D2",
+          "value": "x"
+        },
+        {
+          "ref": "D3",
+          "blank": true
+        },
+        {
+          "ref": "D4",
+          "value": false
+        },
+        {
+          "ref": "E1",
+          "value": "p"
+        },
+        {
+          "ref": "E2",
+          "value": "q"
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 2,
+        "number_r17": "2",
+        "general_text": "2",
+        "display_text": "2"
+      }
+    },
+    {
+      "id": "IFS/0003",
+      "formula": "=IFS(FALSE,1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": 1
+        },
+        {
+          "ref": "A4",
+          "value": true
+        },
+        {
+          "ref": "A5",
+          "value": false
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "abc"
+        },
+        {
+          "ref": "B3",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B4",
+          "text": "0"
+        },
+        {
+          "ref": "B5",
+          "value": " "
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "formula": "=1/0"
+        },
+        {
+          "ref": "C3",
+          "formula": "=SQRT(-1)"
+        },
+        {
+          "ref": "D1",
+          "value": true
+        },
+        {
+          "ref": "D2",
+          "value": "x"
+        },
+        {
+          "ref": "D3",
+          "blank": true
+        },
+        {
+          "ref": "D4",
+          "value": false
+        },
+        {
+          "ref": "E1",
+          "value": "p"
+        },
+        {
+          "ref": "E2",
+          "value": "q"
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "note": "no condition matched",
+      "observed": {
+        "kind": "error",
+        "error": "#N/A",
+        "error_type_code": 7,
+        "cverr": -2146826246,
+        "general_text": "",
+        "display_text": "#N/A"
+      }
+    },
+    {
+      "id": "IFS/0004",
+      "formula": "=IFS(FALSE,1,FALSE,2)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": 1
+        },
+        {
+          "ref": "A4",
+          "value": true
+        },
+        {
+          "ref": "A5",
+          "value": false
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "abc"
+        },
+        {
+          "ref": "B3",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B4",
+          "text": "0"
+        },
+        {
+          "ref": "B5",
+          "value": " "
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "formula": "=1/0"
+        },
+        {
+          "ref": "C3",
+          "formula": "=SQRT(-1)"
+        },
+        {
+          "ref": "D1",
+          "value": true
+        },
+        {
+          "ref": "D2",
+          "value": "x"
+        },
+        {
+          "ref": "D3",
+          "blank": true
+        },
+        {
+          "ref": "D4",
+          "value": false
+        },
+        {
+          "ref": "E1",
+          "value": "p"
+        },
+        {
+          "ref": "E2",
+          "value": "q"
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#N/A",
+        "error_type_code": 7,
+        "cverr": -2146826246,
+        "general_text": "",
+        "display_text": "#N/A"
+      }
+    },
+    {
+      "id": "IFS/0005",
+      "formula": "=IFS(TRUE,1,TRUE,2)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": 1
+        },
+        {
+          "ref": "A4",
+          "value": true
+        },
+        {
+          "ref": "A5",
+          "value": false
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "abc"
+        },
+        {
+          "ref": "B3",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B4",
+          "text": "0"
+        },
+        {
+          "ref": "B5",
+          "value": " "
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "formula": "=1/0"
+        },
+        {
+          "ref": "C3",
+          "formula": "=SQRT(-1)"
+        },
+        {
+          "ref": "D1",
+          "value": true
+        },
+        {
+          "ref": "D2",
+          "value": "x"
+        },
+        {
+          "ref": "D3",
+          "blank": true
+        },
+        {
+          "ref": "D4",
+          "value": false
+        },
+        {
+          "ref": "E1",
+          "value": "p"
+        },
+        {
+          "ref": "E2",
+          "value": "q"
+        }
+      ],
+      "tags": [
+        "basic"
+      ],
+      "note": "first match wins",
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "IFS/0006",
+      "formula": "=IFS(1,\"a\")",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": 1
+        },
+        {
+          "ref": "A4",
+          "value": true
+        },
+        {
+          "ref": "A5",
+          "value": false
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "abc"
+        },
+        {
+          "ref": "B3",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B4",
+          "text": "0"
+        },
+        {
+          "ref": "B5",
+          "value": " "
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "formula": "=1/0"
+        },
+        {
+          "ref": "C3",
+          "formula": "=SQRT(-1)"
+        },
+        {
+          "ref": "D1",
+          "value": true
+        },
+        {
+          "ref": "D2",
+          "value": "x"
+        },
+        {
+          "ref": "D3",
+          "blank": true
+        },
+        {
+          "ref": "D4",
+          "value": false
+        },
+        {
+          "ref": "E1",
+          "value": "p"
+        },
+        {
+          "ref": "E2",
+          "value": "q"
+        }
+      ],
+      "tags": [
+        "coercion"
+      ],
+      "observed": {
+        "kind": "text",
+        "text": "a",
+        "general_text": "a",
+        "display_text": "a"
+      }
+    },
+    {
+      "id": "IFS/0007",
+      "formula": "=IFS(A1,\"a\",TRUE,\"b\")",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": 1
+        },
+        {
+          "ref": "A4",
+          "value": true
+        },
+        {
+          "ref": "A5",
+          "value": false
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "abc"
+        },
+        {
+          "ref": "B3",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B4",
+          "text": "0"
+        },
+        {
+          "ref": "B5",
+          "value": " "
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "formula": "=1/0"
+        },
+        {
+          "ref": "C3",
+          "formula": "=SQRT(-1)"
+        },
+        {
+          "ref": "D1",
+          "value": true
+        },
+        {
+          "ref": "D2",
+          "value": "x"
+        },
+        {
+          "ref": "D3",
+          "blank": true
+        },
+        {
+          "ref": "D4",
+          "value": false
+        },
+        {
+          "ref": "E1",
+          "value": "p"
+        },
+        {
+          "ref": "E2",
+          "value": "q"
+        }
+      ],
+      "tags": [
+        "blank"
+      ],
+      "observed": {
+        "kind": "text",
+        "text": "b",
+        "general_text": "b",
+        "display_text": "b"
+      }
+    },
+    {
+      "id": "IFS/0008",
+      "formula": "=IFS(C1,1,TRUE,2)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": 1
+        },
+        {
+          "ref": "A4",
+          "value": true
+        },
+        {
+          "ref": "A5",
+          "value": false
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "abc"
+        },
+        {
+          "ref": "B3",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B4",
+          "text": "0"
+        },
+        {
+          "ref": "B5",
+          "value": " "
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "formula": "=1/0"
+        },
+        {
+          "ref": "C3",
+          "formula": "=SQRT(-1)"
+        },
+        {
+          "ref": "D1",
+          "value": true
+        },
+        {
+          "ref": "D2",
+          "value": "x"
+        },
+        {
+          "ref": "D3",
+          "blank": true
+        },
+        {
+          "ref": "D4",
+          "value": false
+        },
+        {
+          "ref": "E1",
+          "value": "p"
+        },
+        {
+          "ref": "E2",
+          "value": "q"
+        }
+      ],
+      "tags": [
+        "error-input"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#N/A",
+        "error_type_code": 7,
+        "cverr": -2146826246,
+        "general_text": "",
+        "display_text": "#N/A"
+      }
+    },
+    {
+      "id": "IFS/0009",
+      "formula": "=IFS(FALSE,1/0,TRUE,2)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": 1
+        },
+        {
+          "ref": "A4",
+          "value": true
+        },
+        {
+          "ref": "A5",
+          "value": false
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "abc"
+        },
+        {
+          "ref": "B3",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B4",
+          "text": "0"
+        },
+        {
+          "ref": "B5",
+          "value": " "
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "formula": "=1/0"
+        },
+        {
+          "ref": "C3",
+          "formula": "=SQRT(-1)"
+        },
+        {
+          "ref": "D1",
+          "value": true
+        },
+        {
+          "ref": "D2",
+          "value": "x"
+        },
+        {
+          "ref": "D3",
+          "blank": true
+        },
+        {
+          "ref": "D4",
+          "value": false
+        },
+        {
+          "ref": "E1",
+          "value": "p"
+        },
+        {
+          "ref": "E2",
+          "value": "q"
+        }
+      ],
+      "tags": [
+        "lazy"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 2,
+        "number_r17": "2",
+        "general_text": "2",
+        "display_text": "2"
+      }
+    },
+    {
+      "id": "IFS/0010",
+      "formula": "=IFS(\"abc\",1,TRUE,2)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": 1
+        },
+        {
+          "ref": "A4",
+          "value": true
+        },
+        {
+          "ref": "A5",
+          "value": false
+        },
+        {
+          "ref": "B1",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "B2",
+          "value": "abc"
+        },
+        {
+          "ref": "B3",
+          "text": "TRUE"
+        },
+        {
+          "ref": "B4",
+          "text": "0"
+        },
+        {
+          "ref": "B5",
+          "value": " "
+        },
+        {
+          "ref": "C1",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "C2",
+          "formula": "=1/0"
+        },
+        {
+          "ref": "C3",
+          "formula": "=SQRT(-1)"
+        },
+        {
+          "ref": "D1",
+          "value": true
+        },
+        {
+          "ref": "D2",
+          "value": "x"
+        },
+        {
+          "ref": "D3",
+          "blank": true
+        },
+        {
+          "ref": "D4",
+          "value": false
+        },
+        {
+          "ref": "E1",
+          "value": "p"
+        },
+        {
+          "ref": "E2",
+          "value": "q"
+        }
+      ],
+      "tags": [
+        "error-input"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#VALUE!",
+        "error_type_code": 3,
+        "cverr": -2146826273,
+        "general_text": "",
+        "display_text": "#VALUE!"
+      }
+    }
+  ]
+}

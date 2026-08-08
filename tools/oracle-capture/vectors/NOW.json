@@ -1,0 +1,514 @@
+{
+  "schema": "ehkatra.oracle.vectors/1",
+  "function": "NOW",
+  "group": "dates",
+  "doc": "Volatile. Structural invariants only, for the same reason as TODAY.",
+  "grid_source": "60-dates.psd1",
+  "provenance": {
+    "source": "excel-com",
+    "oracle": true,
+    "excel_version": "16.0",
+    "excel_build": "20228",
+    "excel_product": "Microsoft Excel",
+    "excel_calc_version": "191029",
+    "date_system": "1900",
+    "ui_language_id": 16393,
+    "list_separator": ",",
+    "decimal_separator": ".",
+    "thousands_separator": ",",
+    "os": "Microsoft Windows 11 Home Single Language 10.0.26200",
+    "powershell": "5.1.26100.8875",
+    "harness_version": "1.0.0",
+    "captured_utc": "2026-08-08T07:29:37Z",
+    "probe_column_width": 80,
+    "catalogue_source": "crates/usk-formula/src/functions.rs CATALOGUE"
+  },
+  "case_count": 7,
+  "cases": [
+    {
+      "id": "NOW/0001",
+      "formula": "=ISNUMBER(NOW())",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "volatile",
+        "structural"
+      ],
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "NOW/0002",
+      "formula": "=NOW()>=TODAY()",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "volatile",
+        "structural"
+      ],
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "NOW/0003",
+      "formula": "=NOW()<TODAY()+1",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "volatile",
+        "structural"
+      ],
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "NOW/0004",
+      "formula": "=NOW()-NOW()",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "volatile",
+        "structural"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "NOW/0005",
+      "formula": "=INT(NOW())=TODAY()",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "volatile",
+        "structural"
+      ],
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "NOW/0006",
+      "formula": "=NOW()-INT(NOW())<1",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "volatile",
+        "structural"
+      ],
+      "note": "the fractional part is a time of day",
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "NOW/0007",
+      "formula": "=NOW()-INT(NOW())>=0",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 59
+        },
+        {
+          "ref": "A3",
+          "value": 60
+        },
+        {
+          "ref": "A4",
+          "value": 61
+        },
+        {
+          "ref": "A5",
+          "value": 45292
+        },
+        {
+          "ref": "B1",
+          "text": "2024-03-15"
+        },
+        {
+          "ref": "B2",
+          "text": "15/03/2024"
+        },
+        {
+          "ref": "B3",
+          "formula": "=NA()"
+        },
+        {
+          "ref": "B4",
+          "value": 2958465
+        },
+        {
+          "ref": "B5",
+          "value": 0
+        },
+        {
+          "ref": "C1",
+          "value": 45292.75
+        },
+        {
+          "ref": "C2",
+          "value": -1
+        },
+        {
+          "ref": "C3",
+          "value": 1
+        }
+      ],
+      "tags": [
+        "volatile",
+        "structural"
+      ],
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    }
+  ]
+}

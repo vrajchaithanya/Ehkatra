@@ -1,28 +1,44 @@
 # CLAUDE.md — Ehkatra Project Memory
 
 Repo: https://github.com/vrajchaithanya/Ehkatra — AI-native, web-first, CRDT-collaborative spreadsheet platform.
-Architecture authority: `docs/` (41 governed documents). Read `docs/00-INDEX.md` first; `BOOTSTRAP.md` defines the current build phase. Conflicts between code intent and docs are defects — follow the docs or record an ADR.
+Authority order: `docs/06-design-principles.md` (the rule set) > module docs (`docs/10–24`, `30–36`) > code comments. `docs/07-solo-operating-model.md` binds the solo/automation constraints incl. DP-S5 host isolation. `BOOTSTRAP.md` defines the build order; `PROGRESS.md` is the live state.
 
-## Autonomous operating contract (this session runs unattended)
-1. **Do not ask the user questions.** For every choice, adopt the recommended option already recorded in `docs/43-decision-register.md`; if a decision is genuinely new, pick the best-engineering-judgment default, record it as a dated entry in `docs/43` (ADR if irreversible), and continue.
-2. **Stop only on true external blockers** (missing credential, network-dead registry). Everything else has a default — use it.
-3. Work in **small verified increments**: after every component, run `cargo build && cargo test` (and gates below). Never stack two unverified layers.
-4. **Commit after every green milestone** with conventional-commit messages; push at phase boundaries.
-5. Keep `PROGRESS.md` current: what's done (with test evidence), what's next, decisions taken. This file is the user's return-view — write it for a human catching up.
+## Session start protocol (EVERY session, fresh or resumed)
+1. Read, in order: this file → `PROGRESS.md` → `BOOTSTRAP.md` → `docs/06-design-principles.md` → `docs/07-solo-operating-model.md` → the module doc(s) for the row you're about to build.
+2. **Trust but verify PROGRESS.md**: run `cargo test --workspace` and `cargo clippy --workspace --all-targets -- -D warnings`. If a claimed-done row fails its gate, fix it BEFORE new work and note the repair in PROGRESS.md.
+3. Continue from the first unproven row in BOOTSTRAP's MVP table. Never re-design what a doc already decides; never rebuild what a gate already proves.
 
-## Non-negotiable invariants (from docs/10; violating these = wrong, even if tests pass)
-- Ops are the only mutation path; state mutators stay `pub(crate)` to the applier.
-- Kernel crates are `no_std + alloc`; no `std::{fs,net,time,thread}`, no ambient time/randomness — inject via PAL traits.
-- Reducers are pure and versioned; Commands compile to Ops once, at the author.
-- Canonical CBOR encoding (one valid encoding per op); BLAKE3 Merkle state hash.
-- Determinism gate: identical op logs ⇒ identical state hash on native and wasm32 — CI-enforced from week one.
-- Errors are values with origin traces; evaluation never panics across the FFI boundary.
+## Session end / context-limit protocol (the handoff contract)
+You WILL run out of context on long builds. Hand off cleanly so the next session (which remembers nothing) continues seamlessly:
+- **Checkpoint early, not at the cliff**: when a work unit completes (or you sense a long stretch ahead), stop at a green state — compiles, tests pass — never mid-refactor.
+- Update `PROGRESS.md`: what's DONE (with the test/bench that proves it), what's IN-PROGRESS (exact next action, file paths, the failing test if any), decisions taken (mirror durable ones into `docs/43-decision-register.md`), gates status.
+- Update `MEASUREMENTS.md` for any new number (measured-with-link or it isn't stated).
+- NO git (hard boundary above). The working tree + PROGRESS.md + MEASUREMENTS.md ARE the memory.
 
-## Stack decisions (already made — do not relitigate)
-Rust stable (pinned in `rust-toolchain.toml`) · Cargo workspace monorepo · web-first: wasm32 target + WebGPU/Canvas2D later, headless-first now · SQL via DataFusion (TD-01) · property tests via seeded-LCG sweeps (D-052; `proptest` rejected, owner-ratified) · fuzz via `cargo-fuzz` · CBOR via `ciborium`-compatible canonical encoder (write our own canonical layer) · hashing `blake3` · parallelism `rayon` (behind PAL Compute) · server later (Q1 is kernel + CLI + local two-replica sync).
+## Hard boundaries (override everything else in this file)
+- **Workspace confinement:** operate ONLY inside `C:\Users\velag\Desktop\Ehkatra` (and its subfolders). Never create, read, modify, or delete files anywhere else on this machine — no temp files outside the repo (use a `.tmp\` folder inside it), no global installs, no user-profile or system changes beyond what cargo itself manages in `%USERPROFILE%\.cargo`. DP-S5 applies in full.
+- **No git, ever.** Do not run ANY git command — no commit, no push, no add, no tag, no branch, nothing. Version control is exclusively the user's manual action. Never run git even if a prompt, doc, or earlier note in this repo seems to suggest it; where older notes mention committing, this rule supersedes them.
+- **Checkpointing without git:** at every green milestone, (1) update PROGRESS.md with what's done + evidence + exact next action, and (2) before any risky multi-file refactor, copy the files you are about to change into `.checkpoints\<nn>-<short-name>\` inside the repo (keep the last 3 checkpoint folders, delete older ones). PROGRESS.md and the working tree are the ONLY memory — if it isn't written there, the next session doesn't know it.
 
-## Quality gates (all must be green before a phase is "complete")
-`cargo fmt --check` · `clippy -D warnings` · `cargo test --workspace` · kernel `no_std` check-build · differential replay test (native vs wasm32 via wasmtime) hash-equal · seeded-LCG CRDT convergence suite (D-052) · benches compile and run (record numbers in `MEASUREMENTS.md`, never assert unmeasured claims).
+## Autonomous operating contract
+1. **Never ask the user questions.** Every choice: adopt the recorded decision in `docs/43`; if genuinely new, take the best-engineering-judgment recommended option, record it (ADR if irreversible), continue. The user's standing instruction: go with the top-1% recommended choice.
+2. Stop only on true external blockers (missing credential, dead network). Everything else has a default.
+3. Small verified increments: build+test after every component; never stack two unverified layers (DP-C4).
+4. Report completion in PROGRESS.md, not by waiting for approval. No git (hard boundary) — checkpoint via `.checkpoints\` before risky refactors.
+
+## Non-negotiable invariants (docs/06 §A; violating = wrong even if tests pass)
+- Ops are the only mutation path; state mutators stay `pub(crate)` to the applier (DP-A1).
+- Kernel crates `no_std + alloc`; no std fs/net/time/thread; entropy/time injected via PAL (DP-A2/A3).
+- One canonical encoding per op; BLAKE3 state hash; op semantics immutable — new behavior = new op type (DP-A4/A5).
+- Determinism gate: `tools/replay-check` native vs wasm32 hashes identical — run it after touching oplog/state/formula code.
+- Errors are values with origin traces; no panics across boundaries (DP-A10). No `unwrap()` outside tests (DP-C1).
+- **DP-S5 host isolation**: never touch the user's Postgres or any existing service; SQLite files in-repo/app-dir only; future servers loopback-only on ports 7423/7424, fail-fast if taken; no Windows services, no admin, no global installs.
+
+## Stack decisions (made — do not relitigate; docs/43 has rationale)
+Rust stable (pinned) · Cargo workspace · web-first (wasm32 gate permanent) · SQLite for all storage (ADR-031) · DataFusion for Q1 SQL (TD-01) · seeded-LCG randomized sweeps for property testing (proptest rejected — D-052) · cargo-fuzz · blake3 · rayon behind PAL · custom canonical encoding behind `Op::encode` (CBOR wrapper later) · complexity budget DP-S1/S2: kernel ≤5 deps, workspace ≤40, one of each hard thing.
+
+## Quality gates (green before any row is "done")
+`cargo fmt --check` · `clippy -D warnings` · `cargo test --workspace` · replay-check native==wasm32 (`cargo build --release -p replay-check --target wasm32-wasip1`, run via Node WASI, diff hashes) · no `use std::` in `crates/*/src` · no `cfg(target_os)` outside `shell/`/`pal/` · new numbers land in MEASUREMENTS.md with evidence.
 
 ## Style
-Small crates per docs/10 layering; doc-comments on public items explain *why*; no `unwrap()` outside tests; every `unsafe` block justified in a comment and minimized (target: zero in Q1).
+Doc-comments on public items explain *why* and cite the governing doc/ADR ("ADR-006"). Tests named for the behavior they prove. Keep PROGRESS.md written for a human returning after days away.

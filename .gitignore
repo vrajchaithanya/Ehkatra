@@ -1,3 +1,13 @@
 /target
 # Cargo.lock IS committed: this workspace ships binaries, and DP-A2/DP-E8 require
 # that a given commit rebuilds to the same bits with the same dependency set.
+
+# The in-workspace C toolchain (TD-28, D-073). ~1 GB of third-party binaries,
+# reproduced from the URL + SHA-256 recorded in docs/43 — never committed.
+# It lives inside the repo so DP-S5 holds: no global install, no PATH edit, no
+# registry change, nothing outside this folder.
+/.toolchain
+# Scratch for build probes and crash-injection fixtures. In-repo, per CLAUDE.md's
+# "no temp files outside the workspace" rule, but never committed.
+/.tmp
+/demo/out

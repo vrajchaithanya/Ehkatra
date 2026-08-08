@@ -1,0 +1,916 @@
+{
+  "schema": "ehkatra.oracle.vectors/1",
+  "function": "__compat_comparison",
+  "group": "compat-catalog",
+  "doc": "Cross-type comparison. Excel orders by type tag first -- number below text below logical -- so 1<\"1\" is TRUE for a reason that has nothing to do with the values. A blank compares equal to both 0 and \"\", which are not equal to each other.",
+  "grid_source": "90-compat-catalog.psd1",
+  "provenance": {
+    "source": "excel-com",
+    "oracle": true,
+    "excel_version": "16.0",
+    "excel_build": "20228",
+    "excel_product": "Microsoft Excel",
+    "excel_calc_version": "191029",
+    "date_system": "1900",
+    "ui_language_id": 16393,
+    "list_separator": ",",
+    "decimal_separator": ".",
+    "thousands_separator": ",",
+    "os": "Microsoft Windows 11 Home Single Language 10.0.26200",
+    "powershell": "5.1.26100.8875",
+    "harness_version": "1.0.0",
+    "captured_utc": "2026-08-08T07:29:37Z",
+    "probe_column_width": 80,
+    "catalogue_source": "crates/usk-formula/src/functions.rs CATALOGUE"
+  },
+  "case_count": 24,
+  "cases": [
+    {
+      "id": "__compat_comparison/0001",
+      "formula": "=\"a\"=\"A\"",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": ""
+        },
+        {
+          "ref": "A4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "A5",
+          "value": "abc"
+        }
+      ],
+      "tags": [
+        "comparison"
+      ],
+      "note": "= is case-insensitive; EXACT is not",
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_comparison/0002",
+      "formula": "=\"a\"<\"B\"",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": ""
+        },
+        {
+          "ref": "A4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "A5",
+          "value": "abc"
+        }
+      ],
+      "tags": [
+        "comparison"
+      ],
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_comparison/0003",
+      "formula": "=\"a\"<\"b\"",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": ""
+        },
+        {
+          "ref": "A4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "A5",
+          "value": "abc"
+        }
+      ],
+      "tags": [
+        "comparison"
+      ],
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_comparison/0004",
+      "formula": "=1<\"1\"",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": ""
+        },
+        {
+          "ref": "A4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "A5",
+          "value": "abc"
+        }
+      ],
+      "tags": [
+        "comparison"
+      ],
+      "note": "every number sorts below every text",
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_comparison/0005",
+      "formula": "=999999<\"0\"",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": ""
+        },
+        {
+          "ref": "A4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "A5",
+          "value": "abc"
+        }
+      ],
+      "tags": [
+        "comparison"
+      ],
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_comparison/0006",
+      "formula": "=\"1\"<TRUE",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": ""
+        },
+        {
+          "ref": "A4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "A5",
+          "value": "abc"
+        }
+      ],
+      "tags": [
+        "comparison"
+      ],
+      "note": "every text sorts below every logical",
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_comparison/0007",
+      "formula": "=1<TRUE",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": ""
+        },
+        {
+          "ref": "A4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "A5",
+          "value": "abc"
+        }
+      ],
+      "tags": [
+        "comparison"
+      ],
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_comparison/0008",
+      "formula": "=TRUE>1000000",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": ""
+        },
+        {
+          "ref": "A4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "A5",
+          "value": "abc"
+        }
+      ],
+      "tags": [
+        "comparison"
+      ],
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_comparison/0009",
+      "formula": "=FALSE>\"zzz\"",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": ""
+        },
+        {
+          "ref": "A4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "A5",
+          "value": "abc"
+        }
+      ],
+      "tags": [
+        "comparison"
+      ],
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_comparison/0010",
+      "formula": "=TRUE>FALSE",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": ""
+        },
+        {
+          "ref": "A4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "A5",
+          "value": "abc"
+        }
+      ],
+      "tags": [
+        "comparison"
+      ],
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_comparison/0011",
+      "formula": "=A1=0",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": ""
+        },
+        {
+          "ref": "A4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "A5",
+          "value": "abc"
+        }
+      ],
+      "tags": [
+        "comparison",
+        "blank"
+      ],
+      "note": "a blank equals zero",
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_comparison/0012",
+      "formula": "=A1=\"\"",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": ""
+        },
+        {
+          "ref": "A4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "A5",
+          "value": "abc"
+        }
+      ],
+      "tags": [
+        "comparison",
+        "blank"
+      ],
+      "note": "and equals an empty string",
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_comparison/0013",
+      "formula": "=0=\"\"",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": ""
+        },
+        {
+          "ref": "A4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "A5",
+          "value": "abc"
+        }
+      ],
+      "tags": [
+        "comparison",
+        "boundary"
+      ],
+      "note": "but those two do not equal each other",
+      "observed": {
+        "kind": "logical",
+        "logical": false,
+        "general_text": "FALSE",
+        "display_text": "FALSE"
+      }
+    },
+    {
+      "id": "__compat_comparison/0014",
+      "formula": "=A1=A3",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": ""
+        },
+        {
+          "ref": "A4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "A5",
+          "value": "abc"
+        }
+      ],
+      "tags": [
+        "comparison",
+        "blank"
+      ],
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_comparison/0015",
+      "formula": "=A1=A4",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": ""
+        },
+        {
+          "ref": "A4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "A5",
+          "value": "abc"
+        }
+      ],
+      "tags": [
+        "comparison",
+        "blank"
+      ],
+      "note": "blank against a formula-produced empty string",
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_comparison/0016",
+      "formula": "=A4=\"\"",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": ""
+        },
+        {
+          "ref": "A4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "A5",
+          "value": "abc"
+        }
+      ],
+      "tags": [
+        "comparison",
+        "boundary"
+      ],
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_comparison/0017",
+      "formula": "=A4=0",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": ""
+        },
+        {
+          "ref": "A4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "A5",
+          "value": "abc"
+        }
+      ],
+      "tags": [
+        "comparison",
+        "boundary"
+      ],
+      "observed": {
+        "kind": "logical",
+        "logical": false,
+        "general_text": "FALSE",
+        "display_text": "FALSE"
+      }
+    },
+    {
+      "id": "__compat_comparison/0018",
+      "formula": "=A1<1",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": ""
+        },
+        {
+          "ref": "A4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "A5",
+          "value": "abc"
+        }
+      ],
+      "tags": [
+        "comparison",
+        "blank"
+      ],
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_comparison/0019",
+      "formula": "=A1<\"a\"",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": ""
+        },
+        {
+          "ref": "A4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "A5",
+          "value": "abc"
+        }
+      ],
+      "tags": [
+        "comparison",
+        "blank"
+      ],
+      "note": "which type tag does a blank take in a text comparison",
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_comparison/0020",
+      "formula": "=A1>-1",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": ""
+        },
+        {
+          "ref": "A4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "A5",
+          "value": "abc"
+        }
+      ],
+      "tags": [
+        "comparison",
+        "blank"
+      ],
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_comparison/0021",
+      "formula": "=NA()=NA()",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": ""
+        },
+        {
+          "ref": "A4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "A5",
+          "value": "abc"
+        }
+      ],
+      "tags": [
+        "comparison",
+        "error-input"
+      ],
+      "note": "errors do not compare, they propagate",
+      "observed": {
+        "kind": "error",
+        "error": "#N/A",
+        "error_type_code": 7,
+        "cverr": -2146826246,
+        "general_text": "",
+        "display_text": "#N/A"
+      }
+    },
+    {
+      "id": "__compat_comparison/0022",
+      "formula": "=1<>\"1\"",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": ""
+        },
+        {
+          "ref": "A4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "A5",
+          "value": "abc"
+        }
+      ],
+      "tags": [
+        "comparison"
+      ],
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_comparison/0023",
+      "formula": "=\"10\"<\"9\"",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": ""
+        },
+        {
+          "ref": "A4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "A5",
+          "value": "abc"
+        }
+      ],
+      "tags": [
+        "comparison"
+      ],
+      "note": "text compares lexicographically",
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_comparison/0024",
+      "formula": "=10<9",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "blank": true
+        },
+        {
+          "ref": "A2",
+          "value": 0
+        },
+        {
+          "ref": "A3",
+          "value": ""
+        },
+        {
+          "ref": "A4",
+          "formula": "=\"\""
+        },
+        {
+          "ref": "A5",
+          "value": "abc"
+        }
+      ],
+      "tags": [
+        "comparison"
+      ],
+      "observed": {
+        "kind": "logical",
+        "logical": false,
+        "general_text": "FALSE",
+        "display_text": "FALSE"
+      }
+    }
+  ]
+}

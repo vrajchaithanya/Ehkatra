@@ -20,12 +20,12 @@ A web-first spreadsheet platform whose kernel treats every change as an operatio
 |---|---|---|
 | 1 | Cargo workspace: `usk-types`, `usk-oplog`, `usk-state`, `usk-formula`, `usk-calc`, `usk-reduce`, `ehkatra-cli` | builds, `no_std` check green |
 | 2 | Op log: canonical CBOR, causal order, BLAKE3 Merkle state hash | encode/decode round-trip tests; hash stability test |
-| 3 | Order CRDT (rows/cols): insert/delete/tombstones, A1-as-view via order-statistic index | proptest: convergence over randomized interleavings |
+| 3 | Order CRDT (rows/cols): insert/delete/tombstones, A1-as-view via order-statistic index | seeded-LCG sweep: convergence over randomized interleavings (D-052) |
 | 4 | Tile store: 256×64, presence bitmap, packed f64/tagged payloads, per-tile causal summary + promotion | memory harness reports bytes/cell into `MEASUREMENTS.md` |
 | 5 | Values: Blank/Bool/Number/Decimal128/Text/Error(+origin) ; compat/strict coercion | unit vectors incl. Excel-quirk cases |
 | 6 | Formula engine: lexer→Pratt parser→CST→AST→binder; **60 functions** (arith, logical, text, date core, SUM/AVERAGE/COUNT/MIN/MAX/IF/AND/OR/NOT/CONCAT/LEFT/RIGHT/MID/LEN/TRIM/UPPER/LOWER/ROUND family, VLOOKUP/XLOOKUP/INDEX/MATCH, SUMIF/COUNTIF/SUMIFS/COUNTIFS, IFERROR, TODAY/NOW as materialized volatiles) | function conformance vectors; error-propagation tests |
 | 7 | Dependency graph: formula groups, range edges via interval index; incremental dirty→topo→parallel recalc | 100k-cell recalc bench recorded |
-| 8 | Identity references: insert/delete rows shifts ranges correctly; the canonical test — concurrent row-insert vs `SUM(A1:A10)` converges | dedicated regression + proptest |
+| 8 | Identity references: insert/delete rows shifts ranges correctly; the canonical test — concurrent row-insert vs `SUM(A1:A10)` converges | dedicated regression + seeded-LCG sweep (D-052) |
 | 9 | Reducer + Commands: set_value/set_formula/insert/delete rows-cols/clear/undo/redo with per-actor labeled undo groups | undo-law tests (undo∘do = id on own scope) |
 | 10 | Two-replica sync: in-process + WebSocket relay binary; ops exchange, anti-entropy by Merkle diff | two-terminal demo script `demo/collab.sh`; divergence test = hash equality |
 | 11 | Snapshots + recovery: content-addressed snapshot, op-tail replay | kill −9 mid-write test recovers |

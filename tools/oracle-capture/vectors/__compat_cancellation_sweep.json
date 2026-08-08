@@ -1,0 +1,1572 @@
+{
+  "schema": "ehkatra.oracle.vectors/1",
+  "function": "__compat_cancellation_sweep",
+  "group": "compat-catalog",
+  "doc": "Locating the compat_final_adjust boundary empirically, and establishing that the adjustment is applied to a formula result rather than to the subtraction operator.",
+  "grid_source": "92-cancellation-sweep.psd1",
+  "provenance": {
+    "source": "excel-com",
+    "oracle": true,
+    "excel_version": "16.0",
+    "excel_build": "20228",
+    "excel_product": "Microsoft Excel",
+    "excel_calc_version": "191029",
+    "date_system": "1900",
+    "ui_language_id": 16393,
+    "list_separator": ",",
+    "decimal_separator": ".",
+    "thousands_separator": ",",
+    "os": "Microsoft Windows 11 Home Single Language 10.0.26200",
+    "powershell": "5.1.26100.8875",
+    "harness_version": "1.0.0",
+    "captured_utc": "2026-08-08T07:29:37Z",
+    "probe_column_width": 80,
+    "catalogue_source": "crates/usk-formula/src/functions.rs CATALOGUE"
+  },
+  "case_count": 68,
+  "cases": [
+    {
+      "id": "__compat_cancellation_sweep/0001",
+      "formula": "=1+1E-11-1",
+      "block": 1,
+      "block_label": "residue decades at operand magnitude 1",
+      "tags": [
+        "sweep",
+        "residue-decade"
+      ],
+      "stored_formula": "=1+0.00000000001-1",
+      "observed": {
+        "kind": "number",
+        "number": 1.000000082740371E-11,
+        "number_r17": "1.000000082740371E-11",
+        "general_text": "1.00000008274037E-11",
+        "display_text": "1E-11"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0002",
+      "formula": "=1+1E-12-1",
+      "block": 1,
+      "block_label": "residue decades at operand magnitude 1",
+      "tags": [
+        "sweep",
+        "residue-decade"
+      ],
+      "stored_formula": "=1+0.000000000001-1",
+      "observed": {
+        "kind": "number",
+        "number": 1.000088900582341E-12,
+        "number_r17": "1.000088900582341E-12",
+        "general_text": "1.00008890058234E-12",
+        "display_text": "1.00009E-12"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0003",
+      "formula": "=1+1E-13-1",
+      "block": 1,
+      "block_label": "residue decades at operand magnitude 1",
+      "tags": [
+        "sweep",
+        "residue-decade"
+      ],
+      "stored_formula": "=1+0.0000000000001-1",
+      "observed": {
+        "kind": "number",
+        "number": 9.9920072216264089E-14,
+        "number_r17": "9.9920072216264089E-14",
+        "general_text": "9.99200722162641E-14",
+        "display_text": "9.99201E-14"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0004",
+      "formula": "=1+5E-14-1",
+      "block": 1,
+      "block_label": "residue decades at operand magnitude 1",
+      "tags": [
+        "sweep",
+        "residue-decade"
+      ],
+      "stored_formula": "=1+0.00000000000005-1",
+      "observed": {
+        "kind": "number",
+        "number": 4.9960036108132044E-14,
+        "number_r17": "4.9960036108132044E-14",
+        "general_text": "4.9960036108132E-14",
+        "display_text": "4.996E-14"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0005",
+      "formula": "=1+2E-14-1",
+      "block": 1,
+      "block_label": "residue decades at operand magnitude 1",
+      "tags": [
+        "sweep",
+        "residue-decade"
+      ],
+      "stored_formula": "=1+0.00000000000002-1",
+      "observed": {
+        "kind": "number",
+        "number": 1.9984014443252818E-14,
+        "number_r17": "1.9984014443252818E-14",
+        "general_text": "1.99840144432528E-14",
+        "display_text": "1.9984E-14"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0006",
+      "formula": "=1+1E-14-1",
+      "block": 1,
+      "block_label": "residue decades at operand magnitude 1",
+      "tags": [
+        "sweep",
+        "residue-decade"
+      ],
+      "stored_formula": "=1+0.00000000000001-1",
+      "observed": {
+        "kind": "number",
+        "number": 9.9920072216264089E-15,
+        "number_r17": "9.9920072216264089E-15",
+        "general_text": "9.99200722162641E-15",
+        "display_text": "9.99201E-15"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0007",
+      "formula": "=1+5E-15-1",
+      "block": 1,
+      "block_label": "residue decades at operand magnitude 1",
+      "tags": [
+        "sweep",
+        "residue-decade"
+      ],
+      "stored_formula": "=1+0.000000000000005-1",
+      "observed": {
+        "kind": "number",
+        "number": 5.10702591327572E-15,
+        "number_r17": "5.10702591327572E-15",
+        "general_text": "5.10702591327572E-15",
+        "display_text": "5.10703E-15"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0008",
+      "formula": "=1+4E-15-1",
+      "block": 1,
+      "block_label": "residue decades at operand magnitude 1",
+      "tags": [
+        "sweep",
+        "residue-decade"
+      ],
+      "stored_formula": "=1+0.000000000000004-1",
+      "observed": {
+        "kind": "number",
+        "number": 3.9968028886505635E-15,
+        "number_r17": "3.9968028886505635E-15",
+        "general_text": "3.99680288865056E-15",
+        "display_text": "3.9968E-15"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0009",
+      "formula": "=1+3E-15-1",
+      "block": 1,
+      "block_label": "residue decades at operand magnitude 1",
+      "tags": [
+        "sweep",
+        "residue-decade"
+      ],
+      "stored_formula": "=1+0.000000000000003-1",
+      "observed": {
+        "kind": "number",
+        "number": 3.1086244689504383E-15,
+        "number_r17": "3.1086244689504383E-15",
+        "general_text": "3.10862446895044E-15",
+        "display_text": "3.10862E-15"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0010",
+      "formula": "=1+2E-15-1",
+      "block": 1,
+      "block_label": "residue decades at operand magnitude 1",
+      "tags": [
+        "sweep",
+        "residue-decade"
+      ],
+      "stored_formula": "=1+0.000000000000002-1",
+      "observed": {
+        "kind": "number",
+        "number": 1.9984014443252818E-15,
+        "number_r17": "1.9984014443252818E-15",
+        "general_text": "1.99840144432528E-15",
+        "display_text": "1.9984E-15"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0011",
+      "formula": "=1+1E-15-1",
+      "block": 1,
+      "block_label": "residue decades at operand magnitude 1",
+      "tags": [
+        "sweep",
+        "residue-decade"
+      ],
+      "note": "zeroed in the first capture",
+      "stored_formula": "=1+0.000000000000001-1",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0012",
+      "formula": "=1+5E-16-1",
+      "block": 1,
+      "block_label": "residue decades at operand magnitude 1",
+      "tags": [
+        "sweep",
+        "residue-decade"
+      ],
+      "stored_formula": "=1+0.0000000000000005-1",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0013",
+      "formula": "=1+3E-16-1",
+      "block": 1,
+      "block_label": "residue decades at operand magnitude 1",
+      "tags": [
+        "sweep",
+        "residue-decade"
+      ],
+      "stored_formula": "=1+0.0000000000000003-1",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0014",
+      "formula": "=1+2E-16-1",
+      "block": 1,
+      "block_label": "residue decades at operand magnitude 1",
+      "tags": [
+        "sweep",
+        "residue-decade"
+      ],
+      "stored_formula": "=1+0.0000000000000002-1",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0015",
+      "formula": "=1+1E-15-1",
+      "block": 2,
+      "block_label": "operand magnitude decades at a fixed 1e-15 relative residue",
+      "tags": [
+        "sweep",
+        "operand-decade"
+      ],
+      "note": "operand 1e0",
+      "stored_formula": "=1+0.000000000000001-1",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0016",
+      "formula": "=10+1E-14-10",
+      "block": 2,
+      "block_label": "operand magnitude decades at a fixed 1e-15 relative residue",
+      "tags": [
+        "sweep",
+        "operand-decade"
+      ],
+      "note": "operand 1e1",
+      "stored_formula": "=10+0.00000000000001-10",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0017",
+      "formula": "=100+1E-13-100",
+      "block": 2,
+      "block_label": "operand magnitude decades at a fixed 1e-15 relative residue",
+      "tags": [
+        "sweep",
+        "operand-decade"
+      ],
+      "note": "operand 1e2",
+      "stored_formula": "=100+0.0000000000001-100",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0018",
+      "formula": "=1000+1E-12-1000",
+      "block": 2,
+      "block_label": "operand magnitude decades at a fixed 1e-15 relative residue",
+      "tags": [
+        "sweep",
+        "operand-decade"
+      ],
+      "note": "operand 1e3",
+      "stored_formula": "=1000+0.000000000001-1000",
+      "observed": {
+        "kind": "number",
+        "number": 1.0231815394945443E-12,
+        "number_r17": "1.0231815394945443E-12",
+        "general_text": "1.02318153949454E-12",
+        "display_text": "1.02318E-12"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0019",
+      "formula": "=10000+1E-11-10000",
+      "block": 2,
+      "block_label": "operand magnitude decades at a fixed 1e-15 relative residue",
+      "tags": [
+        "sweep",
+        "operand-decade"
+      ],
+      "note": "operand 1e4",
+      "stored_formula": "=10000+0.00000000001-10000",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0020",
+      "formula": "=100000+1E-10-100000",
+      "block": 2,
+      "block_label": "operand magnitude decades at a fixed 1e-15 relative residue",
+      "tags": [
+        "sweep",
+        "operand-decade"
+      ],
+      "note": "operand 1e5",
+      "stored_formula": "=100000+0.0000000001-100000",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0021",
+      "formula": "=1000000+1E-9-1000000",
+      "block": 2,
+      "block_label": "operand magnitude decades at a fixed 1e-15 relative residue",
+      "tags": [
+        "sweep",
+        "operand-decade"
+      ],
+      "note": "operand 1e6 -- kept in the first capture",
+      "stored_formula": "=1000000+0.000000001-1000000",
+      "observed": {
+        "kind": "number",
+        "number": 1.0477378964424133E-09,
+        "number_r17": "1.0477378964424133E-09",
+        "general_text": "1.04773789644241E-09",
+        "display_text": "1.04774E-09"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0022",
+      "formula": "=10000000+1E-8-10000000",
+      "block": 2,
+      "block_label": "operand magnitude decades at a fixed 1e-15 relative residue",
+      "tags": [
+        "sweep",
+        "operand-decade"
+      ],
+      "note": "operand 1e7",
+      "stored_formula": "=10000000+0.00000001-10000000",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0023",
+      "formula": "=1E9+1E-6-1E9",
+      "block": 2,
+      "block_label": "operand magnitude decades at a fixed 1e-15 relative residue",
+      "tags": [
+        "sweep",
+        "operand-decade"
+      ],
+      "note": "operand 1e9",
+      "stored_formula": "=1000000000+0.000001-1000000000",
+      "observed": {
+        "kind": "number",
+        "number": 9.5367431640625E-07,
+        "number_r17": "9.5367431640625E-07",
+        "general_text": "9.5367431640625E-07",
+        "display_text": "9.53674E-07"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0024",
+      "formula": "=1E12+0.001-1E12",
+      "block": 2,
+      "block_label": "operand magnitude decades at a fixed 1e-15 relative residue",
+      "tags": [
+        "sweep",
+        "operand-decade"
+      ],
+      "note": "operand 1e12",
+      "stored_formula": "=1000000000000+0.001-1000000000000",
+      "observed": {
+        "kind": "number",
+        "number": 0.0009765625,
+        "number_r17": "0.0009765625",
+        "general_text": "0.0009765625",
+        "display_text": "0.000976563"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0025",
+      "formula": "=1E15+1-1E15",
+      "block": 2,
+      "block_label": "operand magnitude decades at a fixed 1e-15 relative residue",
+      "tags": [
+        "sweep",
+        "operand-decade"
+      ],
+      "note": "operand 1e15 -- kept in the first capture",
+      "stored_formula": "=1000000000000000+1-1000000000000000",
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0026",
+      "formula": "=0.1+1E-16-0.1",
+      "block": 2,
+      "block_label": "operand magnitude decades at a fixed 1e-15 relative residue",
+      "tags": [
+        "sweep",
+        "operand-decade"
+      ],
+      "note": "operand 1e-1",
+      "stored_formula": "=0.1+0.0000000000000001-0.1",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0027",
+      "formula": "=0.001+1E-18-0.001",
+      "block": 2,
+      "block_label": "operand magnitude decades at a fixed 1e-15 relative residue",
+      "tags": [
+        "sweep",
+        "operand-decade"
+      ],
+      "note": "operand 1e-3",
+      "stored_formula": "=0.001+0.000000000000000001-0.001",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0028",
+      "formula": "=1E-6+1E-21-1E-6",
+      "block": 2,
+      "block_label": "operand magnitude decades at a fixed 1e-15 relative residue",
+      "tags": [
+        "sweep",
+        "operand-decade"
+      ],
+      "note": "operand 1e-6",
+      "stored_formula": "=0.000001+1E-21-0.000001",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0029",
+      "formula": "=A1+2^-52-A1",
+      "block": 3,
+      "block_label": "residue in ULPs of the operand",
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 1000000
+        },
+        {
+          "ref": "A3",
+          "value": 1E+15
+        }
+      ],
+      "tags": [
+        "sweep",
+        "ulp"
+      ],
+      "note": "operand 1, residue 2 ULP",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0030",
+      "formula": "=A1+2^-51-A1",
+      "block": 3,
+      "block_label": "residue in ULPs of the operand",
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 1000000
+        },
+        {
+          "ref": "A3",
+          "value": 1E+15
+        }
+      ],
+      "tags": [
+        "sweep",
+        "ulp"
+      ],
+      "note": "4 ULP",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0031",
+      "formula": "=A1+2^-50-A1",
+      "block": 3,
+      "block_label": "residue in ULPs of the operand",
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 1000000
+        },
+        {
+          "ref": "A3",
+          "value": 1E+15
+        }
+      ],
+      "tags": [
+        "sweep",
+        "ulp"
+      ],
+      "note": "8 ULP",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0032",
+      "formula": "=A1+2^-48-A1",
+      "block": 3,
+      "block_label": "residue in ULPs of the operand",
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 1000000
+        },
+        {
+          "ref": "A3",
+          "value": 1E+15
+        }
+      ],
+      "tags": [
+        "sweep",
+        "ulp"
+      ],
+      "note": "32 ULP",
+      "observed": {
+        "kind": "number",
+        "number": 3.5527136788005009E-15,
+        "number_r17": "3.5527136788005009E-15",
+        "general_text": "3.5527136788005E-15",
+        "display_text": "3.55271E-15"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0033",
+      "formula": "=A1+2^-46-A1",
+      "block": 3,
+      "block_label": "residue in ULPs of the operand",
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 1000000
+        },
+        {
+          "ref": "A3",
+          "value": 1E+15
+        }
+      ],
+      "tags": [
+        "sweep",
+        "ulp"
+      ],
+      "note": "128 ULP",
+      "observed": {
+        "kind": "number",
+        "number": 1.4210854715202004E-14,
+        "number_r17": "1.4210854715202004E-14",
+        "general_text": "1.4210854715202E-14",
+        "display_text": "1.42109E-14"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0034",
+      "formula": "=A1+2^-44-A1",
+      "block": 3,
+      "block_label": "residue in ULPs of the operand",
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 1000000
+        },
+        {
+          "ref": "A3",
+          "value": 1E+15
+        }
+      ],
+      "tags": [
+        "sweep",
+        "ulp"
+      ],
+      "note": "512 ULP",
+      "observed": {
+        "kind": "number",
+        "number": 5.6843418860808015E-14,
+        "number_r17": "5.6843418860808015E-14",
+        "general_text": "5.6843418860808E-14",
+        "display_text": "5.68434E-14"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0035",
+      "formula": "=A1+2^-40-A1",
+      "block": 3,
+      "block_label": "residue in ULPs of the operand",
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 1000000
+        },
+        {
+          "ref": "A3",
+          "value": 1E+15
+        }
+      ],
+      "tags": [
+        "sweep",
+        "ulp"
+      ],
+      "note": "8192 ULP",
+      "observed": {
+        "kind": "number",
+        "number": 9.0949470177292824E-13,
+        "number_r17": "9.0949470177292824E-13",
+        "general_text": "9.09494701772928E-13",
+        "display_text": "9.09495E-13"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0036",
+      "formula": "=A2+2^-32-A2",
+      "block": 3,
+      "block_label": "residue in ULPs of the operand",
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 1000000
+        },
+        {
+          "ref": "A3",
+          "value": 1E+15
+        }
+      ],
+      "tags": [
+        "sweep",
+        "ulp"
+      ],
+      "note": "operand 1e6",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0037",
+      "formula": "=A2+2^-28-A2",
+      "block": 3,
+      "block_label": "residue in ULPs of the operand",
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 1000000
+        },
+        {
+          "ref": "A3",
+          "value": 1E+15
+        }
+      ],
+      "tags": [
+        "sweep",
+        "ulp"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 3.7252902984619141E-09,
+        "number_r17": "3.7252902984619141E-09",
+        "general_text": "3.72529029846191E-09",
+        "display_text": "3.72529E-09"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0038",
+      "formula": "=A2+2^-24-A2",
+      "block": 3,
+      "block_label": "residue in ULPs of the operand",
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 1000000
+        },
+        {
+          "ref": "A3",
+          "value": 1E+15
+        }
+      ],
+      "tags": [
+        "sweep",
+        "ulp"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 5.9604644775390625E-08,
+        "number_r17": "5.9604644775390625E-08",
+        "general_text": "5.96046447753906E-08",
+        "display_text": "5.96046E-08"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0039",
+      "formula": "=A3+1-A3",
+      "block": 3,
+      "block_label": "residue in ULPs of the operand",
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 1000000
+        },
+        {
+          "ref": "A3",
+          "value": 1E+15
+        }
+      ],
+      "tags": [
+        "sweep",
+        "ulp"
+      ],
+      "note": "operand 1e15",
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0040",
+      "formula": "=A3+2-A3",
+      "block": 3,
+      "block_label": "residue in ULPs of the operand",
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 1000000
+        },
+        {
+          "ref": "A3",
+          "value": 1E+15
+        }
+      ],
+      "tags": [
+        "sweep",
+        "ulp"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 2,
+        "number_r17": "2",
+        "general_text": "2",
+        "display_text": "2"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0041",
+      "formula": "=A3+8-A3",
+      "block": 3,
+      "block_label": "residue in ULPs of the operand",
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1
+        },
+        {
+          "ref": "A2",
+          "value": 1000000
+        },
+        {
+          "ref": "A3",
+          "value": 1E+15
+        }
+      ],
+      "tags": [
+        "sweep",
+        "ulp"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 8,
+        "number_r17": "8",
+        "general_text": "8",
+        "display_text": "8"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0042",
+      "formula": "=0.1+0.2-0.3",
+      "block": 4,
+      "block_label": "is the zero in the value or only in the result",
+      "tags": [
+        "final-adjust"
+      ],
+      "note": "baseline: 0",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0043",
+      "formula": "=(0.1+0.2-0.3)",
+      "block": 4,
+      "block_label": "is the zero in the value or only in the result",
+      "tags": [
+        "final-adjust"
+      ],
+      "note": "parenthesised: still final",
+      "observed": {
+        "kind": "number",
+        "number": 5.5511151231257827E-17,
+        "number_r17": "5.5511151231257827E-17",
+        "general_text": "5.55111512312578E-17",
+        "display_text": "5.55112E-17"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0044",
+      "formula": "=+(0.1+0.2-0.3)",
+      "block": 4,
+      "block_label": "is the zero in the value or only in the result",
+      "tags": [
+        "final-adjust"
+      ],
+      "note": "unary plus after the subtraction",
+      "observed": {
+        "kind": "number",
+        "number": 5.5511151231257827E-17,
+        "number_r17": "5.5511151231257827E-17",
+        "general_text": "5.55111512312578E-17",
+        "display_text": "5.55112E-17"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0045",
+      "formula": "=-(0.1+0.2-0.3)",
+      "block": 4,
+      "block_label": "is the zero in the value or only in the result",
+      "tags": [
+        "final-adjust"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": -5.5511151231257827E-17,
+        "number_r17": "-5.5511151231257827E-17",
+        "general_text": "-5.55111512312578E-17",
+        "display_text": "-5.55112E-17"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0046",
+      "formula": "=1/(0.1+0.2-0.3)",
+      "block": 4,
+      "block_label": "is the zero in the value or only in the result",
+      "tags": [
+        "final-adjust"
+      ],
+      "note": "the residue reappears: 2^54",
+      "observed": {
+        "kind": "number",
+        "number": 18014398509481984,
+        "number_r17": "18014398509481984",
+        "general_text": "18014398509482000",
+        "display_text": "1.80144E+16"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0047",
+      "formula": "=ABS(0.1+0.2-0.3)",
+      "block": 4,
+      "block_label": "is the zero in the value or only in the result",
+      "tags": [
+        "final-adjust"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 5.5511151231257827E-17,
+        "number_r17": "5.5511151231257827E-17",
+        "general_text": "5.55111512312578E-17",
+        "display_text": "5.55112E-17"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0048",
+      "formula": "=ABS(0.1+0.2-0.3)>0",
+      "block": 4,
+      "block_label": "is the zero in the value or only in the result",
+      "tags": [
+        "final-adjust"
+      ],
+      "note": "TRUE in the first capture",
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0049",
+      "formula": "=(0.1+0.2-0.3)=0",
+      "block": 4,
+      "block_label": "is the zero in the value or only in the result",
+      "tags": [
+        "final-adjust"
+      ],
+      "note": "FALSE in the first capture",
+      "observed": {
+        "kind": "logical",
+        "logical": false,
+        "general_text": "FALSE",
+        "display_text": "FALSE"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0050",
+      "formula": "=(0.1+0.2-0.3)*1",
+      "block": 4,
+      "block_label": "is the zero in the value or only in the result",
+      "tags": [
+        "final-adjust"
+      ],
+      "note": "multiplying by one is not a no-op here",
+      "observed": {
+        "kind": "number",
+        "number": 5.5511151231257827E-17,
+        "number_r17": "5.5511151231257827E-17",
+        "general_text": "5.55111512312578E-17",
+        "display_text": "5.55112E-17"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0051",
+      "formula": "=(0.1+0.2-0.3)+0",
+      "block": 4,
+      "block_label": "is the zero in the value or only in the result",
+      "tags": [
+        "final-adjust"
+      ],
+      "note": "and the last op is an addition again",
+      "observed": {
+        "kind": "number",
+        "number": 5.5511151231257827E-17,
+        "number_r17": "5.5511151231257827E-17",
+        "general_text": "5.55111512312578E-17",
+        "display_text": "5.55112E-17"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0052",
+      "formula": "=(0.1+0.2-0.3)-0",
+      "block": 4,
+      "block_label": "is the zero in the value or only in the result",
+      "tags": [
+        "final-adjust"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 5.5511151231257827E-17,
+        "number_r17": "5.5511151231257827E-17",
+        "general_text": "5.55111512312578E-17",
+        "display_text": "5.55112E-17"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0053",
+      "formula": "=(0.1+0.2-0.3)*1E17",
+      "block": 4,
+      "block_label": "is the zero in the value or only in the result",
+      "tags": [
+        "final-adjust"
+      ],
+      "stored_formula": "=(0.1+0.2-0.3)*100000000000000000",
+      "observed": {
+        "kind": "number",
+        "number": 5.5511151231257827,
+        "number_r17": "5.5511151231257827",
+        "general_text": "5.55111512312578",
+        "display_text": "5.551115123"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0054",
+      "formula": "=SIGN(0.1+0.2-0.3)",
+      "block": 4,
+      "block_label": "is the zero in the value or only in the result",
+      "tags": [
+        "final-adjust"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0055",
+      "formula": "=ISNUMBER(1/(0.1+0.2-0.3))",
+      "block": 4,
+      "block_label": "is the zero in the value or only in the result",
+      "tags": [
+        "final-adjust"
+      ],
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0056",
+      "formula": "=IF(0.1+0.2-0.3=0,\"zero\",\"nonzero\")",
+      "block": 4,
+      "block_label": "is the zero in the value or only in the result",
+      "tags": [
+        "final-adjust"
+      ],
+      "note": "the form a user would actually write",
+      "observed": {
+        "kind": "text",
+        "text": "nonzero",
+        "general_text": "nonzero",
+        "display_text": "nonzero"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0057",
+      "formula": "=IF(0.1+0.2-0.3,\"truthy\",\"falsy\")",
+      "block": 4,
+      "block_label": "is the zero in the value or only in the result",
+      "tags": [
+        "final-adjust"
+      ],
+      "observed": {
+        "kind": "text",
+        "text": "truthy",
+        "general_text": "truthy",
+        "display_text": "truthy"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0058",
+      "formula": "=ROUND(0.1+0.2-0.3,20)",
+      "block": 4,
+      "block_label": "is the zero in the value or only in the result",
+      "tags": [
+        "final-adjust"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 5.551E-17,
+        "number_r17": "5.551E-17",
+        "general_text": "5.551E-17",
+        "display_text": "5.551E-17"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0059",
+      "formula": "=TEXT(0.1+0.2-0.3,\"0.00000000000000000000\")",
+      "block": 4,
+      "block_label": "is the zero in the value or only in the result",
+      "tags": [
+        "final-adjust"
+      ],
+      "note": "does TEXT see the residue",
+      "observed": {
+        "kind": "text",
+        "text": "0.00000000000000005551",
+        "general_text": "0.00000000000000005551",
+        "display_text": "0.00000000000000005551"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0060",
+      "formula": "=A1",
+      "block": 5,
+      "block_label": "the residue routed through a cell rather than an expression",
+      "fixture": [
+        {
+          "ref": "A1",
+          "formula": "=0.1+0.2-0.3"
+        },
+        {
+          "ref": "A2",
+          "value": 0.1
+        },
+        {
+          "ref": "A3",
+          "value": 0.2
+        },
+        {
+          "ref": "A4",
+          "value": 0.3
+        }
+      ],
+      "tags": [
+        "final-adjust",
+        "via-cell"
+      ],
+      "note": "reading the adjusted cell",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0061",
+      "formula": "=A1=0",
+      "block": 5,
+      "block_label": "the residue routed through a cell rather than an expression",
+      "fixture": [
+        {
+          "ref": "A1",
+          "formula": "=0.1+0.2-0.3"
+        },
+        {
+          "ref": "A2",
+          "value": 0.1
+        },
+        {
+          "ref": "A3",
+          "value": 0.2
+        },
+        {
+          "ref": "A4",
+          "value": 0.3
+        }
+      ],
+      "tags": [
+        "final-adjust",
+        "via-cell"
+      ],
+      "note": "is the stored cell value a true zero",
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0062",
+      "formula": "=1/A1",
+      "block": 5,
+      "block_label": "the residue routed through a cell rather than an expression",
+      "fixture": [
+        {
+          "ref": "A1",
+          "formula": "=0.1+0.2-0.3"
+        },
+        {
+          "ref": "A2",
+          "value": 0.1
+        },
+        {
+          "ref": "A3",
+          "value": 0.2
+        },
+        {
+          "ref": "A4",
+          "value": 0.3
+        }
+      ],
+      "tags": [
+        "final-adjust",
+        "via-cell"
+      ],
+      "note": "the decisive case: #DIV/0! means the cell really stores 0",
+      "observed": {
+        "kind": "error",
+        "error": "#DIV/0!",
+        "error_type_code": 2,
+        "cverr": -2146826281,
+        "general_text": "",
+        "display_text": "#DIV/0!"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0063",
+      "formula": "=A1*1E17",
+      "block": 5,
+      "block_label": "the residue routed through a cell rather than an expression",
+      "fixture": [
+        {
+          "ref": "A1",
+          "formula": "=0.1+0.2-0.3"
+        },
+        {
+          "ref": "A2",
+          "value": 0.1
+        },
+        {
+          "ref": "A3",
+          "value": 0.2
+        },
+        {
+          "ref": "A4",
+          "value": 0.3
+        }
+      ],
+      "tags": [
+        "final-adjust",
+        "via-cell"
+      ],
+      "stored_formula": "=A1*100000000000000000",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0064",
+      "formula": "=ISNUMBER(1/A1)",
+      "block": 5,
+      "block_label": "the residue routed through a cell rather than an expression",
+      "fixture": [
+        {
+          "ref": "A1",
+          "formula": "=0.1+0.2-0.3"
+        },
+        {
+          "ref": "A2",
+          "value": 0.1
+        },
+        {
+          "ref": "A3",
+          "value": 0.2
+        },
+        {
+          "ref": "A4",
+          "value": 0.3
+        }
+      ],
+      "tags": [
+        "final-adjust",
+        "via-cell"
+      ],
+      "observed": {
+        "kind": "logical",
+        "logical": false,
+        "general_text": "FALSE",
+        "display_text": "FALSE"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0065",
+      "formula": "=A2+A3-A4",
+      "block": 5,
+      "block_label": "the residue routed through a cell rather than an expression",
+      "fixture": [
+        {
+          "ref": "A1",
+          "formula": "=0.1+0.2-0.3"
+        },
+        {
+          "ref": "A2",
+          "value": 0.1
+        },
+        {
+          "ref": "A3",
+          "value": 0.2
+        },
+        {
+          "ref": "A4",
+          "value": 0.3
+        }
+      ],
+      "tags": [
+        "final-adjust",
+        "via-cell"
+      ],
+      "note": "the same arithmetic over cell references",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0066",
+      "formula": "=1/(A2+A3-A4)",
+      "block": 5,
+      "block_label": "the residue routed through a cell rather than an expression",
+      "fixture": [
+        {
+          "ref": "A1",
+          "formula": "=0.1+0.2-0.3"
+        },
+        {
+          "ref": "A2",
+          "value": 0.1
+        },
+        {
+          "ref": "A3",
+          "value": 0.2
+        },
+        {
+          "ref": "A4",
+          "value": 0.3
+        }
+      ],
+      "tags": [
+        "final-adjust",
+        "via-cell"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 18014398509481984,
+        "number_r17": "18014398509481984",
+        "general_text": "18014398509482000",
+        "display_text": "1.80144E+16"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0067",
+      "formula": "=SUM(A2:A3)-A4",
+      "block": 5,
+      "block_label": "the residue routed through a cell rather than an expression",
+      "fixture": [
+        {
+          "ref": "A1",
+          "formula": "=0.1+0.2-0.3"
+        },
+        {
+          "ref": "A2",
+          "value": 0.1
+        },
+        {
+          "ref": "A3",
+          "value": 0.2
+        },
+        {
+          "ref": "A4",
+          "value": 0.3
+        }
+      ],
+      "tags": [
+        "final-adjust",
+        "via-cell"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_cancellation_sweep/0068",
+      "formula": "=1/(SUM(A2:A3)-A4)",
+      "block": 5,
+      "block_label": "the residue routed through a cell rather than an expression",
+      "fixture": [
+        {
+          "ref": "A1",
+          "formula": "=0.1+0.2-0.3"
+        },
+        {
+          "ref": "A2",
+          "value": 0.1
+        },
+        {
+          "ref": "A3",
+          "value": 0.2
+        },
+        {
+          "ref": "A4",
+          "value": 0.3
+        }
+      ],
+      "tags": [
+        "final-adjust",
+        "via-cell"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 18014398509481984,
+        "number_r17": "18014398509481984",
+        "general_text": "18014398509482000",
+        "display_text": "1.80144E+16"
+      }
+    }
+  ]
+}

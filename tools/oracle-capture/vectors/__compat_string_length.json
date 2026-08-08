@@ -1,0 +1,2780 @@
+{
+  "schema": "ehkatra.oracle.vectors/1",
+  "function": "__compat_string_length",
+  "group": "text",
+  "doc": "Code units versus Unicode scalars, cross-checked between a UNICHAR formula and a cell seeded with the same code points.",
+  "grid_source": "93-unicode-length.psd1",
+  "provenance": {
+    "source": "excel-com",
+    "oracle": true,
+    "excel_version": "16.0",
+    "excel_build": "20228",
+    "excel_product": "Microsoft Excel",
+    "excel_calc_version": "191029",
+    "date_system": "1900",
+    "ui_language_id": 16393,
+    "list_separator": ",",
+    "decimal_separator": ".",
+    "thousands_separator": ",",
+    "os": "Microsoft Windows 11 Home Single Language 10.0.26200",
+    "powershell": "5.1.26100.8875",
+    "harness_version": "1.0.0",
+    "captured_utc": "2026-08-08T07:29:37Z",
+    "probe_column_width": 80,
+    "catalogue_source": "crates/usk-formula/src/functions.rs CATALOGUE"
+  },
+  "case_count": 31,
+  "cases": [
+    {
+      "id": "__compat_string_length/0001",
+      "formula": "=LEN(UNICHAR(128512))",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "astral",
+        "via-unichar"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "__compat_string_length/0002",
+      "formula": "=LEN(UNICHAR(128512)&\"x\")",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "astral",
+        "via-unichar"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 2,
+        "number_r17": "2",
+        "general_text": "2",
+        "display_text": "2"
+      }
+    },
+    {
+      "id": "__compat_string_length/0003",
+      "formula": "=LEN(UNICHAR(233))",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "via-unichar"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "__compat_string_length/0004",
+      "formula": "=LEN(UNICHAR(101)&UNICHAR(769))",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "via-unichar"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 2,
+        "number_r17": "2",
+        "general_text": "2",
+        "display_text": "2"
+      }
+    },
+    {
+      "id": "__compat_string_length/0005",
+      "formula": "=LEN(A1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "astral",
+        "via-cell"
+      ],
+      "note": "the decisive comparison against LEN(UNICHAR(128512))",
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "__compat_string_length/0006",
+      "formula": "=LEN(A2)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "astral",
+        "via-cell"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 2,
+        "number_r17": "2",
+        "general_text": "2",
+        "display_text": "2"
+      }
+    },
+    {
+      "id": "__compat_string_length/0007",
+      "formula": "=LEN(A3)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "via-cell"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "__compat_string_length/0008",
+      "formula": "=LEN(A4)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "via-cell"
+      ],
+      "note": "combining mark: two scalars, one grapheme",
+      "observed": {
+        "kind": "number",
+        "number": 2,
+        "number_r17": "2",
+        "general_text": "2",
+        "display_text": "2"
+      }
+    },
+    {
+      "id": "__compat_string_length/0009",
+      "formula": "=LEN(A5)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "via-cell"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 2,
+        "number_r17": "2",
+        "general_text": "2",
+        "display_text": "2"
+      }
+    },
+    {
+      "id": "__compat_string_length/0010",
+      "formula": "=LEN(B1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "via-cell"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "__compat_string_length/0011",
+      "formula": "=LEN(B3)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "astral",
+        "via-cell"
+      ],
+      "note": "written as an explicit surrogate pair rather than as one scalar",
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "__compat_string_length/0012",
+      "formula": "=LEN(B4)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "astral",
+        "via-cell"
+      ],
+      "note": "3 scalars, 6 UTF-16 code units",
+      "observed": {
+        "kind": "number",
+        "number": 3,
+        "number_r17": "3",
+        "general_text": "3",
+        "display_text": "3"
+      }
+    },
+    {
+      "id": "__compat_string_length/0013",
+      "formula": "=LEN(B5)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "via-cell"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "__compat_string_length/0014",
+      "formula": "=LEFT(A2,1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "astral",
+        "offset"
+      ],
+      "note": "does taking one unit split the pair",
+      "observed": {
+        "kind": "text",
+        "text": "\ud83d\ude00",
+        "general_text": "\ud83d\ude00",
+        "display_text": "\ud83d\ude00"
+      }
+    },
+    {
+      "id": "__compat_string_length/0015",
+      "formula": "=LEN(LEFT(A2,1))",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "astral",
+        "offset"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "__compat_string_length/0016",
+      "formula": "=LEN(RIGHT(A2,1))",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "astral",
+        "offset"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "__compat_string_length/0017",
+      "formula": "=MID(A2,2,1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "astral",
+        "offset"
+      ],
+      "observed": {
+        "kind": "text",
+        "text": "x",
+        "general_text": "x",
+        "display_text": "x"
+      }
+    },
+    {
+      "id": "__compat_string_length/0018",
+      "formula": "=LEN(MID(A2,2,1))",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "astral",
+        "offset"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "__compat_string_length/0019",
+      "formula": "=FIND(\"x\",A2)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "astral",
+        "offset"
+      ],
+      "note": "2 if scalar-based, 3 if code-unit-based",
+      "observed": {
+        "kind": "number",
+        "number": 2,
+        "number_r17": "2",
+        "general_text": "2",
+        "display_text": "2"
+      }
+    },
+    {
+      "id": "__compat_string_length/0020",
+      "formula": "=SEARCH(\"x\",A2)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "astral",
+        "offset"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 2,
+        "number_r17": "2",
+        "general_text": "2",
+        "display_text": "2"
+      }
+    },
+    {
+      "id": "__compat_string_length/0021",
+      "formula": "=LEN(MID(B4,2,1))",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "astral",
+        "offset"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "__compat_string_length/0022",
+      "formula": "=UNICODE(A1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "astral"
+      ],
+      "note": "the code point Excel reports for the astral character",
+      "observed": {
+        "kind": "number",
+        "number": 128512,
+        "number_r17": "128512",
+        "general_text": "128512",
+        "display_text": "128512"
+      }
+    },
+    {
+      "id": "__compat_string_length/0023",
+      "formula": "=UNICODE(B3)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "astral"
+      ],
+      "note": "and for the same thing written as a surrogate pair",
+      "observed": {
+        "kind": "number",
+        "number": 128512,
+        "number_r17": "128512",
+        "general_text": "128512",
+        "display_text": "128512"
+      }
+    },
+    {
+      "id": "__compat_string_length/0024",
+      "formula": "=CODE(A1)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "astral"
+      ],
+      "note": "the legacy single-byte function",
+      "observed": {
+        "kind": "number",
+        "number": 63,
+        "number_r17": "63",
+        "general_text": "63",
+        "display_text": "63"
+      }
+    },
+    {
+      "id": "__compat_string_length/0025",
+      "formula": "=EXACT(A1,B3)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "astral"
+      ],
+      "note": "are the two spellings the same string",
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_string_length/0026",
+      "formula": "=EXACT(A1,UNICHAR(128512))",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "astral"
+      ],
+      "note": "and does UNICHAR produce that same string",
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_string_length/0027",
+      "formula": "=EXACT(A3,A4)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode"
+      ],
+      "note": "no NFC normalisation",
+      "observed": {
+        "kind": "logical",
+        "logical": false,
+        "general_text": "FALSE",
+        "display_text": "FALSE"
+      }
+    },
+    {
+      "id": "__compat_string_length/0028",
+      "formula": "=LEN(TRIM(B2))",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "via-cell"
+      ],
+      "note": "NBSP is not stripped by TRIM",
+      "observed": {
+        "kind": "number",
+        "number": 5,
+        "number_r17": "5",
+        "general_text": "5",
+        "display_text": "5"
+      }
+    },
+    {
+      "id": "__compat_string_length/0029",
+      "formula": "=LEN(TRIM(UNICHAR(160)&\"abc\"&UNICHAR(160)))",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "via-unichar"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 5,
+        "number_r17": "5",
+        "general_text": "5",
+        "display_text": "5"
+      }
+    },
+    {
+      "id": "__compat_string_length/0030",
+      "formula": "=LEN(CLEAN(B2))",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "via-cell"
+      ],
+      "note": "CLEAN removes control characters, not NBSP",
+      "observed": {
+        "kind": "number",
+        "number": 5,
+        "number_r17": "5",
+        "general_text": "5",
+        "display_text": "5"
+      }
+    },
+    {
+      "id": "__compat_string_length/0031",
+      "formula": "=LEN(SUBSTITUTE(B2,UNICHAR(160),\"\"))",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "codepoints": [
+            128512
+          ]
+        },
+        {
+          "ref": "A2",
+          "codepoints": [
+            128512,
+            120
+          ]
+        },
+        {
+          "ref": "A3",
+          "codepoints": [
+            233
+          ]
+        },
+        {
+          "ref": "A4",
+          "codepoints": [
+            101,
+            769
+          ]
+        },
+        {
+          "ref": "A5",
+          "codepoints": [
+            20320,
+            22909
+          ]
+        },
+        {
+          "ref": "B1",
+          "codepoints": [
+            160
+          ]
+        },
+        {
+          "ref": "B2",
+          "codepoints": [
+            160,
+            97,
+            98,
+            99,
+            160
+          ]
+        },
+        {
+          "ref": "B3",
+          "codepoints": [
+            55357,
+            56832
+          ]
+        },
+        {
+          "ref": "B4",
+          "codepoints": [
+            128512,
+            128513,
+            128514
+          ]
+        },
+        {
+          "ref": "B5",
+          "codepoints": [
+            223
+          ]
+        }
+      ],
+      "tags": [
+        "unicode",
+        "via-cell"
+      ],
+      "note": "the idiom users actually need",
+      "observed": {
+        "kind": "number",
+        "number": 3,
+        "number_r17": "3",
+        "general_text": "3",
+        "display_text": "3"
+      }
+    }
+  ]
+}

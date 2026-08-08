@@ -1,0 +1,381 @@
+{
+  "schema": "ehkatra.oracle.vectors/1",
+  "function": "__compat_1900_leap",
+  "group": "compat-catalog",
+  "doc": "The phantom 29 February 1900, approached from serial arithmetic, DATE, the date-part functions, WEEKDAY, DATEVALUE and text formatting. Serial 60 is the fault line; every vector here says which side of it a given path lands on.",
+  "grid_source": "90-compat-catalog.psd1",
+  "provenance": {
+    "source": "excel-com",
+    "oracle": true,
+    "excel_version": "16.0",
+    "excel_build": "20228",
+    "excel_product": "Microsoft Excel",
+    "excel_calc_version": "191029",
+    "date_system": "1904",
+    "ui_language_id": 16393,
+    "list_separator": ",",
+    "decimal_separator": ".",
+    "thousands_separator": ",",
+    "os": "Microsoft Windows 11 Home Single Language 10.0.26200",
+    "powershell": "5.1.26100.8875",
+    "harness_version": "1.0.0",
+    "captured_utc": "2026-08-08T04:01:33Z",
+    "probe_column_width": 80,
+    "catalogue_source": "crates/usk-formula/src/functions.rs CATALOGUE"
+  },
+  "case_count": 22,
+  "cases": [
+    {
+      "id": "__compat_1900_leap/0001",
+      "formula": "=DATE(1900,2,29)",
+      "block": 1,
+      "tags": [
+        "1900-leap"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "__compat_1900_leap/0002",
+      "formula": "=DAY(60)",
+      "block": 1,
+      "tags": [
+        "1900-leap"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 1,
+        "number_r17": "1",
+        "general_text": "1",
+        "display_text": "1"
+      }
+    },
+    {
+      "id": "__compat_1900_leap/0003",
+      "formula": "=MONTH(60)",
+      "block": 1,
+      "tags": [
+        "1900-leap"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 3,
+        "number_r17": "3",
+        "general_text": "3",
+        "display_text": "3"
+      }
+    },
+    {
+      "id": "__compat_1900_leap/0004",
+      "formula": "=YEAR(60)",
+      "block": 1,
+      "tags": [
+        "1900-leap"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 1904,
+        "number_r17": "1904",
+        "general_text": "1904",
+        "display_text": "1904"
+      }
+    },
+    {
+      "id": "__compat_1900_leap/0005",
+      "formula": "=TEXT(60,\"yyyy-mm-dd\")",
+      "block": 1,
+      "tags": [
+        "1900-leap",
+        "display"
+      ],
+      "observed": {
+        "kind": "text",
+        "text": "1904-03-01",
+        "general_text": "1904-03-01",
+        "display_text": "1904-03-01"
+      }
+    },
+    {
+      "id": "__compat_1900_leap/0006",
+      "formula": "=TEXT(59,\"yyyy-mm-dd\")",
+      "block": 1,
+      "tags": [
+        "1900-leap",
+        "display"
+      ],
+      "observed": {
+        "kind": "text",
+        "text": "1904-02-29",
+        "general_text": "1904-02-29",
+        "display_text": "1904-02-29"
+      }
+    },
+    {
+      "id": "__compat_1900_leap/0007",
+      "formula": "=TEXT(61,\"yyyy-mm-dd\")",
+      "block": 1,
+      "tags": [
+        "1900-leap",
+        "display"
+      ],
+      "observed": {
+        "kind": "text",
+        "text": "1904-03-02",
+        "general_text": "1904-03-02",
+        "display_text": "1904-03-02"
+      }
+    },
+    {
+      "id": "__compat_1900_leap/0008",
+      "formula": "=TEXT(1,\"yyyy-mm-dd\")",
+      "block": 1,
+      "tags": [
+        "1900-leap",
+        "display"
+      ],
+      "note": "the epoch",
+      "observed": {
+        "kind": "text",
+        "text": "1904-01-02",
+        "general_text": "1904-01-02",
+        "display_text": "1904-01-02"
+      }
+    },
+    {
+      "id": "__compat_1900_leap/0009",
+      "formula": "=TEXT(0,\"yyyy-mm-dd\")",
+      "block": 1,
+      "tags": [
+        "1900-leap",
+        "display"
+      ],
+      "note": "serial 0 formatted as a date",
+      "observed": {
+        "kind": "text",
+        "text": "1904-01-01",
+        "general_text": "1904-01-01",
+        "display_text": "1904-01-01"
+      }
+    },
+    {
+      "id": "__compat_1900_leap/0010",
+      "formula": "=DATE(1900,3,1)-DATE(1900,2,28)",
+      "block": 1,
+      "tags": [
+        "1900-leap"
+      ],
+      "note": "two days apart, not one",
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "__compat_1900_leap/0011",
+      "formula": "=DATE(1901,1,1)-DATE(1900,1,1)",
+      "block": 1,
+      "tags": [
+        "1900-leap"
+      ],
+      "note": "366 if 1900 is a leap year here, 365 in reality",
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "__compat_1900_leap/0012",
+      "formula": "=DATEVALUE(\"1900-02-29\")",
+      "block": 1,
+      "tags": [
+        "1900-leap"
+      ],
+      "note": "does the parser accept the phantom",
+      "observed": {
+        "kind": "error",
+        "error": "#VALUE!",
+        "error_type_code": 3,
+        "cverr": -2146826273,
+        "general_text": "",
+        "display_text": "#VALUE!"
+      }
+    },
+    {
+      "id": "__compat_1900_leap/0013",
+      "formula": "=DATEVALUE(\"1900-02-28\")",
+      "block": 1,
+      "tags": [
+        "1900-leap"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#VALUE!",
+        "error_type_code": 3,
+        "cverr": -2146826273,
+        "general_text": "",
+        "display_text": "#VALUE!"
+      }
+    },
+    {
+      "id": "__compat_1900_leap/0014",
+      "formula": "=DATEVALUE(\"1900-03-01\")",
+      "block": 1,
+      "tags": [
+        "1900-leap"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#VALUE!",
+        "error_type_code": 3,
+        "cverr": -2146826273,
+        "general_text": "",
+        "display_text": "#VALUE!"
+      }
+    },
+    {
+      "id": "__compat_1900_leap/0015",
+      "formula": "=DATEVALUE(\"2024-02-29\")",
+      "block": 1,
+      "tags": [
+        "1900-leap"
+      ],
+      "note": "a real leap day for contrast",
+      "observed": {
+        "kind": "number",
+        "number": 43889,
+        "number_r17": "43889",
+        "general_text": "43889",
+        "display_text": "43889"
+      }
+    },
+    {
+      "id": "__compat_1900_leap/0016",
+      "formula": "=WEEKDAY(60)",
+      "block": 1,
+      "tags": [
+        "1900-leap"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 3,
+        "number_r17": "3",
+        "general_text": "3",
+        "display_text": "3"
+      }
+    },
+    {
+      "id": "__compat_1900_leap/0017",
+      "formula": "=DATE(1900,2,29)=60",
+      "block": 1,
+      "tags": [
+        "1900-leap"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "__compat_1900_leap/0018",
+      "formula": "=EOMONTH(DATE(1900,2,1),0)",
+      "block": 1,
+      "tags": [
+        "1900-leap"
+      ],
+      "note": "end of February 1900 per Excel",
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "__compat_1900_leap/0019",
+      "formula": "=DAY(EOMONTH(DATE(1900,2,1),0))",
+      "block": 1,
+      "tags": [
+        "1900-leap"
+      ],
+      "note": "28 or 29",
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "__compat_1900_leap/0020",
+      "formula": "=DATE(1900,2,29)-DATE(1900,2,28)",
+      "block": 1,
+      "tags": [
+        "1900-leap"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "__compat_1900_leap/0021",
+      "formula": "=DATE(1900,2,29)+1",
+      "block": 1,
+      "tags": [
+        "1900-leap"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "__compat_1900_leap/0022",
+      "formula": "=TEXT(DATE(1900,2,29),\"dddd\")",
+      "block": 1,
+      "tags": [
+        "1900-leap",
+        "display"
+      ],
+      "note": "a weekday name for a day that never happened",
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    }
+  ]
+}

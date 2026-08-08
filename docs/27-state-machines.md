@@ -12,10 +12,23 @@ SYNCING ──NEED/GIVE exchange──► SYNCING            (anti-entropy loop,
 LIVE ──local op──► LIVE (send OPS)                 (echo suppressed by op id)
 LIVE ──remote OPS──► LIVE (apply, ack watermark)
 LIVE|SYNCING ──transport loss──► BACKOFF(n) ──timer──► HELLO_SENT   (jittered exp backoff, cap 60 s)
+HELLO_SENT|BACKOFF ──transport loss──► DISCONNECTED (session torn down and rebuilt) ──timer──► HELLO_SENT
 LIVE ──StalenessExceeded(180d watermark gap)──► REBASE_REQUIRED ──snapshot+migrate_ops──► SYNCING
 any ──auth revoked──► DISCONNECTED (queued ops retained; never dropped)
 ```
 Forbidden: sending OPS before HelloAck; applying remote ops that fail schema/bounds validation (reject + report, stay LIVE); dropping queued local ops in any transition (DP: never-drop, docs/15).
+
+### 1a. Loop and late-arrival edges (ratified 2026-08-08; see docs/43 D-064 and both addenda)
+Row 10 implemented §1 transition-for-transition and found four (state, event) pairs a real link produces that the table above did not define. They are now part of the specification, stated as the implementation resolves them.
+
+**Transport loss during HELLO_SENT or BACKOFF** — the row added above. There is no live session to move to BACKOFF and, after a retry has already fired, no timer to wait on; the first implementation therefore did nothing and a replica that lost its link mid-handshake wedged in HELLO_SENT permanently (found by W-SYNC-RELAY at 50 replicas: the run diverged and a mid-run kill delivered 1 of 117 queued ops). The session is **torn down and rebuilt from DISCONNECTED**, carrying the durable op log and **every unacknowledged op** across — never-drop survives a teardown for the same reason it survives a process death — and armed with a jittered delay before reconnecting. Reconnection asks the current state which edge is listed (`DISCONNECTED → connect`, `BACKOFF → timer`) rather than assuming one.
+
+**Late or duplicated protocol messages.** These are transport facts, not state changes, and the resolution is uniform: *route by the state that defines the message, discard otherwise.* Discarding a **protocol** message is safe because the next anti-entropy round re-derives whatever it carried; a **local op** is never what gets discarded, which is the never-drop queue's job.
+* `InSync` arriving in LIVE (the session already converged) — **discard**, it is a duplicate.
+* `GIVE` in LIVE, or `OPS` in SYNCING — **one payload, two names**: route to whichever of the `Give`/`RemoteOps` edges the current state defines.
+* `ACK` outside LIVE or SYNCING — **discard**; there is no queue to release in those states.
+
+**The adaptation belongs in the transport shell, not in the machine** (docs/20: L3 changes transport, never semantics). The machine stays closed, and the `debug_assert` below stays with it: keeping it has caught two distinct shell defects — the wedge above, and a reconnect helper that called `connect` from BACKOFF — where widening the machine to "accept anything from anywhere" would have turned both into silent behaviour changes. **That record is the argument: a closed machine moves the cost from debugging a divergence to fixing a caller.**
 
 ## 2. Document lifecycle (container, Row 11)
 ```

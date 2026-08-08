@@ -183,6 +183,247 @@ impl Op {
     pub fn hash(&self) -> blake3::Hash {
         blake3::hash(&self.encode())
     }
+
+    /// Decodes one op from the front of `bytes`, returning it and the number of
+    /// bytes consumed.
+    ///
+    /// The inverse of [`Op::encode`], and the reason Row 10 can put ops on a
+    /// socket at all. Decoding is **total**: every malformed input yields a
+    /// `DecodeError`, never a panic and never a partially-built op (DP-A10).
+    /// Unknown tags are reported rather than skipped — forward preservation
+    /// (DP-A5) needs the op's length to retain it opaquely, and this encoding
+    /// does not yet carry one, so the honest answer today is a named error.
+    /// Recorded as TD-25.
+    pub fn decode(bytes: &[u8]) -> Result<(Op, usize), DecodeError> {
+        let mut r = Reader { bytes, at: 0 };
+        let id = r.opid()?;
+        let lamport = r.u64()?;
+        let payload = match r.u8()? {
+            0x10 => Payload::InsertRow {
+                anchor: r.anchor()?,
+            },
+            0x11 => Payload::DeleteRow {
+                row: RowId(r.opid()?),
+            },
+            0x12 => Payload::InsertCol {
+                anchor: r.anchor()?,
+            },
+            0x13 => Payload::DeleteCol {
+                col: ColId(r.opid()?),
+            },
+            0x14 => Payload::SetCell {
+                row: RowId(r.opid()?),
+                col: ColId(r.opid()?),
+                value: r.value()?,
+            },
+            0x15 => Payload::ClearCell {
+                row: RowId(r.opid()?),
+                col: ColId(r.opid()?),
+            },
+            0x16 => {
+                let row = RowId(r.opid()?);
+                let col = ColId(r.opid()?);
+                let len = r.u32()? as usize;
+                let source = r.utf8(len)?;
+                let count = r.u16()? as usize;
+                let mut bindings = Vec::with_capacity(count.min(1024));
+                for _ in 0..count {
+                    bindings.push(RangeBinding {
+                        row_start: r.opid()?,
+                        row_end: r.opid()?,
+                        col_start: r.opid()?,
+                        col_end: r.opid()?,
+                        anchors: r.u8()?,
+                    });
+                }
+                Payload::SetFormula {
+                    row,
+                    col,
+                    source,
+                    bindings,
+                }
+            }
+            0x17 => Payload::UndeleteRow {
+                row: RowId(r.opid()?),
+            },
+            0x18 => Payload::UndeleteCol {
+                col: ColId(r.opid()?),
+            },
+            tag => return Err(DecodeError::UnknownTag(tag)),
+        };
+        Ok((
+            Op {
+                id,
+                lamport,
+                payload,
+            },
+            r.at,
+        ))
+    }
+}
+
+/// Why a byte string is not an op. Errors are values here too (DP-A10).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum DecodeError {
+    /// The input ended inside a field.
+    Truncated,
+    /// A payload tag this build does not know (see [`Op::decode`], TD-25).
+    UnknownTag(u8),
+    /// A value tag this build does not know.
+    UnknownValueTag(u8),
+    /// Text that is not valid UTF-8.
+    BadUtf8,
+    /// An enum discriminant outside its defined range.
+    BadDiscriminant,
+}
+
+struct Reader<'a> {
+    bytes: &'a [u8],
+    at: usize,
+}
+
+impl Reader<'_> {
+    fn take(&mut self, n: usize) -> Result<&[u8], DecodeError> {
+        let end = self.at.checked_add(n).ok_or(DecodeError::Truncated)?;
+        let slice = self.bytes.get(self.at..end).ok_or(DecodeError::Truncated)?;
+        self.at = end;
+        Ok(slice)
+    }
+
+    fn u8(&mut self) -> Result<u8, DecodeError> {
+        Ok(self.take(1)?[0])
+    }
+
+    fn u16(&mut self) -> Result<u16, DecodeError> {
+        let b = self.take(2)?;
+        Ok(u16::from_be_bytes([b[0], b[1]]))
+    }
+
+    fn u32(&mut self) -> Result<u32, DecodeError> {
+        let b = self.take(4)?;
+        Ok(u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+    }
+
+    fn u64(&mut self) -> Result<u64, DecodeError> {
+        let b = self.take(8)?;
+        let mut a = [0u8; 8];
+        a.copy_from_slice(b);
+        Ok(u64::from_be_bytes(a))
+    }
+
+    fn u128(&mut self) -> Result<u128, DecodeError> {
+        let b = self.take(16)?;
+        let mut a = [0u8; 16];
+        a.copy_from_slice(b);
+        Ok(u128::from_be_bytes(a))
+    }
+
+    fn i128(&mut self) -> Result<i128, DecodeError> {
+        Ok(self.u128()? as i128)
+    }
+
+    fn opid(&mut self) -> Result<OpId, DecodeError> {
+        Ok(OpId {
+            actor: usk_types::ActorId(self.u128()?),
+            counter: self.u64()?,
+        })
+    }
+
+    fn utf8(&mut self, len: usize) -> Result<String, DecodeError> {
+        let b = self.take(len)?;
+        core::str::from_utf8(b)
+            .map(alloc::borrow::ToOwned::to_owned)
+            .map_err(|_| DecodeError::BadUtf8)
+    }
+
+    fn anchor(&mut self) -> Result<Anchor, DecodeError> {
+        match self.u8()? {
+            0x00 => Ok(Anchor::Start),
+            0x01 => Ok(Anchor::After(self.opid()?)),
+            _ => Err(DecodeError::BadDiscriminant),
+        }
+    }
+
+    fn value(&mut self) -> Result<Value, DecodeError> {
+        match self.u8()? {
+            0x00 => Ok(Value::Blank),
+            0x01 => Ok(Value::Bool(false)),
+            0x02 => Ok(Value::Bool(true)),
+            0x03 => Ok(Value::Number(f64::from_bits(self.u64()?))),
+            0x04 => {
+                let len = self.u32()? as usize;
+                Ok(Value::Text(self.utf8(len)?))
+            }
+            0x05 => {
+                let kind = match self.u8()? {
+                    0 => usk_types::ErrorKind::Div0,
+                    1 => usk_types::ErrorKind::Value,
+                    2 => usk_types::ErrorKind::Ref,
+                    3 => usk_types::ErrorKind::Name,
+                    4 => usk_types::ErrorKind::Num,
+                    5 => usk_types::ErrorKind::Na,
+                    6 => usk_types::ErrorKind::Circ,
+                    7 => usk_types::ErrorKind::Spill,
+                    _ => return Err(DecodeError::BadDiscriminant),
+                };
+                Ok(Value::Error(usk_types::CellError {
+                    kind,
+                    origin: self.origin()?,
+                }))
+            }
+            0x06 => {
+                let coefficient = self.i128()?;
+                let b = self.take(2)?;
+                let exponent = i16::from_be_bytes([b[0], b[1]]);
+                // `new` canonicalises, which is a no-op on bytes the encoder
+                // produced (they were canonical already) and a *repair* on
+                // bytes from anywhere else — so a hostile peer cannot smuggle
+                // a second representation of one value past the DP-A4 rule.
+                Ok(Value::Decimal(usk_types::Decimal::new(
+                    coefficient,
+                    exponent,
+                )))
+            }
+            tag => Err(DecodeError::UnknownValueTag(tag)),
+        }
+    }
+
+    fn origin(&mut self) -> Result<usk_types::Origin, DecodeError> {
+        match self.u8()? {
+            0x00 => Ok(usk_types::Origin::Authored),
+            0x01 => Ok(usk_types::Origin::Coercion {
+                from: self.type_tag()?,
+                to: self.type_tag()?,
+            }),
+            0x02 => Ok(usk_types::Origin::Arithmetic { op: self.arith()? }),
+            0x03 => Ok(usk_types::Origin::Propagated),
+            _ => Err(DecodeError::BadDiscriminant),
+        }
+    }
+
+    fn type_tag(&mut self) -> Result<usk_types::TypeTag, DecodeError> {
+        use usk_types::TypeTag::*;
+        Ok(match self.u8()? {
+            0 => Blank,
+            1 => Bool,
+            2 => Number,
+            3 => Decimal,
+            4 => Text,
+            5 => Error,
+            _ => return Err(DecodeError::BadDiscriminant),
+        })
+    }
+
+    fn arith(&mut self) -> Result<usk_types::ArithOp, DecodeError> {
+        use usk_types::ArithOp::*;
+        Ok(match self.u8()? {
+            0 => Add,
+            1 => Sub,
+            2 => Mul,
+            3 => Div,
+            _ => return Err(DecodeError::BadDiscriminant),
+        })
+    }
 }
 
 /// A causally-ordered set of ops. v0.1 keeps the log as a simple grow-only

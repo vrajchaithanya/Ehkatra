@@ -1,0 +1,1033 @@
+{
+  "schema": "ehkatra.oracle.vectors/1",
+  "function": "__compat_precision_limits",
+  "group": "compat-catalog",
+  "doc": "Where 15 significant digits stops being enough, and what Excel does at the edges of the double range: overflow to #NUM! rather than infinity, underflow to zero, and the largest exactly representable integer. The extremes arrive as fixture cells because Excel-s formula parser cannot express them at all -- see __compat_literal_parser.",
+  "grid_source": "90-compat-catalog.psd1",
+  "provenance": {
+    "source": "excel-com",
+    "oracle": true,
+    "excel_version": "16.0",
+    "excel_build": "20228",
+    "excel_product": "Microsoft Excel",
+    "excel_calc_version": "191029",
+    "date_system": "1900",
+    "ui_language_id": 16393,
+    "list_separator": ",",
+    "decimal_separator": ".",
+    "thousands_separator": ",",
+    "os": "Microsoft Windows 11 Home Single Language 10.0.26200",
+    "powershell": "5.1.26100.8875",
+    "harness_version": "1.0.0",
+    "captured_utc": "2026-08-08T07:29:37Z",
+    "probe_column_width": 80,
+    "catalogue_source": "crates/usk-formula/src/functions.rs CATALOGUE"
+  },
+  "case_count": 26,
+  "cases": [
+    {
+      "id": "__compat_precision_limits/0001",
+      "formula": "=A1",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "A2",
+          "value": 1E+308
+        },
+        {
+          "ref": "A3",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "A4",
+          "value": 2.2250738585072014E-308
+        },
+        {
+          "ref": "A5",
+          "value": 9007199254740992
+        }
+      ],
+      "tags": [
+        "precision",
+        "boundary"
+      ],
+      "note": "the largest finite double, seeded via Value2",
+      "observed": {
+        "kind": "number",
+        "number": 1.7976931348623157E+308,
+        "number_r17": "1.7976931348623157E+308",
+        "general_text": "1.7976931348623E+308",
+        "display_text": "1.7977E+308"
+      }
+    },
+    {
+      "id": "__compat_precision_limits/0002",
+      "formula": "=A1*2",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "A2",
+          "value": 1E+308
+        },
+        {
+          "ref": "A3",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "A4",
+          "value": 2.2250738585072014E-308
+        },
+        {
+          "ref": "A5",
+          "value": 9007199254740992
+        }
+      ],
+      "tags": [
+        "precision",
+        "overflow"
+      ],
+      "note": "IEEE gives +Inf; Excel has no infinity",
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "__compat_precision_limits/0003",
+      "formula": "=A2*10",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "A2",
+          "value": 1E+308
+        },
+        {
+          "ref": "A3",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "A4",
+          "value": 2.2250738585072014E-308
+        },
+        {
+          "ref": "A5",
+          "value": 9007199254740992
+        }
+      ],
+      "tags": [
+        "precision",
+        "overflow"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "__compat_precision_limits/0004",
+      "formula": "=A4",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "A2",
+          "value": 1E+308
+        },
+        {
+          "ref": "A3",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "A4",
+          "value": 2.2250738585072014E-308
+        },
+        {
+          "ref": "A5",
+          "value": 9007199254740992
+        }
+      ],
+      "tags": [
+        "precision",
+        "boundary"
+      ],
+      "note": "the smallest normal double",
+      "observed": {
+        "kind": "number",
+        "number": 2.2250738585072014E-308,
+        "number_r17": "2.2250738585072014E-308",
+        "general_text": "2.2250738585072E-308",
+        "display_text": "2.2251E-308"
+      }
+    },
+    {
+      "id": "__compat_precision_limits/0005",
+      "formula": "=A4/1E+10",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "A2",
+          "value": 1E+308
+        },
+        {
+          "ref": "A3",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "A4",
+          "value": 2.2250738585072014E-308
+        },
+        {
+          "ref": "A5",
+          "value": 9007199254740992
+        }
+      ],
+      "tags": [
+        "precision",
+        "boundary"
+      ],
+      "note": "divided down into the subnormal range",
+      "stored_formula": "=A4/10000000000",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_precision_limits/0006",
+      "formula": "=A3",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "A2",
+          "value": 1E+308
+        },
+        {
+          "ref": "A3",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "A4",
+          "value": 2.2250738585072014E-308
+        },
+        {
+          "ref": "A5",
+          "value": 9007199254740992
+        }
+      ],
+      "tags": [
+        "precision",
+        "boundary"
+      ],
+      "note": "the smallest positive subnormal -- does Excel keep it or flatten it",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_precision_limits/0007",
+      "formula": "=A3*1E+10",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "A2",
+          "value": 1E+308
+        },
+        {
+          "ref": "A3",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "A4",
+          "value": 2.2250738585072014E-308
+        },
+        {
+          "ref": "A5",
+          "value": 9007199254740992
+        }
+      ],
+      "tags": [
+        "precision",
+        "boundary"
+      ],
+      "stored_formula": "=A3*10000000000",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_precision_limits/0008",
+      "formula": "=A3=0",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "A2",
+          "value": 1E+308
+        },
+        {
+          "ref": "A3",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "A4",
+          "value": 2.2250738585072014E-308
+        },
+        {
+          "ref": "A5",
+          "value": 9007199254740992
+        }
+      ],
+      "tags": [
+        "precision",
+        "boundary"
+      ],
+      "note": "is the subnormal distinguishable from zero",
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_precision_limits/0009",
+      "formula": "=A4=0",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "A2",
+          "value": 1E+308
+        },
+        {
+          "ref": "A3",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "A4",
+          "value": 2.2250738585072014E-308
+        },
+        {
+          "ref": "A5",
+          "value": 9007199254740992
+        }
+      ],
+      "tags": [
+        "precision",
+        "boundary"
+      ],
+      "observed": {
+        "kind": "logical",
+        "logical": false,
+        "general_text": "FALSE",
+        "display_text": "FALSE"
+      }
+    },
+    {
+      "id": "__compat_precision_limits/0010",
+      "formula": "=2^53",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "A2",
+          "value": 1E+308
+        },
+        {
+          "ref": "A3",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "A4",
+          "value": 2.2250738585072014E-308
+        },
+        {
+          "ref": "A5",
+          "value": 9007199254740992
+        }
+      ],
+      "tags": [
+        "precision",
+        "boundary"
+      ],
+      "note": "2^53, computed rather than written -- the literal would be 15-digit truncated",
+      "observed": {
+        "kind": "number",
+        "number": 9007199254740992,
+        "number_r17": "9007199254740992",
+        "general_text": "9007199254740990",
+        "display_text": "9.0072E+15"
+      }
+    },
+    {
+      "id": "__compat_precision_limits/0011",
+      "formula": "=A5",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "A2",
+          "value": 1E+308
+        },
+        {
+          "ref": "A3",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "A4",
+          "value": 2.2250738585072014E-308
+        },
+        {
+          "ref": "A5",
+          "value": 9007199254740992
+        }
+      ],
+      "tags": [
+        "precision",
+        "boundary"
+      ],
+      "note": "2^53 seeded exactly via Value2",
+      "observed": {
+        "kind": "number",
+        "number": 9007199254740992,
+        "number_r17": "9007199254740992",
+        "general_text": "9007199254740990",
+        "display_text": "9.0072E+15"
+      }
+    },
+    {
+      "id": "__compat_precision_limits/0012",
+      "formula": "=2^53+1",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "A2",
+          "value": 1E+308
+        },
+        {
+          "ref": "A3",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "A4",
+          "value": 2.2250738585072014E-308
+        },
+        {
+          "ref": "A5",
+          "value": 9007199254740992
+        }
+      ],
+      "tags": [
+        "precision",
+        "boundary"
+      ],
+      "note": "2^53+1 is not representable",
+      "observed": {
+        "kind": "number",
+        "number": 9007199254740992,
+        "number_r17": "9007199254740992",
+        "general_text": "9007199254740990",
+        "display_text": "9.0072E+15"
+      }
+    },
+    {
+      "id": "__compat_precision_limits/0013",
+      "formula": "=A5+1",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "A2",
+          "value": 1E+308
+        },
+        {
+          "ref": "A3",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "A4",
+          "value": 2.2250738585072014E-308
+        },
+        {
+          "ref": "A5",
+          "value": 9007199254740992
+        }
+      ],
+      "tags": [
+        "precision",
+        "boundary"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 9007199254740992,
+        "number_r17": "9007199254740992",
+        "general_text": "9007199254740990",
+        "display_text": "9.0072E+15"
+      }
+    },
+    {
+      "id": "__compat_precision_limits/0014",
+      "formula": "=A5+2",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "A2",
+          "value": 1E+308
+        },
+        {
+          "ref": "A3",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "A4",
+          "value": 2.2250738585072014E-308
+        },
+        {
+          "ref": "A5",
+          "value": 9007199254740992
+        }
+      ],
+      "tags": [
+        "precision",
+        "boundary"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 9007199254740994,
+        "number_r17": "9007199254740994",
+        "general_text": "9007199254740990",
+        "display_text": "9.0072E+15"
+      }
+    },
+    {
+      "id": "__compat_precision_limits/0015",
+      "formula": "=2^53=2^53+1",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "A2",
+          "value": 1E+308
+        },
+        {
+          "ref": "A3",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "A4",
+          "value": 2.2250738585072014E-308
+        },
+        {
+          "ref": "A5",
+          "value": 9007199254740992
+        }
+      ],
+      "tags": [
+        "precision",
+        "boundary"
+      ],
+      "note": "the collapse made visible",
+      "observed": {
+        "kind": "logical",
+        "logical": true,
+        "general_text": "TRUE",
+        "display_text": "TRUE"
+      }
+    },
+    {
+      "id": "__compat_precision_limits/0016",
+      "formula": "=999999999999999+1",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "A2",
+          "value": 1E+308
+        },
+        {
+          "ref": "A3",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "A4",
+          "value": 2.2250738585072014E-308
+        },
+        {
+          "ref": "A5",
+          "value": 9007199254740992
+        }
+      ],
+      "tags": [
+        "precision",
+        "boundary"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 1E+15,
+        "number_r17": "1E+15",
+        "general_text": "1000000000000000",
+        "display_text": "1E+15"
+      }
+    },
+    {
+      "id": "__compat_precision_limits/0017",
+      "formula": "=1/0",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "A2",
+          "value": 1E+308
+        },
+        {
+          "ref": "A3",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "A4",
+          "value": 2.2250738585072014E-308
+        },
+        {
+          "ref": "A5",
+          "value": 9007199254740992
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "note": "no infinity in the value domain",
+      "observed": {
+        "kind": "error",
+        "error": "#DIV/0!",
+        "error_type_code": 2,
+        "cverr": -2146826281,
+        "general_text": "",
+        "display_text": "#DIV/0!"
+      }
+    },
+    {
+      "id": "__compat_precision_limits/0018",
+      "formula": "=0/0",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "A2",
+          "value": 1E+308
+        },
+        {
+          "ref": "A3",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "A4",
+          "value": 2.2250738585072014E-308
+        },
+        {
+          "ref": "A5",
+          "value": 9007199254740992
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "note": "and no NaN",
+      "observed": {
+        "kind": "error",
+        "error": "#DIV/0!",
+        "error_type_code": 2,
+        "cverr": -2146826281,
+        "general_text": "",
+        "display_text": "#DIV/0!"
+      }
+    },
+    {
+      "id": "__compat_precision_limits/0019",
+      "formula": "=LOG(0)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "A2",
+          "value": 1E+308
+        },
+        {
+          "ref": "A3",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "A4",
+          "value": 2.2250738585072014E-308
+        },
+        {
+          "ref": "A5",
+          "value": 9007199254740992
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "__compat_precision_limits/0020",
+      "formula": "=EXP(1000)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "A2",
+          "value": 1E+308
+        },
+        {
+          "ref": "A3",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "A4",
+          "value": 2.2250738585072014E-308
+        },
+        {
+          "ref": "A5",
+          "value": 9007199254740992
+        }
+      ],
+      "tags": [
+        "overflow",
+        "boundary"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "__compat_precision_limits/0021",
+      "formula": "=EXP(-1000)",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "A2",
+          "value": 1E+308
+        },
+        {
+          "ref": "A3",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "A4",
+          "value": 2.2250738585072014E-308
+        },
+        {
+          "ref": "A5",
+          "value": 9007199254740992
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "note": "underflow",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_precision_limits/0022",
+      "formula": "=A2+A2-A2",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "A2",
+          "value": 1E+308
+        },
+        {
+          "ref": "A3",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "A4",
+          "value": 2.2250738585072014E-308
+        },
+        {
+          "ref": "A5",
+          "value": 9007199254740992
+        }
+      ],
+      "tags": [
+        "overflow",
+        "cancellation"
+      ],
+      "note": "does an intermediate overflow survive being cancelled",
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "__compat_precision_limits/0023",
+      "formula": "=2^1024",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "A2",
+          "value": 1E+308
+        },
+        {
+          "ref": "A3",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "A4",
+          "value": 2.2250738585072014E-308
+        },
+        {
+          "ref": "A5",
+          "value": 9007199254740992
+        }
+      ],
+      "tags": [
+        "overflow",
+        "boundary"
+      ],
+      "observed": {
+        "kind": "error",
+        "error": "#NUM!",
+        "error_type_code": 6,
+        "cverr": -2146826252,
+        "general_text": "",
+        "display_text": "#NUM!"
+      }
+    },
+    {
+      "id": "__compat_precision_limits/0024",
+      "formula": "=2^1023",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "A2",
+          "value": 1E+308
+        },
+        {
+          "ref": "A3",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "A4",
+          "value": 2.2250738585072014E-308
+        },
+        {
+          "ref": "A5",
+          "value": 9007199254740992
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "observed": {
+        "kind": "number",
+        "number": 8.98846567431158E+307,
+        "number_r17": "8.98846567431158E+307",
+        "general_text": "8.9884656743116E+307",
+        "display_text": "8.9885E+307"
+      }
+    },
+    {
+      "id": "__compat_precision_limits/0025",
+      "formula": "=2^-1074",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "A2",
+          "value": 1E+308
+        },
+        {
+          "ref": "A3",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "A4",
+          "value": 2.2250738585072014E-308
+        },
+        {
+          "ref": "A5",
+          "value": 9007199254740992
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "note": "the smallest positive subnormal",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    },
+    {
+      "id": "__compat_precision_limits/0026",
+      "formula": "=2^-1075",
+      "block": 1,
+      "fixture": [
+        {
+          "ref": "A1",
+          "value": 1.7976931348623157E+308
+        },
+        {
+          "ref": "A2",
+          "value": 1E+308
+        },
+        {
+          "ref": "A3",
+          "value": 4.94065645841247E-324
+        },
+        {
+          "ref": "A4",
+          "value": 2.2250738585072014E-308
+        },
+        {
+          "ref": "A5",
+          "value": 9007199254740992
+        }
+      ],
+      "tags": [
+        "boundary"
+      ],
+      "note": "below it",
+      "observed": {
+        "kind": "number",
+        "number": 0,
+        "number_r17": "0",
+        "general_text": "0",
+        "display_text": "0"
+      }
+    }
+  ]
+}
