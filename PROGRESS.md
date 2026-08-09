@@ -93,16 +93,21 @@ redirection in `tools\*.ps1`.
 
 ## NEXT ACTION
 
-**The W-ORACLE target is met, so the compatibility list is no longer the queue.**
-docs/44's table now has no cheap cluster left; everything remaining needs a
-subsystem. The BOOTSTRAP order therefore resumes, and the first thing in it is
-the structural debt below.
+**The container half of ADR-036 — make `snapshots.body` the image.** The kernel
+half is built and proven; this is what actually closes **TD-45** (7.86 s cold
+open), **TD-31** (307 MB container) and **TD-24's residual**. Concretely:
+`Snapshot::build` writes `State::write_image_with(&WinnerStamps::from_log(log))`
+instead of the compacted op set; `verify` decodes and re-hashes instead of
+replaying; `decode_body` and the salvage path follow. **D-101 records the two
+traps**, including that `Watermark` gaps do not survive the stored encoding
+without a `user_version` bump. Budget a session: it touches 18 container, 3
+crash and 15 recovery tests, and those tests are the guarantee TD-30 was closed
+to buy. Re-measure **W-OPEN-1M** and **W-TILE-10M** afterwards — 153.2 MB is a
+projection, and a projection is not a measurement.
 
-If more compatibility work is wanted before that, take them in this order and
-budget accordingly: **TD-36 (`TEXT()`, ~28)** — a number-format grammar, a
-session of its own, and it also unblocks the residual `__compat_1900_leap` /
-`__compat_serial_boundary` cases; then **TD-16** (implicit intersection, which
-unblocks **TD-50** as well); then **TD-15**, **TD-55**, **TD-49**.
+**The rest of step 3 is gated and should stay closed** (D-112): TD-17 and TD-44
+have triggers that measurement shows are not live, and TD-37 is blocked on
+packaging rather than effort.
 
 **TD-46: the ADR is written (ADR-036) and its kernel half is built** — stamp
 sidecar, `State::apply_tail`, and the refusal of a tail that predates the image,

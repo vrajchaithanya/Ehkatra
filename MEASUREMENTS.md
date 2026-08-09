@@ -864,6 +864,52 @@ Recoverability was the right side of that trade and it is not a free one. Both
 entries close with the same change: the tile-image snapshot body, which is also
 TD-24's residual.
 
+## W-CHAIN-100K re-measured (docs/38) — A-003, and a number that was noise · session 21
+
+Run: `cargo run --release -p calc-bench`. Same M1 machine, same 10,000 x 10
+shape (100,000 formula cells).
+
+| | budget | audit (session 16) | **session 21** |
+|---|---|---:|---:|
+| full recalc, single-threaded | 200 ms (A-003) | 114.0 ms | **105.8 ms** |
+| incremental, one edit | 8 ms (docs/31) | 0.618 ms | **0.436 ms** |
+| graph build | — | 699 ms (session 7) | **857 ms** median of 5, range **801–918** |
+
+**Neither TD-17's nor TD-44's trigger is live, and this is the measurement that
+says so rather than the register quoting itself.** TD-17 is gated by owner
+directive (D-054) on *a real workload breaching 200 ms single-threaded*: full
+recalc is at **53% of budget**. The bench also reports `max parallel width ~
+1.0` for this shape — a chain has no parallel width to exploit — so building
+PAL `Compute` and the rayon bench now would be speculative twice over. TD-44's
+trigger is *a W-\* workload approaching its budget*: incremental is at **5.5%**.
+Both stay open, unpaid, and correctly so.
+
+### The graph-build figure, and why no debt entry was filed
+
+A single run measured **875.9 ms** against the 699 ms on record — a 25% gap,
+which docs/38 §39 would make a signed debt entry. It is **not** one, and the
+process that reached that conclusion is the point.
+
+The suspect was TD-32's literal parser: `compat_parse_15` runs on every numeric
+literal, and its first implementation allocated a `String` per literal to count
+significant digits. Removing that allocation is a strict reduction in work. It
+moved the number to **1090 ms** — *worse* — which is impossible as a causal
+result and therefore evidence about the measurement rather than the code. Five
+runs then put graph build at **801–918 ms**, so both the 876 and the 1090 sit
+inside ordinary variance and the original 699 ms is a **single unreplicated
+sample** from session 7 that cannot be compared against a median.
+
+Recorded as measured, with three consequences stated plainly:
+* **No debt entry**, because there is no demonstrated regression — filing one
+  on an unreplicated delta is the defect D-104 was written about, in the
+  performance register instead of the debt register.
+* **No fix claimed.** The allocation removal is kept because doing less work on
+  a hot path is right regardless, and its comment says so rather than claiming
+  a speed-up it did not produce.
+* **The 699 ms row is superseded** by a replicated median with a range. A
+  benchmark that reports one sample invites exactly this, which is why the
+  recalc figures beside it are already medians of five.
+
 ## W-IMAGE-STAMPS (docs/38) — the stamp-carrying tile image vs A-001 · session 18
 
 **The question.** `usk_state::image` round-trips a `State` to the same hash, but

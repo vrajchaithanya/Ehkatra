@@ -750,12 +750,28 @@ fn truncate_to_15(raw: &str) -> Option<f64> {
     let sign = if mantissa.starts_with('-') { "-" } else { "" };
     let unsigned = mantissa.trim_start_matches(['+', '-']);
     let (int_part, frac_part) = unsigned.split_once('.').unwrap_or((unsigned, ""));
+    // Count the significant digits *without* building the concatenation. Every
+    // numeric literal in every formula reaches this function and almost none
+    // needs truncating, so the common path should not allocate.
+    //
+    // Honest about its own evidence: this was written to chase an apparent 25%
+    // graph-build regression, and it did **not** move the number — W-CHAIN-100K's
+    // graph build measures 801-918 ms across five runs either way, so the
+    // single sample that prompted it was noise (D-112). The change is kept
+    // because doing less work on the hot path is right regardless, not because
+    // it was shown to be faster.
+    let int_significant = int_part.trim_start_matches('0');
+    let significant_len = if int_significant.is_empty() {
+        frac_part.trim_start_matches('0').len()
+    } else {
+        int_significant.len() + frac_part.len()
+    };
+    if significant_len <= 15 {
+        return None;
+    }
     let mut digits = String::from(int_part);
     digits.push_str(frac_part);
     let significant = digits.trim_start_matches('0');
-    if significant.len() <= 15 {
-        return None;
-    }
     // `written_exponent` already located the leading digit, so the truncated
     // value is `0.<15 digits>` scaled one place past it.
     let exp = written_exponent(raw) + 1;

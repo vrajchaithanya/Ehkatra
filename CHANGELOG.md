@@ -1,5 +1,12 @@
 # Changelog — Architecture Repository
 
+## 2026-08-09 (session 21, close) — the rest of step 3 is gated, and one number was noise (D-112)
+- **TD-17, TD-44 and TD-37 stay unpaid, and the reasons are measured rather than quoted.** W-CHAIN-100K re-measured: full recalc **105.8 ms against a 200 ms budget (53%)**, incremental **0.436 ms against 8 ms (5.5%)**. TD-17 is gated by owner directive D-054 on a *breach*, which has not happened — and the same run reports `max parallel width ~ 1.0`, so a chain has no width to exploit even if it had. TD-44 repays when a workload *approaches* its budget; neither does. TD-37 is blocked on packaging, not effort: an AppContainer profile needs a packaged app and there is no installer yet.
+- **A 25% graph-build "regression" turned out to be noise, and no debt entry was filed for it.** One run showed 875.9 ms against the 699 ms on record. The suspect was TD-32's literal parser allocating a `String` per numeric literal; removing that allocation — strictly less work — moved the number to **1090 ms**, which is impossible as a causal result. Five runs then put graph build at **801–918 ms**: both samples are inside ordinary variance, and the 699 ms was a single unreplicated sample being compared against a median.
+- **The allocation removal is kept but claims nothing.** Doing less work on a hot path is right regardless; the comment says that rather than claiming a speed-up it did not produce. Filing debt on an unreplicated delta would be D-104's defect moved into the performance register.
+- MEASUREMENTS.md's 699 ms row is superseded by a replicated median with its range. The recalc figures beside it were already medians of five — the one number that was not is the one that misled.
+- No test count change. All gates green; replay hashes unchanged.
+
 ## 2026-08-09 (session 21, cont.) — ADR-036's kernel half; and a recursive axis walk over user data
 - **The stamp sidecar is built and proven (D-111).** `WinnerStamps::from_log` folds an op log into per-cell winners; the image carries them delta-varint encoded behind `IMAGE_VERSION` 2; `State::apply_tail` promotes each cell a tail contests, seeded with the winner the sidecar recorded, before applying it.
 - **The load-bearing test is the one ADR-036 named**: an adopted image plus a tail retains **the same losers** as a full replay, not merely the same hash. That second assertion is the whole point — a hash covers winners, so a dropped loser is invisible to it, and a hash-only test would have passed against a broken implementation.

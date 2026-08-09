@@ -204,6 +204,20 @@ docs/16 promises salvage from "the **last valid** snapshot", which presupposes m
 That is not a bug in the salvage path, which behaved exactly as specified — it is a retention policy that was never stated. Recorded as **TD-30** with the two candidate fixes (keep N ≥ 2 snapshots, or retain compacted ops until a second snapshot verifies) rather than picked here: the choice trades file size against recoverability, and docs/16's cadence section is where it belongs.
 Worth noting the smaller-scale test disagrees and is right to: `a_corrupted_snapshot_opens_through_salvage_and_reports_it` keeps every op in `ops`, so it recovers the full workbook. The two together are the actual lesson — **recoverability is a property of the retention policy, not of the salvage code.**
 
+### Session 21 (2026-08-09) — the rest of the structural queue is gated, and one number was noise
+
+**D-112 — TD-17 and TD-44 stay unpaid because their triggers are not live, measured rather than quoted; and the graph-build "regression" that prompted a fix did not exist.**
+
+Step 3's queue is TD-46, TD-44, TD-17 and TD-37. Only TD-46's trigger is live, and the other three are recorded here so a later session does not re-open the question:
+
+* **TD-17 (parallel recalc) is gated by owner directive.** D-054 says PAL `Compute` and the rayon bench are built *only* when a real workload breaches 200 ms single-threaded. W-CHAIN-100K measures **105.8 ms — 53% of budget**. The same run reports `max parallel width ~ 1.0`: a chain of dependent groups has no width to exploit, so building the parallel path now would be speculative twice over — against an unbreached budget, on a workload that could not use it.
+* **TD-44 (the cancellation-rule cost)** repays when a W-\* workload approaches its budget. Incremental recalc is **0.436 ms against 8 ms — 5.5%**. Not approaching.
+* **TD-37 (sandbox syscall filter)** is not blocked on effort but on packaging: its own entry names an AppContainer profile, which can only be applied from a packaged app, and there is no installer yet. Nothing DP-S5 permits moves it today.
+
+**The graph-build figure, and the process worth keeping.** One run measured 875.9 ms against the 699 ms on record — a 25% gap, which docs/38 §39 would make a signed debt entry. The suspect was TD-32's literal parser, which allocated a `String` per numeric literal to count significant digits. Removing that allocation — a strict reduction in work — moved the number to **1090 ms**, *worse*, which is impossible as a causal result and is therefore evidence about the measurement. Five runs put graph build at **801–918 ms**: both samples sit inside ordinary variance, and the 699 ms on record is a **single unreplicated sample** from session 7 being compared against a median.
+
+So: **no debt entry filed**, because there is no demonstrated regression, and filing one on an unreplicated delta is D-104's defect relocated into the performance register. **No fix claimed** — the allocation removal is kept because doing less work on a hot path is right regardless, and its comment now says exactly that instead of claiming the speed-up it failed to produce. The 699 ms row is superseded by a replicated median with its range, and the lesson generalises: the recalc figures beside it were already medians of five, and the one number that was not is the one that misled.
+
 ### Session 21 (2026-08-09) — ADR-036 implemented as far as the kernel; and the axis walk was recursive over user data
 
 **D-111 — The stamp sidecar, `State::apply_tail`, and an iterative axis walk. The image is adoptable; wiring it into `snapshots.body` is the remaining half.**
