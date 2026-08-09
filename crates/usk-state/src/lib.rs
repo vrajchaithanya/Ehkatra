@@ -9,12 +9,14 @@ extern crate alloc;
 
 pub mod formula;
 pub mod image;
+pub mod stamps;
 pub mod tile;
 
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 pub use formula::FormulaCell;
 use formula::FormulaRegistry;
+pub use stamps::{Stamp, WinnerStamps};
 use tile::{PromotionStats, TileStore};
 use usk_oplog::{Anchor, Op, OpLog, Payload};
 use usk_types::{ColId, Lamport, OpId, RowId, Value};
@@ -68,15 +70,38 @@ impl AxisSeq {
         out
     }
 
+    /// Pre-order walk of the insertion tree, **iteratively**.
+    ///
+    /// Iterative rather than recursive because the recursion depth is the depth
+    /// of the insertion tree, and that is user data. Appending N rows one below
+    /// the previous anchors each to the last, so the tree is a *chain* N deep —
+    /// a 100k-row workbook built the ordinary way would have recursed 100k
+    /// frames. The image fuzz test found it first on a corrupted tree, which is
+    /// the cheaper way to be told (D-111).
     fn walk(&self, key: Option<OpId>, out: &mut Vec<OpId>) {
-        if let Some(kids) = self.children.get(&key) {
-            for (_, id) in kids {
-                if !self.tombstones.contains_key(id) {
-                    out.push(*id);
-                }
-                self.walk(Some(*id), out);
+        for id in self.preorder(key) {
+            if self.is_live(&id) {
+                out.push(id);
             }
         }
+    }
+
+    /// The shared traversal. Children are pushed in reverse so they pop in
+    /// insertion order, which is what makes this identical to the recursion it
+    /// replaced rather than merely similar.
+    fn preorder(&self, key: Option<OpId>) -> Vec<OpId> {
+        let mut out = Vec::new();
+        let mut stack: Vec<OpId> = Vec::new();
+        if let Some(kids) = self.children.get(&key) {
+            stack.extend(kids.iter().rev().map(|(_, id)| *id));
+        }
+        while let Some(id) = stack.pop() {
+            out.push(id);
+            if let Some(kids) = self.children.get(&Some(id)) {
+                stack.extend(kids.iter().rev().map(|(_, k)| *k));
+            }
+        }
+        out
     }
 
     fn is_live(&self, id: &OpId) -> bool {
@@ -97,12 +122,10 @@ impl AxisSeq {
     }
 
     fn walk_full(&self, key: Option<OpId>, out: &mut Vec<(OpId, bool)>) {
-        if let Some(kids) = self.children.get(&key) {
-            for (_, id) in kids {
-                out.push((*id, self.is_live(id)));
-                self.walk_full(Some(*id), out);
-            }
-        }
+        out.extend(self.preorder(key).into_iter().map(|id| {
+            let live = self.is_live(&id);
+            (id, live)
+        }));
     }
 }
 
@@ -121,6 +144,25 @@ pub struct State {
     /// order ops happen to be applied in, so an incremental merge cannot
     /// resolve it differently from a full replay. See `formula.rs`.
     pub(crate) formulas: FormulaRegistry,
+}
+
+/// Why a tail could not be applied to an adopted image.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TailError {
+    /// The op is canonically at or before the image's greatest key, so the
+    /// image may already contain it or a newer write to the same cell.
+    /// Refused rather than misplaced (ADR-036).
+    NotAfterImage { op: OpId, image_greatest: OpId },
+}
+
+/// The cell a payload writes, if it writes one.
+fn cell_of(payload: &Payload) -> Option<(RowId, ColId)> {
+    match payload {
+        Payload::SetCell { row, col, .. }
+        | Payload::ClearCell { row, col }
+        | Payload::SetFormula { row, col, .. } => Some((*row, *col)),
+        _ => None,
+    }
 }
 
 impl State {
@@ -178,6 +220,48 @@ impl State {
             s.apply(&op);
         }
         s
+    }
+
+    /// Applies a **tail** onto a state adopted from an image (ADR-036).
+    ///
+    /// This is what makes an image a snapshot body rather than a read-only
+    /// cache. The tail's ops were not in the plan the image was built from, so
+    /// a cell the plan proved uncontested may now be contested — and the
+    /// summary path would overwrite it without keeping the loser. Each cell the
+    /// tail writes is therefore promoted first, seeded with the winner stamp
+    /// the sidecar carries, and only then applied.
+    ///
+    /// `tail` must be in canonical `(lamport, actor, counter)` order, the same
+    /// precondition `replay_sorted` has (TD-11).
+    ///
+    /// # Errors
+    /// An op canonically **at or before** the image's greatest key is refused,
+    /// not applied. The image records that key precisely so this case is
+    /// visible: a summary tile trusts arrival order instead of comparing
+    /// stamps, so silently accepting an earlier op would overwrite a newer
+    /// value with an older one and report success (D-101, ADR-036).
+    pub fn apply_tail(&mut self, stamps: &WinnerStamps, tail: &[Op]) -> Result<(), TailError> {
+        if let Some(greatest) = stamps.greatest() {
+            if let Some(op) = tail.iter().find(|op| (op.lamport, op.id) <= greatest) {
+                return Err(TailError::NotAfterImage {
+                    op: op.id,
+                    image_greatest: greatest.1,
+                });
+            }
+        }
+        for op in tail {
+            if let Some((row, col)) = cell_of(&op.payload) {
+                // Promote only where the image actually holds a winner: a cell
+                // the tail creates has nothing to lose to.
+                if let Some(stamp) = stamps.get(row, col) {
+                    if stamp.1.actor != op.id.actor && !self.cells.is_contested(row.0, col.0) {
+                        self.cells.adopt_stamp(row.0, col.0, stamp);
+                    }
+                }
+            }
+            self.apply(op);
+        }
+        Ok(())
     }
 
     /// Applies one op.

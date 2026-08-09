@@ -252,3 +252,29 @@ fn log_merge_idempotent_commutative() {
         State::replay(&ba).state_hash()
     );
 }
+
+/// A 100,000-row workbook built the ordinary way — each row inserted **below**
+/// the previous one — resolves its order without exhausting the stack.
+///
+/// This is the shape a user makes by holding down "insert row", and it anchors
+/// each row to the last, so the insertion tree is a chain 100,000 deep rather
+/// than a flat fan of siblings. The order walk used to recurse once per level
+/// and would overflow long before this size; the image fuzz test found it on a
+/// corrupted tree first, but the bug was never limited to corrupted input
+/// (D-111). A flat workbook — every row anchored to `Start` — has depth 1 and
+/// would never have shown it, which is why this test names the shape it builds.
+#[test]
+fn a_deep_insertion_chain_resolves_without_exhausting_the_stack() {
+    const ROWS: u64 = 100_000;
+    let mut log = OpLog::new();
+    let mut anchor = Anchor::Start;
+    for counter in 1..=ROWS {
+        let op = insert_row(1, counter, counter, anchor);
+        anchor = Anchor::After(RowId(opid(1, counter)).0);
+        log.append(op);
+    }
+    let state = State::replay(&log);
+    assert_eq!(state.row_order().len() as u64, ROWS);
+    // The full order (tombstones included) walks the same tree.
+    assert_eq!(state.full_row_order().len() as u64, ROWS);
+}

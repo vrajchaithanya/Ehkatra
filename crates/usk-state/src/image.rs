@@ -37,17 +37,30 @@
 //! layout in one place means the shared and unshared forms cannot disagree
 //! about what a tile is.
 //!
-//! # Not yet the snapshot body
-//! docs/16 and docs/26 both specify this as `snapshots.body`, and it is not
-//! wired in — see TD-46 and `usk_recover::snapshot`'s module docs. The
-//! blocker is not the format: it is that adopting an image and applying a tail
-//! onto it loses the identity of a retained loser at any cell first written
-//! inside the image, which ADR-006 and DP-A8 promise to keep.
+//! # The winner-stamp sidecar (ADR-036)
+//! An image on its own cannot be *adopted and continued*: apply a tail op to a
+//! cell it holds and there is no way to tell whether the tail wins, nor to keep
+//! the loser if it does — and ADR-006 and DP-A8 promise the loser is kept. A
+//! summary tile has no per-cell stamps to serialise, and that is ADR-005
+//! working rather than failing.
+//!
+//! So the stamps are **reconstructed at write time from the op log** and
+//! carried as a sidecar section: per tile, a small writer table plus a
+//! delta-varint run over the present cells. D-102 measured this encoding at
+//! **3.10 B/cell** against 32 for the naive layout, which is the difference
+//! between passing A-001 with 2.6x headroom and failing it.
+//!
+//! The section also records the image's **greatest canonical key**, so a tail
+//! op canonically *earlier* than the image is refused rather than misplaced —
+//! the summary path trusts arrival order instead of comparing stamps, so
+//! silently accepting such an op would overwrite a newer value.
 
 use alloc::string::String;
 use alloc::vec::Vec;
 use usk_oplog::RangeBinding;
 use usk_types::{ActorId, ColId, Decimal, OpId, RowId, Value};
+
+use crate::stamps::{read_varint, unzigzag, write_varint, zigzag, WinnerStamps};
 
 use crate::formula::{FormulaCell, FormulaRegistry};
 use crate::tile::{TileKey, TileStore};
@@ -57,7 +70,11 @@ const MAGIC: &[u8; 8] = b"EHKIMG\0\0";
 /// Image format version. A reader refuses anything it does not know rather
 /// than guessing — an image is a *cache*, so refusing costs a replay from the
 /// op tail and never costs data.
-pub const IMAGE_VERSION: u16 = 1;
+///
+/// **2** adds the winner-stamp sidecar (ADR-036). Version 1 was never the
+/// snapshot body and so was never written to any container, which is why the
+/// bump needs no migration.
+pub const IMAGE_VERSION: u16 = 2;
 
 /// Bounds on an untrusted image (docs/37). Each is above anything a real
 /// workbook produces and below anything that could exhaust memory.
@@ -65,6 +82,8 @@ pub(crate) const MAX_AXIS_ENTRIES: usize = 1 << 26;
 pub(crate) const MAX_TILES: usize = 1 << 22;
 const MAX_FORMULAS: usize = 1 << 24;
 const MAX_LOSERS: usize = 1 << 16;
+/// One stamp per cell, so this is the cell bound rather than the tile bound.
+const MAX_STAMPS: usize = 1 << 28;
 const MAX_TEXT_BYTES: usize = 1 << 26;
 
 /// Why a byte string is not an image this build can load. Errors are values
@@ -131,12 +150,25 @@ impl Writer {
     pub(crate) fn f64(&mut self, v: f64) {
         self.u64(v.to_bits());
     }
+
+    pub(crate) fn varint(&mut self, v: u64) {
+        write_varint(&mut self.out, v);
+    }
 }
 
 impl State {
     /// Serialises this state as a self-contained tile image.
     pub fn write_image(&self) -> Vec<u8> {
         self.write_image_parts().0
+    }
+
+    /// Serialises this state **with** the winner stamps a tail needs (ADR-036).
+    ///
+    /// This is the form a snapshot body takes. `write_image` is the same thing
+    /// with an empty sidecar: still a faithful image, but one that can only be
+    /// loaded and read, never adopted and continued.
+    pub fn write_image_with(&self, stamps: &WinnerStamps) -> Vec<u8> {
+        self.write_image_parts_with(stamps).0
     }
 
     /// The image, plus the byte range of each tile inside it.
@@ -146,6 +178,14 @@ impl State {
     /// "structurally shared via tile Merkle identity", and the reason three
     /// snapshots need not cost three copies.
     pub fn write_image_parts(&self) -> (Vec<u8>, Vec<(TileKey, usize, usize)>) {
+        self.write_image_parts_with(&WinnerStamps::default())
+    }
+
+    /// `write_image_parts`, carrying the sidecar.
+    pub fn write_image_parts_with(
+        &self,
+        stamps: &WinnerStamps,
+    ) -> (Vec<u8>, Vec<(TileKey, usize, usize)>) {
         let mut w = Writer {
             out: Vec::with_capacity(1 << 16),
             tiles: Vec::new(),
@@ -157,17 +197,19 @@ impl State {
         write_axis(&mut w, &self.cols);
         self.cells.write_image(&mut w);
         write_formulas(&mut w, &self.formulas);
+        write_stamps(&mut w, stamps);
 
         let tiles = core::mem::take(&mut w.tiles);
         (w.out, tiles)
     }
 
-    /// Rebuilds a state from an image.
+    /// Rebuilds a state from an image, together with the winner stamps a tail
+    /// needs (ADR-036).
     ///
     /// **Not a mutation path** (DP-A1): the result is trusted only once its
     /// `state_hash()` matches what the snapshot recorded, which is
     /// `Snapshot::verify`'s job and the only way a caller obtains one.
-    pub fn from_image(bytes: &[u8]) -> Result<State, ImageError> {
+    pub fn from_image_with_stamps(bytes: &[u8]) -> Result<(State, WinnerStamps), ImageError> {
         let mut r = Reader { b: bytes, at: 0 };
         if r.take(MAGIC.len())? != MAGIC {
             return Err(ImageError::NotAnImage);
@@ -180,16 +222,102 @@ impl State {
         let cols = read_axis(&mut r)?;
         let cells = TileStore::read_image(&mut r)?;
         let formulas = read_formulas(&mut r)?;
+        let stamps = read_stamps(&mut r)?;
         if r.at != bytes.len() {
             return Err(ImageError::Malformed("trailing bytes after the image"));
         }
-        Ok(State {
-            rows,
-            cols,
-            cells,
-            formulas,
-        })
+        Ok((
+            State {
+                rows,
+                cols,
+                cells,
+                formulas,
+            },
+            stamps,
+        ))
     }
+
+    /// Rebuilds a state from an image, discarding the sidecar.
+    ///
+    /// For readers that will never apply a tail. A caller that intends to keep
+    /// editing wants [`State::from_image_with_stamps`], because without the
+    /// stamps the first concurrent write to an adopted cell cannot keep its
+    /// loser (ADR-006).
+    pub fn from_image(bytes: &[u8]) -> Result<State, ImageError> {
+        Self::from_image_with_stamps(bytes).map(|(state, _)| state)
+    }
+}
+
+/// The sidecar, laid out per tile so a reader can decode one band rather than
+/// the whole workbook.
+///
+/// Cells are written in slot order within the tile and the values are deltas
+/// against the previous entry, which is what makes each one a single byte in
+/// the common case: a bulk write assigns lamports and counters that ascend
+/// almost in lockstep (D-102).
+fn write_stamps(w: &mut Writer, stamps: &WinnerStamps) {
+    match stamps.greatest() {
+        None => w.u8(0),
+        Some((lamport, id)) => {
+            w.u8(1);
+            w.u64(lamport);
+            w.opid(&id);
+        }
+    }
+    w.len(stamps.len());
+    let (mut last_lamport, mut last_counter) = (0i64, 0i64);
+    for ((row, col), (lamport, id)) in stamps.iter() {
+        w.opid(&row.0);
+        w.opid(&col.0);
+        w.varint(zigzag(*lamport as i64 - last_lamport));
+        w.out.extend_from_slice(&id.actor.0.to_le_bytes());
+        w.varint(zigzag(id.counter as i64 - last_counter));
+        last_lamport = *lamport as i64;
+        last_counter = id.counter as i64;
+    }
+}
+
+fn read_stamps(r: &mut Reader) -> Result<WinnerStamps, ImageError> {
+    let mut stamps = WinnerStamps::default();
+    match r.u8()? {
+        0 => stamps.set_greatest(None),
+        1 => {
+            let lamport = r.u64()?;
+            let id = r.opid()?;
+            stamps.set_greatest(Some((lamport, id)));
+        }
+        _ => return Err(ImageError::Malformed("stamp watermark tag")),
+    }
+    let n = r.count(MAX_STAMPS, "stamps")?;
+    let (mut last_lamport, mut last_counter) = (0i64, 0i64);
+    for _ in 0..n {
+        let row = RowId(r.opid()?);
+        let col = ColId(r.opid()?);
+        let lamport = last_lamport
+            .checked_add(unzigzag(r.varint()?))
+            .ok_or(ImageError::Malformed("stamp lamport delta overflows"))?;
+        let actor = ActorId(r.u128()?);
+        let counter = last_counter
+            .checked_add(unzigzag(r.varint()?))
+            .ok_or(ImageError::Malformed("stamp counter delta overflows"))?;
+        if lamport < 0 || counter < 0 {
+            return Err(ImageError::Malformed("stamp delta went negative"));
+        }
+        stamps.insert(
+            row,
+            col,
+            (
+                lamport as u64,
+                OpId {
+                    actor,
+                    counter: counter as u64,
+                },
+            ),
+        );
+        last_lamport = lamport;
+        last_counter = counter;
+    }
+    Ok(stamps)
 }
 
 fn write_axis(w: &mut Writer, axis: &AxisSeq) {
@@ -234,6 +362,21 @@ fn read_axis(r: &mut Reader) -> Result<AxisSeq, ImageError> {
             kids.push((lamport, r.opid()?));
         }
         axis.children.insert(anchor, kids);
+    }
+    // **Every node has at most one parent.** An iterative walk cannot overflow
+    // the stack, but it can still loop forever on a cycle, and a corrupted
+    // image is the obvious way to get one. With single parents a cycle is
+    // unreachable from the root by construction, so this one check is what
+    // makes the traversal total (D-111, docs/37).
+    {
+        let mut seen = alloc::collections::BTreeSet::new();
+        for kids in axis.children.values() {
+            for (_, id) in kids {
+                if !seen.insert(*id) {
+                    return Err(ImageError::Malformed("axis node has two parents"));
+                }
+            }
+        }
     }
     let n = r.count(MAX_AXIS_ENTRIES, "tombstones")?;
     for _ in 0..n {
@@ -323,6 +466,20 @@ impl<'a> Reader<'a> {
     pub(crate) fn u16(&mut self) -> Result<u16, ImageError> {
         let b = self.take(2)?;
         Ok(u16::from_le_bytes([b[0], b[1]]))
+    }
+
+    pub(crate) fn u128(&mut self) -> Result<u128, ImageError> {
+        let b = self.take(16)?;
+        let mut a = [0u8; 16];
+        a.copy_from_slice(b);
+        Ok(u128::from_le_bytes(a))
+    }
+
+    pub(crate) fn varint(&mut self) -> Result<u64, ImageError> {
+        let mut at = self.at;
+        let v = read_varint(self.b, &mut at).ok_or(ImageError::Truncated)?;
+        self.at = at;
+        Ok(v)
     }
 
     pub(crate) fn u32(&mut self) -> Result<u32, ImageError> {

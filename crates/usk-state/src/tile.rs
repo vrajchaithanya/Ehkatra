@@ -469,6 +469,86 @@ impl TileStore {
         }
     }
 
+    /// Promotes one cell **retroactively**, seeding it with the stamp the
+    /// image recorded for it (ADR-036).
+    ///
+    /// This is the operation the `write` contract below says is impossible
+    /// without help, and the sidecar is that help. A state adopted from an
+    /// image was planned over the *image's* op set; a tail op from a second
+    /// actor contests a cell that plan proved uncontested, so the cell has to
+    /// join the stamped path carrying the winner it already has — otherwise
+    /// the tail overwrites it on the summary path and the loser ADR-006
+    /// promises is gone before anything can retain it.
+    ///
+    /// Idempotent: a cell already contested keeps the stamp it has, because
+    /// that stamp is either the same one or a newer one the tail installed.
+    pub(crate) fn adopt_stamp(&mut self, row: OpId, col: OpId, stamp: (Lamport, OpId)) {
+        let (Some(row_slot), Some(col_slot)) = (self.rows.slot_of(&row), self.cols.slot_of(&col))
+        else {
+            // The image never held this cell, so there is no winner to keep
+            // and the ordinary write path is already correct.
+            return;
+        };
+        let key = TileKey::of(row_slot, col_slot);
+        let idx = cell_index(row_slot, col_slot);
+        let bits = self.contested.entry(key).or_insert([0u64; PRESENCE_WORDS]);
+        if bits[idx as usize / 64] & (1u64 << (idx % 64)) != 0 {
+            return;
+        }
+        bits[idx as usize / 64] |= 1u64 << (idx % 64);
+
+        let Some(tile) = self.tiles.get_mut(&key) else {
+            return;
+        };
+        // A tile holding a contested cell is `Mixed`, and its frontier is
+        // preserved: anti-entropy diffs on it (docs/15), so resetting it here
+        // would make a tile that has not changed look stale.
+        let (max_lamport, writer) = match &tile.meta {
+            Meta::Summary {
+                max_lamport,
+                writer,
+            }
+            | Meta::Mixed {
+                max_lamport,
+                writer,
+                ..
+            } => (*max_lamport, *writer),
+        };
+        let mut stamps = match core::mem::replace(
+            &mut tile.meta,
+            Meta::Summary {
+                max_lamport,
+                writer,
+            },
+        ) {
+            Meta::Mixed { stamps, .. } => stamps,
+            Meta::Summary { .. } => BTreeMap::new(),
+        };
+        stamps.entry(idx).or_insert(CellMeta {
+            lamport: stamp.0,
+            id: stamp.1,
+            losers: Vec::new(),
+        });
+        tile.meta = Meta::Mixed {
+            max_lamport,
+            writer,
+            stamps,
+        };
+    }
+
+    /// Whether a cell is already on the stamped path.
+    pub(crate) fn is_contested(&self, row: OpId, col: OpId) -> bool {
+        let (Some(row_slot), Some(col_slot)) = (self.rows.slot_of(&row), self.cols.slot_of(&col))
+        else {
+            return false;
+        };
+        let key = TileKey::of(row_slot, col_slot);
+        let idx = cell_index(row_slot, col_slot);
+        self.contested
+            .get(&key)
+            .is_some_and(|bits| bits[idx as usize / 64] & (1u64 << (idx % 64)) != 0)
+    }
+
     /// Applies one cell write.
     ///
     /// Contract: the store was built from a `Plan` computed over the same op

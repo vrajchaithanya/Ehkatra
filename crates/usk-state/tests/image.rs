@@ -8,7 +8,7 @@
 
 use usk_oplog::{Anchor, Op, OpLog, Payload, RangeBinding};
 use usk_state::image::{chunk_hashes, ImageError, IMAGE_VERSION};
-use usk_state::State;
+use usk_state::{State, TailError, WinnerStamps};
 use usk_types::{ActorId, CellError, ColId, Decimal, ErrorKind, OpId, Origin, RowId, Value};
 
 fn id(actor: u128, counter: u64) -> OpId {
@@ -540,4 +540,202 @@ fn no_mutation_of_an_image_can_panic_or_produce_an_inconsistent_state() {
             let _ = state.state_hash();
         }
     }
+}
+
+// ---------------------------------------------------- the stamp sidecar (ADR-036)
+
+/// The test ADR-036 names as load-bearing, and the reason the whole sidecar
+/// exists.
+///
+/// One history, split at a point, taken two ways: replay the whole thing, or
+/// adopt an image of the prefix and apply the rest as a tail. They must agree
+/// on the state hash **and on every retained loser** — agreeing on the hash
+/// alone is exactly the approximation ADR-006 and DP-A8 forbid, because a
+/// dropped loser is invisible to a hash over winners.
+#[test]
+fn an_adopted_image_plus_tail_retains_the_same_losers_as_a_full_replay() {
+    // Two actors write the same cell concurrently. The prefix holds actor 1's
+    // write; the tail brings actor 2's. Under the plan the image was built
+    // from, that cell is uncontested — which is the whole difficulty.
+    let (prefix, tail) = split_history();
+
+    let mut whole = OpLog::new();
+    for op in prefix.ops().iter().chain(tail.iter()) {
+        whole.append(op.clone());
+    }
+    let full = State::replay(&whole);
+
+    let image_state = State::replay(&prefix);
+    let stamps = WinnerStamps::from_log(&prefix);
+    let bytes = image_state.write_image_with(&stamps);
+    let (mut adopted, restored) = State::from_image_with_stamps(&bytes).expect("image loads");
+    adopted.apply_tail(&restored, tail).expect("tail applies");
+
+    assert_eq!(
+        adopted.state_hash(),
+        full.state_hash(),
+        "image + tail must fold to the same state as a full replay"
+    );
+
+    let (row, col) = contested_cell();
+    let a = full.conflicts(row, col);
+    let b = adopted.conflicts(row, col);
+    assert!(
+        !a.is_empty(),
+        "the fixture must actually contest a cell, or this test proves nothing"
+    );
+    assert_eq!(
+        a, b,
+        "a retained loser was dropped by the image+tail route — the hash agrees \
+         because a hash covers winners, which is why this assertion exists"
+    );
+}
+
+/// The stamps a fold reconstructs are the stamps the state actually has: for
+/// every contested cell, the winner the sidecar names is the winner the replay
+/// produced.
+#[test]
+fn reconstructed_stamps_name_the_winner_the_replay_chose() {
+    let (prefix, tail) = split_history();
+    let mut whole = OpLog::new();
+    for op in prefix.ops().iter().chain(tail.iter()) {
+        whole.append(op.clone());
+    }
+    let stamps = WinnerStamps::from_log(&whole);
+    let state = State::replay(&whole);
+    let (row, col) = contested_cell();
+
+    // Every loser is strictly below the stamp, and the stamp is the greatest
+    // write to the cell — which is what "winner" means.
+    let winner = stamps.get(row, col).expect("the cell was written");
+    for (lamport, id, _) in state.conflicts(row, col) {
+        assert!(
+            (*lamport, *id) < winner,
+            "a retained loser outranks the stamp the sidecar calls the winner"
+        );
+    }
+}
+
+/// A fold is order-independent, so a writer that hands ops over in the wrong
+/// order still records stamps that agree with the state beside them (TD-11).
+#[test]
+fn stamp_reconstruction_does_not_depend_on_arrival_order() {
+    let (prefix, tail) = split_history();
+    let mut forward = OpLog::new();
+    for op in prefix.ops().iter().chain(tail.iter()) {
+        forward.append(op.clone());
+    }
+    let mut backward = OpLog::new();
+    for op in prefix.ops().iter().chain(tail.iter()).rev() {
+        backward.append(op.clone());
+    }
+    assert_eq!(
+        WinnerStamps::from_log(&forward),
+        WinnerStamps::from_log(&backward)
+    );
+}
+
+/// An op canonically at or before the image is **refused**, not applied.
+///
+/// The summary path trusts arrival order instead of comparing stamps, so
+/// accepting an earlier op would overwrite a newer value with an older one and
+/// report success. This is the ordering half of D-101 that D-102 left open.
+#[test]
+fn a_tail_that_predates_the_image_is_refused_rather_than_misplaced() {
+    let (prefix, _) = split_history();
+    let stamps = WinnerStamps::from_log(&prefix);
+    let image = State::replay(&prefix).write_image_with(&stamps);
+    let (mut adopted, restored) = State::from_image_with_stamps(&image).expect("image loads");
+    let before = adopted.state_hash();
+
+    // An op from inside the image's own range.
+    let stale = vec![prefix.ops()[prefix.ops().len() - 1].clone()];
+    let err = adopted
+        .apply_tail(&restored, &stale)
+        .expect_err("an op at or before the image must be refused");
+    assert!(matches!(err, TailError::NotAfterImage { .. }));
+    assert_eq!(
+        adopted.state_hash(),
+        before,
+        "a refused tail must leave the state untouched"
+    );
+}
+
+/// The sidecar survives the round trip byte for byte, and an image written
+/// without one still loads — it is simply not adoptable.
+#[test]
+fn the_sidecar_round_trips_and_is_optional() {
+    let log = workbook();
+    let state = State::replay(&log);
+    let stamps = WinnerStamps::from_log(&log);
+    assert!(!stamps.is_empty());
+
+    let with = state.write_image_with(&stamps);
+    let (_, restored) = State::from_image_with_stamps(&with).expect("loads");
+    assert_eq!(restored, stamps);
+
+    let without = state.write_image();
+    let (_, none) = State::from_image_with_stamps(&without).expect("loads");
+    assert!(none.is_empty());
+    assert!(none.greatest().is_none());
+}
+
+/// A history in two parts: a prefix an image is built from, and a tail whose
+/// first op contests a cell the prefix left with a single author.
+fn split_history() -> (OpLog, &'static [Op]) {
+    use std::sync::OnceLock;
+    static SPLIT: OnceLock<(Vec<Op>, Vec<Op>)> = OnceLock::new();
+    let (head, rest) = SPLIT.get_or_init(|| {
+        let r = id(1, 1);
+        let c = id(1, 2);
+        let head = vec![
+            Op {
+                id: r,
+                lamport: 1,
+                payload: Payload::InsertRow {
+                    anchor: Anchor::Start,
+                },
+            },
+            Op {
+                id: c,
+                lamport: 2,
+                payload: Payload::InsertCol {
+                    anchor: Anchor::Start,
+                },
+            },
+            // Actor 1 writes the cell. Uncontested as far as this prefix knows.
+            Op {
+                id: id(1, 3),
+                lamport: 3,
+                payload: Payload::SetCell {
+                    row: RowId(r),
+                    col: ColId(c),
+                    value: Value::Number(10.0),
+                },
+            },
+        ];
+        let rest = vec![
+            // Actor 2 writes the same cell later. A full replay plans this cell
+            // as contested; the image was planned without it.
+            Op {
+                id: id(2, 1),
+                lamport: 4,
+                payload: Payload::SetCell {
+                    row: RowId(r),
+                    col: ColId(c),
+                    value: Value::Number(20.0),
+                },
+            },
+        ];
+        (head, rest)
+    });
+    let mut log = OpLog::new();
+    for op in head {
+        log.append(op.clone());
+    }
+    (log, rest.as_slice())
+}
+
+fn contested_cell() -> (RowId, ColId) {
+    (RowId(id(1, 1)), ColId(id(1, 2)))
 }

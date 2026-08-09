@@ -204,6 +204,22 @@ docs/16 promises salvage from "the **last valid** snapshot", which presupposes m
 That is not a bug in the salvage path, which behaved exactly as specified — it is a retention policy that was never stated. Recorded as **TD-30** with the two candidate fixes (keep N ≥ 2 snapshots, or retain compacted ops until a second snapshot verifies) rather than picked here: the choice trades file size against recoverability, and docs/16's cadence section is where it belongs.
 Worth noting the smaller-scale test disagrees and is right to: `a_corrupted_snapshot_opens_through_salvage_and_reports_it` keeps every op in `ops`, so it recovers the full workbook. The two together are the actual lesson — **recoverability is a property of the retention policy, not of the salvage code.**
 
+### Session 21 (2026-08-09) — ADR-036 implemented as far as the kernel; and the axis walk was recursive over user data
+
+**D-111 — The stamp sidecar, `State::apply_tail`, and an iterative axis walk. The image is adoptable; wiring it into `snapshots.body` is the remaining half.**
+
+ADR-036's mechanism now exists and is proven: `WinnerStamps::from_log` folds a log into per-cell winners, the image carries them as a delta-varint sidecar behind `IMAGE_VERSION` 2, and `State::apply_tail` promotes each cell the tail contests — seeding it with the winner the sidecar recorded — before applying.
+
+**The load-bearing test is the one the ADR named.** `an_adopted_image_plus_tail_retains_the_same_losers_as_a_full_replay` takes one history two ways and asserts both the state hash *and* every retained loser. The second assertion is the point: a hash covers winners, so a dropped loser is invisible to it, and dropping losers is exactly what ADR-006 and DP-A8 forbid. A test that checked only the hash would have passed against a broken implementation.
+
+**An op canonically at or before the image is refused, not applied** — the ordering half of D-101 that D-102 left open. The summary path trusts arrival order rather than comparing stamps, so accepting an earlier op would overwrite a newer value with an older one *and report success*.
+
+**The defect this uncovered is worth more than the feature.** The image fuzz test began overflowing its stack, and the cause was not the sidecar: `AxisSeq::walk` was **recursive, one frame per level of the insertion tree**, and the tree's depth is user data. Appending rows one below the previous — what holding down "insert row" does — anchors each to the last and builds a *chain*, so a 100k-row workbook would have recursed 100k frames. It had never fired because every existing fixture and benchmark anchors to `Start`, giving a flat fan of siblings at depth 1. **The sidecar did not cause the bug; it widened the set of corrupted images that decode far enough to reach it.** Fixed at the source: `walk` and `walk_full` now share one iterative pre-order traversal, and `read_axis` refuses a tree in which any node has two parents — with single parents a cycle is unreachable from the root, which is what makes the iterative walk total rather than merely non-recursive.
+
+A regression test names the shape rather than the symptom: `a_deep_insertion_chain_resolves_without_exhausting_the_stack` builds the 100,000-row chain a user would, because a flat workbook would never have shown it.
+
+**Still open, and deliberately not started here:** `Snapshot::build` still writes the compacted op set. Switching `snapshots.body` to the image is container work — D-101 records the two traps waiting there, including that `Watermark` gaps do not survive the stored encoding without a `user_version` bump — and it wants its own increment rather than the tail of this one. TD-45, TD-31 and TD-24's residual therefore stay open, with their blocker now built and proven instead of designed.
+
 ### Session 21 (2026-08-09) — TD-52 and TD-53 paid: a condition is not a number, and a formula is never blank
 
 **D-110 — Conditions get Excel's own truth rule; an omitted argument parses as blank; a blank result materialises as zero.**

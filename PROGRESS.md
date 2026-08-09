@@ -79,7 +79,7 @@ redirection in `tools\*.ps1`.
   (also `pwsh -File tools/gates.ps1`). Shell compat · fmt · clippy `-D warnings`
   · tests · no_std wasm32 kernel build · dep budget · supply chain (cargo-deny)
   · differential replay native == wasm32 · purity/host-isolation greps.
-- **Tests:** 346, all passing.
+- **Tests:** 352, all passing.
 - **Replay hashes:** oplog `c79fa533…` · state `b58d5505…` (unchanged by the
   date work — it is additive to the op algebra).
 - **Dependency budget:** kernel direct 1/5 · kernel closure 10/12 · workspace
@@ -104,8 +104,13 @@ session of its own, and it also unblocks the residual `__compat_1900_leap` /
 `__compat_serial_boundary` cases; then **TD-16** (implicit intersection, which
 unblocks **TD-50** as well); then **TD-15**, **TD-55**, **TD-49**.
 
-**Still open and unchanged from session 19: the TD-46 ADR must be written before
-any stamp plumbing is implemented.** D-102 settled the encoding (delta-varint,
+**TD-46: the ADR is written (ADR-036) and its kernel half is built** — stamp
+sidecar, `State::apply_tail`, and the refusal of a tail that predates the image,
+with the loser-equivalence test ADR-036 named as load-bearing. **What remains is
+the container half**: `Snapshot::build` still writes the compacted op set, so
+TD-45, TD-31 and TD-24's residual are still open. D-101 records the two traps
+waiting there, including that `Watermark` gaps do not survive the stored
+encoding without a `user_version` bump. Superseded context: D-102 settled the encoding (delta-varint,
 3.1 B/cell, 153.2 MB at 10M — passes A-001); D-103 states the remaining fork,
 which is an ADR-005 question about where stamps come from, with both options
 measured. The recommendation on record is (b), reconstruction at snapshot time,
