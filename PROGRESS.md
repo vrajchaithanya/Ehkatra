@@ -12,18 +12,19 @@ registers (docs/43 decisions, docs/44 debt, MEASUREMENTS.md numbers) are for.
 
 **Where the tree is:** v0.1 is complete and tagged `v0.1.0`. Q1 is done. The
 work in flight is the compatibility-debt push toward **W-ORACLE ≥ 90%**
-(now **88.2%**, 1,205 / 1,366 cases — up from 74.2% at the start of session 20),
+(now **89.3%**, 1,220 / 1,366 cases — up from 74.2% at the start of session 20),
 followed by the structural debt around the tile image, then Q2's shell.
 
-**Session 20 in one paragraph.** Paid **six** debt items — TD-47, TD-33, TD-14,
-TD-35, TD-34, TD-32 — moving W-ORACLE **74.2% → 88.2%**, +191 cases. Every unit
-is committed and pushed with CI green. Eleven functions reached 100% — `DATE`,
+**Session 20 in one paragraph.** Paid **eight** debt items — TD-47, TD-33,
+TD-14, TD-35, TD-34, TD-32, TD-51, TD-54 — moving W-ORACLE **74.2% → 89.3%**,
++206 cases against a 90% target. Every unit is committed and pushed with CI
+green. Eleven functions reached 100% — `DATE`,
 `DAY`, `MONTH`, `YEAR`, `WEEKDAY`, `VLOOKUP`, `HLOOKUP`, `XLOOKUP`, `MATCH`,
 `FIND`, `SEARCH` — plus the whole `__compat_literal_parser` corpus. Tests
-323 → 341. The replay hashes never moved, which is the evidence that none of it
+323 → 343. The replay hashes never moved, which is the evidence that none of it
 touched the op algebra.
 
-**The through-line, worth reading before the next cluster.** Four of the six
+**The through-line, worth reading before the next cluster.** Five of the eight
 were paid by finding that the *documented* rule and the *implemented* rule
 differ, and only the oracle could say which one is Excel: approximate lookup is
 a binary search whose answer on unsorted data no reasonable linear scan
@@ -33,12 +34,15 @@ conversion, and truncates rather than rounds (D-108). ADR-024's premise — the
 binary is the spec — earned its keep this session, and the same should be
 expected of what is left.
 
-**The remaining 161 failures are less scattered than the per-function table
-makes them look.** Most of the thin spread across `SUM`, `COUNT`, `MAX`, `MIN`,
-`IF`, `NA` and the `IS` predicates is **four** rules, now measured and filed as
-**TD-51 to TD-54** with case counts and fix sites. TD-51 alone is ~15 cases and
-is a single rule. Read those rows before touching anything — they were written
-so the next session does not have to re-derive them.
+**The remaining 146 failures, and how close 90% is.** The session ends **0.7
+points short of the 90% target** — about **10 cases**. They are already
+identified: **TD-52** (~5, an omitted argument is a parse error rather than a
+blank: `=IF(TRUE,,2)` is `0` in Excel), **TD-53** (~4, `IF`'s condition coerces
+text logicals but not numeric text, and the engine does exactly the opposite),
+and `ERROR.TYPE`, which is simply unimplemented. **Those three alone should
+cross 90%**, and none needs a new subsystem. **TD-36 (`TEXT()`, ~28)** is the
+largest single item after that and needs a number-format grammar — budget a
+session for it rather than starting it late.
 
 **Session 20 paid TD-33, the largest cluster.** Excel's two date systems are now
 an explicit `DateSystem` on the evaluation context (**D-105**): +126 cases, and
@@ -110,12 +114,12 @@ keeps its number forever.
   (also `pwsh -File tools/gates.ps1`). Shell compat · fmt · clippy `-D warnings`
   · tests · no_std wasm32 kernel build · dep budget · supply chain (cargo-deny)
   · differential replay native == wasm32 · purity/host-isolation greps.
-- **Tests:** 341, all passing.
+- **Tests:** 343, all passing.
 - **Replay hashes:** oplog `c79fa533…` · state `b58d5505…` (unchanged by the
   date work — it is additive to the op algebra).
 - **Dependency budget:** kernel direct 1/5 · kernel closure 10/12 · workspace
   closure 29/40.
-- **W-ORACLE:** **88.2%** overall (1,205 / 1,366).
+- **W-ORACLE:** **89.3%** overall (1,220 / 1,366) — 0.7 points off the 90% target.
 - **Open structural debt:** TD-46 (the tile image is built, tested, fuzz-clean
   and measured — and still not the snapshot body), and with it TD-45, TD-31 and
   TD-24's residual, all of which close together.
@@ -129,13 +133,10 @@ case count** — the ranking is the point of having a runner, so follow it rathe
 than re-guessing:
 
 1. ~~TD-33 — date semantics~~ **PAID (session 20)**, +126 cases.
-2. **TD-51 — direct arguments vs range cells** (~15). **Start here.** It is
-   the largest remaining cluster, it is *one rule* spread across eight
-   functions, and it is already fully characterised in docs/44: `Operand`
-   distinguishes `Value` from `Range`, so the fix is to coerce in
-   `numeric_cells`'s `Value` arm and keep skipping in the `Range` arm. Take
-   **TD-52, TD-53 and TD-54** in the same pass — all three are argument and
-   error handling in the same functions, ~13 more cases between them.
+2. ~~TD-51 — direct arguments vs range cells~~ **PAID (session 20)**, with
+   ~~TD-54~~. **Start with what is left of that pass: TD-52, TD-53 and
+   `ERROR.TYPE`** — ~10 cases between them, all argument and error handling in
+   functions already touched, and enough to cross **90%**.
 2b. **TD-36 — `TEXT()`** (~28), unimplemented; needs the number-format grammar,
    which is a language of its own and the largest *single* item left. It also
    unblocks the residual `__compat_1900_leap` / `__compat_serial_boundary`

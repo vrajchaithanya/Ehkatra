@@ -198,6 +198,60 @@ fn string_literals_unescape_doubled_quotes() {
     assert_eq!(ev("=\"say \"\"hi\"\"\"", Profile::Compat), t("say \"hi\""));
 }
 
+/// TD-51: a direct argument and a range cell coerce differently, and the
+/// documented description of `SUM` covers only the range half — which is
+/// exactly why one rule had been written for both.
+#[test]
+fn a_direct_argument_coerces_where_a_range_cell_is_skipped() {
+    // Direct: text that looks numeric becomes a number, logicals become 1/0,
+    // and text that does not look numeric is an error rather than a skip.
+    assert_eq!(ev("=SUM(\"7\",1)", Profile::Compat), dec("8"));
+    assert_eq!(ev("=SUM(TRUE,1)", Profile::Compat), dec("2"));
+    assert_eq!(ev("=SUM(TRUE,FALSE)", Profile::Compat), dec("1"));
+    assert_eq!(
+        kind_of(&ev("=SUM(\"abc\",1)", Profile::Compat)),
+        Some(ErrorKind::Value)
+    );
+    assert_eq!(ev("=COUNT(TRUE)", Profile::Compat), n(1.0));
+    assert_eq!(ev("=COUNT(\"7\")", Profile::Compat), n(1.0));
+    assert_eq!(ev("=MAX(\"9\",5)", Profile::Compat), n(9.0));
+    assert_eq!(ev("=MAX(TRUE,0)", Profile::Compat), n(1.0));
+
+    // The same values inside a *range* are skipped, not coerced. This is the
+    // half the documentation describes, and it must not regress.
+    let g = Fixture::new(
+        1,
+        4,
+        alloc_cells(&[t("7"), Value::Bool(true), t("abc"), n(1.0)]),
+    );
+    assert_eq!(evg("=SUM(A1:D1)", &g, Profile::Compat), dec("1"));
+    assert_eq!(evg("=COUNT(A1:D1)", &g, Profile::Compat), n(1.0));
+    assert_eq!(evg("=MAX(A1:D1)", &g, Profile::Compat), n(1.0));
+}
+
+/// TD-54: errors are transparent to the predicates whose job is to *look at* a
+/// value, and to `COUNT`, which counts numbers and an error is not one.
+#[test]
+fn error_testing_functions_do_not_propagate_the_error_they_test() {
+    assert_eq!(ev("=ISNUMBER(1/0)", Profile::Compat), Value::Bool(false));
+    assert_eq!(ev("=ISTEXT(1/0)", Profile::Compat), Value::Bool(false));
+    assert_eq!(ev("=COUNT(NA())", Profile::Compat), n(0.0));
+    // An error in a range is still fatal to SUM — only COUNT ignores it.
+    let g = Fixture::new(
+        1,
+        2,
+        alloc_cells(&[
+            n(1.0),
+            Value::Error(CellError::new(ErrorKind::Na, usk_types::Origin::Authored)),
+        ]),
+    );
+    assert_eq!(evg("=COUNT(A1:B1)", &g, Profile::Compat), n(1.0));
+    assert_eq!(
+        kind_of(&evg("=SUM(A1:B1)", &g, Profile::Compat)),
+        Some(ErrorKind::Na)
+    );
+}
+
 /// TD-32: Excel's literal rules run at **parse** time and are destructive.
 /// Values from `tools/oracle-capture/grids/91-literal-parser.psd1`.
 #[test]

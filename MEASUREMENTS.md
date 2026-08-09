@@ -548,6 +548,7 @@ data point, not a re-run.
 | **After lookup + wildcards (TD-14, TD-35, session 20)** | 1,366 | **1,171** | **85.7%** |
 | **After the criteria sub-language (TD-34, session 20)** | 1,366 | **1,189** | **87.0%** |
 | **After the literal parser (TD-32, session 20)** | 1,366 | **1,205** | **88.2%** |
+| **After argument coercion (TD-51, TD-54, session 20)** | 1,366 | **1,220** | **89.3%** |
 
 352 fail at 74.2%, of which **12 are numerically near** (relative difference
 ≤ 1e-12) and are counted as fails anyway. 0 unjudged — a case the runner cannot
@@ -642,6 +643,28 @@ The second measured oddity is the underflow boundary. `=1E-308` and `=1E-309`
 are both **0**, but `=1E-310` is a **parse error** — the line sits at the
 *written* exponent, not at anything representable, since both are perfectly good
 subnormals.
+
+### TD-51 + TD-54: +15 cases from two rules where there had been one · session 20
+
+| | Cases | Pass | Rate |
+|---|---:|---:|---:|
+| before | 1,366 | 1,205 | 88.2% |
+| after | 1,366 | **1,220** | **89.3%** |
+
+`SUM`, `COUNT`, `MAX`, `MIN`, `AVERAGE`, `PRODUCT` and the `IS` predicates are
+now clean apart from two `SUM` cancellation cases, which belong to D-041 rather
+than here.
+
+**The measurement.** A value written as a direct argument is coerced; the same
+value inside a range is skipped. `SUM("7",1)` is **8** and `SUM(TRUE,1)` is
+**2**, while a text or logical *cell* is ignored — and `SUM("abc",1)` is
+**`#VALUE!`** where a text cell would simply be passed over. The documented
+description of `SUM` ("ignores text and logical values") describes only the
+range half, which is why one rule had been written for both.
+
+**One case left in this area and it is not this cluster's**: `ERROR.TYPE` is
+unimplemented, so `ERROR.TYPE(NA())` is `#NAME?` rather than `7`. That is the
+function catalogue, not argument handling.
 
 **Locale is deliberately excluded.** `YEAR("2024-03-15")` is implemented;
 `YEAR("15/03/2024")` is not, although the fixture for it exists. The second

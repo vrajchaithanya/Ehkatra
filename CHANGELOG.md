@@ -1,5 +1,13 @@
 # Changelog — Architecture Repository
 
+## 2026-08-09 (session 20, cont.) — TD-51 + TD-54 paid: W-ORACLE 88.2% → 89.3%
+- **TD-51 and TD-54 PAID (D-109)**, filed and paid in the same session. **+15 cases**; `SUM`, `COUNT`, `MAX`, `MIN`, `AVERAGE`, `PRODUCT` and the `IS` predicates are now clean apart from two `SUM` cancellation cases that belong to D-041.
+- **Two rules where there had been one.** A value written as a **direct argument** is coerced; the same value **inside a range** is skipped. `SUM("7",1)` is 8 and `SUM(TRUE,1)` is 2, while a text or logical *cell* is ignored — and `SUM("abc",1)` is `#VALUE!` where a text cell is simply passed over. The documented description of `SUM` covers only the range half, which is exactly why one rule got written for both. `Operand` already carried the distinction, so the two rules cost one `match`.
+- **A trap the debt entry did not foresee**: `SUMIF`/`AVERAGEIF` wrapped their picked cells as individual `Operand::Value`s, which would have put *range* data through the new direct-argument coercion and quietly changed `SUMIF`. They now build a single `Operand::Range`.
+- **TD-54**: the blanket error guard in `call` now exempts the functions whose job is to *look at* a value rather than compute with it. `ISNUMBER(1/0)` is `false`, not `#DIV/0!`; `COUNT(NA())` is `0`. An error in a range is still fatal to `SUM` — only `COUNT` ignores it, and there is a test for each direction.
+- **One case in this area remains and is attributed elsewhere**: `ERROR.TYPE` is unimplemented (`#NAME?`), which is the function catalogue rather than argument handling.
+- 2 new tests (343 total, from 341). All gates green; replay hashes unchanged.
+
 ## 2026-08-09 (session 20, close) — the residual, measured and filed
 - **Five new debt rows, TD-51 to TD-55**, characterising what is left of the W-ORACLE gap. Filed with measured case counts and named fix sites rather than left as "161 failures spread across forty functions", because the spread is misleading: most of it is four rules.
 - **TD-51 (~15 cases, the largest remaining cluster)**: a direct argument and a range cell coerce differently, and the engine treats them alike. `SUM("7",1)` is 8 and `SUM(TRUE,1)` is 2, while the same values *inside a range* are skipped, and `SUM("abc",1)` is `#VALUE!` where a text cell in a range is ignored. Same split in `COUNT`, `MAX`, `MIN`, `PRODUCT`. The documented description of `SUM` describes only the range half, which is why one rule was written for both. `Operand` already distinguishes `Value` from `Range`, so the fix site is `numeric_cells`.

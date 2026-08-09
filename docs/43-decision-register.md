@@ -185,6 +185,20 @@ docs/16 promises salvage from "the **last valid** snapshot", which presupposes m
 That is not a bug in the salvage path, which behaved exactly as specified — it is a retention policy that was never stated. Recorded as **TD-30** with the two candidate fixes (keep N ≥ 2 snapshots, or retain compacted ops until a second snapshot verifies) rather than picked here: the choice trades file size against recoverability, and docs/16's cadence section is where it belongs.
 Worth noting the smaller-scale test disagrees and is right to: `a_corrupted_snapshot_opens_through_salvage_and_reports_it` keeps every op in `ops`, so it recovers the full workbook. The two together are the actual lesson — **recoverability is a property of the retention policy, not of the salvage code.**
 
+### Session 20 (2026-08-09) — TD-51 and TD-54 paid: an argument and a cell are not the same thing
+
+**D-109 — Aggregation has two coercion rules, chosen by whether the value was written as an argument or read from a range.**
+
+W-ORACLE **88.2% → 89.3%** (+15 cases). Filed and paid in the same session, which is worth noting because the filing is what made it cheap: the entry named the fix site, and the fix was there.
+
+**The rule.** A value written as a **direct argument** is coerced; the same value **inside a range** is skipped. `SUM("7",1)` is 8, `SUM(TRUE,1)` is 2, and `SUM("abc",1)` is `#VALUE!` — while a text or logical *cell* is passed over silently. Excel's own description of `SUM`, "ignores text and logical values", describes only the range half. That is why one rule was written for both, and it is the same failure mode as D-106 and D-107: the documentation describes a subset of the behaviour and reads like the whole of it.
+
+**`Operand` already carried the distinction**, so the two rules cost one `match` — the type had been right since Row 6 and only the predicate over it was wrong.
+
+**The trap the debt entry did not foresee.** `SUMIF`/`AVERAGEIF` wrapped their selected cells as individual `Operand::Value`s before handing them to `f_sum`. Under the old single rule that was harmless; under the new one it would have put *range* data through direct-argument coercion and silently changed `SUMIF`'s meaning for text and logical cells. They now build one `Operand::Range`. Worth recording because it is the general hazard of adding a distinction to a type that already existed: every place that manufactured one of its variants for convenience becomes a decision.
+
+**TD-54, taken in the same pass.** The blanket error guard in `call` now exempts the functions whose job is to *look at* a value rather than compute with it: `ISNUMBER(1/0)` is `false`, not `#DIV/0!`, and `COUNT(NA())` is `0`. Uniform error propagation remains right everywhere else — an error inside a range is still fatal to `SUM`, and only `COUNT` ignores it. There is a test asserting each direction, because "errors are transparent here" is the kind of exemption that grows if nobody bounds it.
+
 ### Session 20 (2026-08-09) — TD-32 paid: the literal parser is destructive, so the profile has to reach it
 
 **D-108 — `compat_parse_15` lives in the parser, operates on the source text, and takes a `Profile`.**

@@ -141,7 +141,25 @@ pub fn call<G: Grid>(name: &str, args: &[Ast], ctx: &Context<G>) -> Operand {
     let ops: Vec<Operand> = args.iter().map(|a| eval_operand(a, ctx)).collect();
 
     // Errors propagate through every strict function, carrying their origin.
-    if !matches!(name, "ISERROR" | "ISNA" | "NA" | "COUNTBLANK") {
+    //
+    // The exemptions are the functions whose whole job is to *look at* a value
+    // rather than compute with it (TD-54). A predicate written to test for an
+    // error must not propagate the error it was asked about — `ISNUMBER(1/0)`
+    // is `false`, not `#DIV/0!` — and `COUNT` counts numbers, so an error is
+    // simply not one of them: `COUNT(NA())` is `0` (TD-51).
+    if !matches!(
+        name,
+        "ISERROR"
+            | "ISNA"
+            | "NA"
+            | "COUNTBLANK"
+            | "COUNT"
+            | "ISNUMBER"
+            | "ISTEXT"
+            | "ISLOGICAL"
+            | "ISBLANK"
+            | "ERROR.TYPE"
+    ) {
         if let Some(e) = ops.iter().find_map(|o| o.as_error()) {
             return Operand::Value(Value::Error(e));
         }
@@ -151,7 +169,7 @@ pub fn call<G: Grid>(name: &str, args: &[Ast], ctx: &Context<G>) -> Operand {
         "SUM" => f_sum(&ops, ctx),
         "PRODUCT" => f_product(&ops, ctx),
         "AVERAGE" => f_average(&ops, ctx),
-        "COUNT" => num(numeric_cells(&ops).len() as f64),
+        "COUNT" => num(numeric_inputs(&ops, ctx, true).map_or(0, |v| v.len()) as f64),
         "COUNTA" => num(ops
             .iter()
             .flat_map(|o| o.cells())
@@ -162,8 +180,8 @@ pub fn call<G: Grid>(name: &str, args: &[Ast], ctx: &Context<G>) -> Operand {
             .flat_map(|o| o.cells())
             .filter(|c| matches!(c, Value::Blank))
             .count() as f64),
-        "MIN" => f_extreme(&ops, true),
-        "MAX" => f_extreme(&ops, false),
+        "MIN" => f_extreme(&ops, ctx, true),
+        "MAX" => f_extreme(&ops, ctx, false),
         "ABS" => unary_num(&ops, ctx, |x| Some(if x < 0.0 { -x } else { x })),
         "SIGN" => unary_num(&ops, ctx, |x| {
             Some(if x > 0.0 {
@@ -334,13 +352,72 @@ fn num_arg_or<G: Grid>(
     }
 }
 
-/// Numeric cells only. Text and blanks are *skipped*, not coerced — that is
-/// Excel's aggregation rule and it is why `COUNT` and `COUNTA` differ.
-fn numeric_cells(ops: &[Operand]) -> Vec<Value> {
-    ops.iter()
-        .flat_map(|o| o.cells())
-        .filter(|c| matches!(c, Value::Number(_) | Value::Decimal(_)))
-        .collect()
+/// The numbers an aggregation sees — and the rule here is **two** rules, which
+/// is TD-51 and the largest single divergence the oracle found after TD-33.
+///
+/// A value written as a **direct argument** is coerced; the same value sitting
+/// **inside a range** is skipped. Measured:
+///
+/// | | direct | in a range |
+/// |---|---|---|
+/// | `"7"` | `SUM("7",1)` = **8** | skipped |
+/// | `TRUE` | `SUM(TRUE,1)` = **2** | skipped |
+/// | `"abc"` | `SUM("abc",1)` = **`#VALUE!`** | skipped |
+///
+/// The documented description of `SUM` — "ignores text and logical values" —
+/// describes only the right-hand column, which is exactly why one rule was
+/// implemented for both. `Operand` already carries the distinction, so the
+/// two rules cost one `match`.
+///
+/// Errors split too: they propagate out of `SUM` and friends, and `COUNT`
+/// ignores them (`COUNT(NA())` is `0`, not `#N/A`).
+fn numeric_inputs<G: Grid>(
+    ops: &[Operand],
+    ctx: &Context<G>,
+    counting: bool,
+) -> Result<Vec<Value>, CellError> {
+    let mut out = Vec::new();
+    for op in ops {
+        match op {
+            // A range: take the numbers, skip text, logicals and blanks.
+            Operand::Range { cells, .. } => {
+                for c in cells {
+                    match c {
+                        Value::Number(_) | Value::Decimal(_) => out.push(c.clone()),
+                        Value::Error(e) if !counting => return Err(*e),
+                        _ => {}
+                    }
+                }
+            }
+            // A direct argument: coerce it, and fail loudly if it will not.
+            Operand::Value(v) => match v {
+                Value::Number(_) | Value::Decimal(_) => out.push(v.clone()),
+                Value::Blank => {}
+                Value::Error(e) => {
+                    if !counting {
+                        return Err(*e);
+                    }
+                }
+                Value::Bool(b) => out.push(Value::Number(if *b { 1.0 } else { 0.0 })),
+                Value::Text(_) => match ctx.profile.to_number(v) {
+                    Ok(n) => out.push(Value::Number(n)),
+                    // `COUNT("abc")` is 0; `SUM("abc",1)` is #VALUE!.
+                    Err(e) => {
+                        if !counting {
+                            return Err(e);
+                        }
+                    }
+                },
+            },
+        }
+    }
+    Ok(out)
+}
+
+/// `numeric_inputs` for the aggregations that propagate errors, collapsing the
+/// error case into the `Operand` the caller returns.
+fn numeric_cells_or_err<G: Grid>(ops: &[Operand], ctx: &Context<G>) -> Result<Vec<Value>, Operand> {
+    numeric_inputs(ops, ctx, false).map_err(|e| val(Value::Error(e)))
 }
 
 fn truthy<G: Grid>(ctx: &Context<G>, v: &Value) -> Result<bool, CellError> {
@@ -426,7 +503,10 @@ fn ceil(x: f64) -> f64 {
 /// only when it meets a value that cannot be represented exactly — the same
 /// lossless-only promotion rule `coerce::arith` uses for binary operators.
 fn f_sum<G: Grid>(ops: &[Operand], ctx: &Context<G>) -> Operand {
-    let cells = numeric_cells(ops);
+    let cells = match numeric_cells_or_err(ops, ctx) {
+        Ok(cells) => cells,
+        Err(e) => return e,
+    };
     let mut exact = Some(Decimal::ZERO);
     let mut float = 0.0f64;
 
@@ -502,7 +582,10 @@ fn float_sum<G: Grid>(cells: &[Value], ctx: &Context<G>) -> Result<f64, Value> {
 }
 
 fn f_product<G: Grid>(ops: &[Operand], ctx: &Context<G>) -> Operand {
-    let cells = numeric_cells(ops);
+    let cells = match numeric_cells_or_err(ops, ctx) {
+        Ok(cells) => cells,
+        Err(e) => return e,
+    };
     if cells.is_empty() {
         return num(0.0);
     }
@@ -517,7 +600,10 @@ fn f_product<G: Grid>(ops: &[Operand], ctx: &Context<G>) -> Operand {
 }
 
 fn f_average<G: Grid>(ops: &[Operand], ctx: &Context<G>) -> Operand {
-    let cells = numeric_cells(ops);
+    let cells = match numeric_cells_or_err(ops, ctx) {
+        Ok(cells) => cells,
+        Err(e) => return e,
+    };
     if cells.is_empty() {
         return err(ErrorKind::Div0);
     }
@@ -536,8 +622,11 @@ fn f_average<G: Grid>(ops: &[Operand], ctx: &Context<G>) -> Operand {
     ))
 }
 
-fn f_extreme(ops: &[Operand], want_min: bool) -> Operand {
-    let cells = numeric_cells(ops);
+fn f_extreme<G: Grid>(ops: &[Operand], ctx: &Context<G>, want_min: bool) -> Operand {
+    let cells = match numeric_cells_or_err(ops, ctx) {
+        Ok(cells) => cells,
+        Err(e) => return e,
+    };
     if cells.is_empty() {
         // Excel returns 0, not an error, for MIN/MAX over no numbers.
         return num(0.0);
@@ -1778,12 +1867,19 @@ fn f_sumif<G: Grid>(ops: &[Operand], ctx: &Context<G>) -> Operand {
     let Some((target, mask)) = selected(ops, 2) else {
         return err(ErrorKind::Value);
     };
-    let picked: Vec<Operand> = target
+    // One `Range`, not many `Value`s: these came *from* a range, and TD-51's
+    // direct-argument coercion must not apply to them.
+    let cells: Vec<Value> = target
         .iter()
         .zip(mask.iter())
         .filter(|(_, m)| **m)
-        .map(|(v, _)| Operand::Value(v.clone()))
+        .map(|(v, _)| v.clone())
         .collect();
+    let picked = [Operand::Range {
+        rows: cells.len() as u32,
+        cols: 1,
+        cells,
+    }];
     f_sum(&picked, ctx)
 }
 
@@ -1791,12 +1887,19 @@ fn f_averageif<G: Grid>(ops: &[Operand], ctx: &Context<G>) -> Operand {
     let Some((target, mask)) = selected(ops, 2) else {
         return err(ErrorKind::Value);
     };
-    let picked: Vec<Operand> = target
+    // One `Range`, not many `Value`s: these came *from* a range, and TD-51's
+    // direct-argument coercion must not apply to them.
+    let cells: Vec<Value> = target
         .iter()
         .zip(mask.iter())
         .filter(|(_, m)| **m)
-        .map(|(v, _)| Operand::Value(v.clone()))
+        .map(|(v, _)| v.clone())
         .collect();
+    let picked = [Operand::Range {
+        rows: cells.len() as u32,
+        cols: 1,
+        cells,
+    }];
     f_average(&picked, ctx)
 }
 
