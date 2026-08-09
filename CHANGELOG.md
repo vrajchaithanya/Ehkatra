@@ -1,5 +1,13 @@
 # Changelog — Architecture Repository
 
+## 2026-08-09 (session 20, cont.) — TD-32 paid: W-ORACLE 87.0% → 88.2%
+- **TD-32 PAID (D-108).** Excel's literal rules now run at parse time. `__compat_literal_parser` reaches **100%** (29/29, from 51.7%); **+16 cases**.
+- **The truncation is on the source text, not the parsed double** — and only measurement shows why. Excel truncates to 15 significant digits *before* converting, and truncates rather than rounds: `=9999999999999999` is **9999999999999990**, where rounding gives `1e16`. Truncating the double cannot reproduce it, because `9999999999999999` has no exact `f64` and lands on `1e16` with the dropped digits already gone.
+- **An out-of-range literal invalidates the formula, not the cell.** A magnitude at or above `1E308` is refused by Excel's parser rather than stored as `#NUM!`, and `-1E308` is refused too — the out-of-range thing is the *literal*, so the minus never runs. `Ast::Invalid` now propagates through unary and binary operators for that reason.
+- **The underflow boundary is at the written exponent, not at representability**: `=1E-308` and `=1E-309` are both `0`, but `=1E-310` is a parse error, even though both are perfectly good subnormals. Detected textually, because near that boundary the parsed doubles stop being reliably distinguishable.
+- **The profile now reaches the parser** (`parse_with`; `parse` still defaults to `Compat`). It has to: these rules are destructive, and no amount of correct arithmetic downstream recovers a literal that changed meaning at parse time — which is what D-081 meant by putting the rule in the lexer.
+- 3 new tests (341 total, from 338). All gates green; replay hashes unchanged.
+
 ## 2026-08-09 (session 20, cont.) — TD-34 paid: W-ORACLE 85.7% → 87.0%
 - **TD-34 PAID (D-107).** The `COUNTIF`/`SUMIF`/`COUNTIFS`/`SUMIFS`/`AVERAGEIF` criteria sub-language. **+18 cases**; all five reach 100% but for the three cases TD-50 now owns and one TD-15 float `near`.
 - **The headline rule: criteria coerce, lookups do not.** `COUNTIF(range, 7)` counts a cell holding the *text* `"7"`, and so does `COUNTIF(range, "7")` — but `VLOOKUP(7, …)` does not find it. The two families had been sharing `values_equal`, which is wrong for one of them, and nothing in the documented contract says so. There are now two predicates.

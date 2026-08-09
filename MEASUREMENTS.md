@@ -547,6 +547,7 @@ data point, not a re-run.
 | — 1904 date system | 130 | 114 | **87.7%** |
 | **After lookup + wildcards (TD-14, TD-35, session 20)** | 1,366 | **1,171** | **85.7%** |
 | **After the criteria sub-language (TD-34, session 20)** | 1,366 | **1,189** | **87.0%** |
+| **After the literal parser (TD-32, session 20)** | 1,366 | **1,205** | **88.2%** |
 
 352 fail at 74.2%, of which **12 are numerically near** (relative difference
 ≤ 1e-12) and are counted as fails anyway. 0 unjudged — a case the runner cannot
@@ -618,6 +619,29 @@ documented contract distinguishes them.
 extend a short sum range to the criteria range's shape (`H1` means `H1:H5`),
 which needs the *reference* rather than the materialised values — the same
 information TD-16 waits on.
+
+### TD-32: +16 cases, and the truncation has to happen on the text · session 20
+
+`__compat_literal_parser` 29/29 — **100%**, from 51.7%.
+
+| | Cases | Pass | Rate |
+|---|---:|---:|---:|
+| before | 1,366 | 1,189 | 87.0% |
+| after | 1,366 | **1,205** | **88.2%** |
+
+**The measurement that decided where the rule lives.** Excel truncates a literal
+to 15 significant digits *before* converting it to a double, and truncates
+rather than rounds: `=9999999999999999` is **9999999999999990**, where rounding
+gives `1e16`. Truncating the parsed double cannot reproduce this at all —
+`9999999999999999` has no exact `f64`, so it lands on `1e16` and the digits
+Excel drops are already gone. The rule is therefore textual, which is also what
+makes it identical on every target: `core`'s float formatting is pure Rust and
+locale-free (DP-A2).
+
+The second measured oddity is the underflow boundary. `=1E-308` and `=1E-309`
+are both **0**, but `=1E-310` is a **parse error** — the line sits at the
+*written* exponent, not at anything representable, since both are perfectly good
+subnormals.
 
 **Locale is deliberately excluded.** `YEAR("2024-03-15")` is implemented;
 `YEAR("15/03/2024")` is not, although the fixture for it exists. The second

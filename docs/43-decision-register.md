@@ -185,6 +185,20 @@ docs/16 promises salvage from "the **last valid** snapshot", which presupposes m
 That is not a bug in the salvage path, which behaved exactly as specified — it is a retention policy that was never stated. Recorded as **TD-30** with the two candidate fixes (keep N ≥ 2 snapshots, or retain compacted ops until a second snapshot verifies) rather than picked here: the choice trades file size against recoverability, and docs/16's cadence section is where it belongs.
 Worth noting the smaller-scale test disagrees and is right to: `a_corrupted_snapshot_opens_through_salvage_and_reports_it` keeps every op in `ops`, so it recovers the full workbook. The two together are the actual lesson — **recoverability is a property of the retention policy, not of the salvage code.**
 
+### Session 20 (2026-08-09) — TD-32 paid: the literal parser is destructive, so the profile has to reach it
+
+**D-108 — `compat_parse_15` lives in the parser, operates on the source text, and takes a `Profile`.**
+
+W-ORACLE **87.0% → 88.2%** (+16 cases). `__compat_literal_parser` goes 51.7% → **100%**.
+
+**Textual, not numeric, and the corpus is what forces it.** Excel truncates a literal to 15 significant digits *before* converting it to a double, and **truncates rather than rounds**: `=9999999999999999` is `9999999999999990`, where rounding gives `1e16`. A post-parse rounding pass cannot reproduce this at all — `9999999999999999` has no exact `f64`, so it has already landed on `1e16` and the digits Excel drops no longer exist. This is the same shape of finding as D-041's `compat_round_15`: the rule reads as a precision limit and behaves as a text transform.
+
+**An out-of-range literal invalidates the formula.** A magnitude at or above `1E308` is refused by Excel's *parser*; it is not stored as `#NUM!`. `-1E308` is refused too, which says something structural: the out-of-range thing is the literal, and the unary minus never runs. `Ast::Invalid` therefore propagates through unary and binary operators rather than being wrapped — a refused literal poisons the expression containing it, which is what "the parser refuses the formula" means.
+
+**The underflow boundary sits at the written exponent.** `=1E-308` and `=1E-309` are both `0`; `=1E-310` is a parse error. Both are perfectly representable subnormals, so nothing about the value explains the split — it is the text. `written_exponent` is deliberately textual for the same reason: near that boundary the parsed doubles stop being reliably distinguishable from each other.
+
+**Consequence: the profile reaches the parser** (`parse_with`, with `parse` defaulting to `Compat` because the common caller is an imported workbook). Everything else in the compat layer is a *reading* of a stored value and can sit at the evaluator; this one is destructive and irreversible, so `Strict` cannot be implemented downstream of it. That is what D-081 meant when it said the rule belongs in the lexer rather than being layered on as a display concern — stated here as the architectural consequence rather than as an implementation note.
+
 ### Session 20 (2026-08-09) — TD-34 paid: criteria coerce, lookups do not
 
 **D-107 — The criteria sub-language is a *separate* comparison from the lookup one, and the corpus is what proves it.**

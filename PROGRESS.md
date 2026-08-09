@@ -12,7 +12,7 @@ registers (docs/43 decisions, docs/44 debt, MEASUREMENTS.md numbers) are for.
 
 **Where the tree is:** v0.1 is complete and tagged `v0.1.0`. Q1 is done. The
 work in flight is the compatibility-debt push toward **W-ORACLE ≥ 90%**
-(now **87.0%**, 1,189 / 1,366 cases — up from 74.2% this session), followed by
+(now **88.2%**, 1,205 / 1,366 cases — up from 74.2% this session), followed by
 the structural debt around the tile image, then Q2's shell.
 
 **Session 20 paid TD-33, the largest cluster.** Excel's two date systems are now
@@ -43,6 +43,14 @@ nothing in the documented contract says so. Also: `""` is the blank cell and
 string. Filed rather than bodged: **TD-50**, `SUMIF`'s short sum range must
 extend to the criteria range's shape, which needs the *reference* rather than
 materialised values — the same thing TD-16 waits on, so they repay together.
+
+**Session 20 paid TD-32** (**D-108**), +16 cases, taking the literal parser to
+100%. The rule only measurement gives you: the 15-digit truncation is on the
+**source text**, not the parsed double — `9999999999999999` has no exact `f64`,
+so by the time it is a number the digits Excel drops are gone. It also
+**truncates rather than rounds**. Consequence worth knowing: the profile now
+reaches the *parser* (`parse_with`), because unlike every other compat rule this
+one is destructive, so `Strict` cannot be implemented downstream of it.
 
 **Session 20 closed TD-47 and found it was never true.** `tools/gates.ps1` was
 recorded as requiring PowerShell 7 and aborting on this 5.1-only host. Measured:
@@ -77,12 +85,12 @@ keeps its number forever.
   (also `pwsh -File tools/gates.ps1`). Shell compat · fmt · clippy `-D warnings`
   · tests · no_std wasm32 kernel build · dep budget · supply chain (cargo-deny)
   · differential replay native == wasm32 · purity/host-isolation greps.
-- **Tests:** 338, all passing.
+- **Tests:** 341, all passing.
 - **Replay hashes:** oplog `c79fa533…` · state `b58d5505…` (unchanged by the
   date work — it is additive to the op algebra).
 - **Dependency budget:** kernel direct 1/5 · kernel closure 10/12 · workspace
   closure 29/40.
-- **W-ORACLE:** **87.0%** overall (1,189 / 1,366).
+- **W-ORACLE:** **88.2%** overall (1,205 / 1,366).
 - **Open structural debt:** TD-46 (the tile image is built, tested, fuzz-clean
   and measured — and still not the snapshot body), and with it TD-45, TD-31 and
   TD-24's residual, all of which close together.
@@ -102,9 +110,7 @@ than re-guessing:
    they fail on `TEXT`, `DATEVALUE` and `EOMONTH`, not on date arithmetic.
 3. ~~TD-14 — approximate-match lookup~~ **PAID (session 20)**, with ~~TD-35~~.
 4. ~~TD-34 — the criteria sub-language~~ **PAID (session 20)**, +18 cases.
-5. **TD-32 — `compat_parse_15`** (~14), parse-time literal truncation. **Do
-   this next**: it is the last self-contained cluster before TD-36's format
-   grammar, and it belongs in the lexer, so it cannot be layered on later.
+5. ~~TD-32 — `compat_parse_15`~~ **PAID (session 20)**, +16 cases.
 6. **TD-16 — implicit intersection** — not in the original list, but it is now
    what holds the last three `INDEX` cases down, and it needs the dependency
    graph to supply the calling cell's position.

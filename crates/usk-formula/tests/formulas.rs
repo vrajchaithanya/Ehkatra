@@ -198,6 +198,71 @@ fn string_literals_unescape_doubled_quotes() {
     assert_eq!(ev("=\"say \"\"hi\"\"\"", Profile::Compat), t("say \"hi\""));
 }
 
+/// TD-32: Excel's literal rules run at **parse** time and are destructive.
+/// Values from `tools/oracle-capture/grids/91-literal-parser.psd1`.
+#[test]
+fn literals_truncate_to_15_significant_digits_rather_than_rounding() {
+    // The case that forces the truncation onto the *text*: `9999999999999999`
+    // has no exact f64, so it parses to 1e16 and by then the digits Excel
+    // truncates are gone. Excel truncates first and converts second.
+    assert_eq!(
+        ev("=9999999999999999", Profile::Compat),
+        n(9999999999999990.0)
+    );
+    assert_eq!(
+        ev("=123456789012345678", Profile::Compat),
+        n(1.23456789012345e17)
+    );
+    assert_eq!(
+        ev("=1.234567890123456789", Profile::Compat),
+        n(1.23456789012345)
+    );
+    assert_eq!(
+        ev("=0.1234567890123456789", Profile::Compat),
+        n(0.123456789012345)
+    );
+    // Fifteen digits or fewer are untouched.
+    assert_eq!(ev("=45292", Profile::Compat), n(45292.0));
+    assert_eq!(ev("=1.5", Profile::Compat), n(1.5));
+}
+
+/// A literal outside Excel's range makes the **formula** invalid, not the cell
+/// value — Excel's parser refuses it. `-1E308` is refused too, because the
+/// out-of-range thing is the literal and the minus never gets to run.
+#[test]
+fn out_of_range_literals_are_refused_by_the_parser() {
+    for src in ["=1E308", "=1E+308", "=1.5E308", "=-1E308", "=1E309"] {
+        assert!(
+            matches!(parse(src).ast, Ast::Invalid(_)),
+            "{src} should be refused at parse time"
+        );
+    }
+    // Below the smallest normal a literal flushes to zero — but an exponent
+    // below -309 is refused outright. An odd boundary, and a measured one: it
+    // sits at the written exponent, not at anything representable.
+    assert_eq!(ev("=1E-308", Profile::Compat), n(0.0));
+    assert_eq!(ev("=1E-309", Profile::Compat), n(0.0));
+    for src in ["=1E-310", "=1E-320"] {
+        assert!(
+            matches!(parse(src).ast, Ast::Invalid(_)),
+            "{src} should be refused at parse time"
+        );
+    }
+}
+
+/// Every rule above is a compatibility fiction, so `Strict` keeps the literal
+/// exactly as written. The profile has to reach the *parser* for that to be
+/// possible at all.
+#[test]
+fn strict_keeps_the_literal_it_was_given() {
+    let strict = parse_mod::parse_with("=1.234567890123456789", Profile::Strict);
+    // The nearest f64 to what was typed — which is the point: strict rounds
+    // once, to the double, and does not truncate the decimal text first.
+    assert_eq!(strict.ast, Ast::Literal(n(1.2345678901234568)));
+    let strict = parse_mod::parse_with("=1E308", Profile::Strict);
+    assert_eq!(strict.ast, Ast::Literal(n(1e308)));
+}
+
 /// A malformed formula is an error *value*, never a panic (DP-A10).
 #[test]
 fn malformed_formulas_produce_error_values_not_panics() {
