@@ -198,6 +198,85 @@ fn string_literals_unescape_doubled_quotes() {
     assert_eq!(ev("=\"say \"\"hi\"\"\"", Profile::Compat), t("say \"hi\""));
 }
 
+/// TD-53: a condition reads text logicals and refuses numeric text — the exact
+/// inverse of the ordinary text→number coercion the engine used to apply.
+#[test]
+fn a_condition_reads_text_logicals_and_refuses_numeric_text() {
+    assert_eq!(ev("=IF(\"TRUE\",1,2)", Profile::Compat), n(1.0));
+    assert_eq!(ev("=IF(\"true\",1,2)", Profile::Compat), n(1.0));
+    assert_eq!(ev("=IF(\"FALSE\",1,2)", Profile::Compat), n(2.0));
+    // The inversion that matters: `"1"` is a number to `VALUE` and not a
+    // condition to `IF`.
+    for src in ["=IF(\"1\",1,2)", "=IF(\"abc\",1,2)", "=IF(\"\",1,2)"] {
+        assert_eq!(
+            kind_of(&ev(src, Profile::Compat)),
+            Some(ErrorKind::Value),
+            "{src}"
+        );
+    }
+    // Numbers are still conditions, and zero is still the false one.
+    assert_eq!(ev("=IF(-1,1,2)", Profile::Compat), n(1.0));
+    assert_eq!(ev("=IF(0,1,2)", Profile::Compat), n(2.0));
+    // The same rule reaches NOT, which is why `truthy` is shared.
+    assert_eq!(ev("=NOT(\"TRUE\")", Profile::Compat), Value::Bool(false));
+    assert_eq!(
+        kind_of(&ev("=NOT(\"abc\")", Profile::Compat)),
+        Some(ErrorKind::Value)
+    );
+    // AND/OR/XOR *skip* what they cannot read rather than failing, and fail
+    // only when nothing readable remains.
+    assert_eq!(ev("=AND(TRUE,\"x\")", Profile::Compat), Value::Bool(true));
+    assert_eq!(
+        kind_of(&ev("=AND(\"\")", Profile::Compat)),
+        Some(ErrorKind::Value)
+    );
+    assert_eq!(ev("=XOR(TRUE)", Profile::Compat), Value::Bool(true));
+}
+
+/// TD-52: an omitted argument is Excel's shorthand for "this slot is empty",
+/// not a parse error — and a formula's *result* is never blank, because a
+/// formula always occupies its cell.
+#[test]
+fn an_omitted_argument_is_blank_and_a_blank_result_is_zero() {
+    assert_eq!(ev("=IF(TRUE,,2)", Profile::Compat), n(0.0));
+    assert_eq!(ev("=IF(FALSE,1,)", Profile::Compat), n(0.0));
+    assert_eq!(ev("=IFERROR(1/0,)", Profile::Compat), n(0.0));
+    assert_eq!(ev("=IFNA(NA(),)", Profile::Compat), n(0.0));
+
+    // A blank *cell* reaching the top of a formula renders as 0 too.
+    let g = Fixture::new(1, 1, alloc_cells(&[Value::Blank]));
+    assert_eq!(evg("=IF(TRUE,A1,2)", &g, Profile::Compat), n(0.0));
+    assert_eq!(evg("=IFERROR(A1,\"caught\")", &g, Profile::Compat), n(0.0));
+    assert_eq!(evg("=A1", &g, Profile::Compat), n(0.0));
+
+    // But a blank *sub-expression* is still blank, or COUNTBLANK and ISBLANK
+    // would have nothing to see and SUM would add a zero where it should skip.
+    assert_eq!(evg("=ISBLANK(A1)", &g, Profile::Compat), Value::Bool(true));
+    assert_eq!(evg("=COUNTBLANK(A1)", &g, Profile::Compat), n(1.0));
+    assert_eq!(evg("=COUNT(A1)", &g, Profile::Compat), n(0.0));
+
+    // The empty slot has no bytes, so the CST still round-trips (ADR-011).
+    for src in ["=IF(TRUE,,2)", "=IFERROR(1/0,)"] {
+        assert_eq!(parse(src).cst.text(src), src, "{src}");
+    }
+}
+
+/// `ERROR.TYPE` maps Excel's published error numbering. The two error kinds
+/// this engine has that Excel does not number are refused rather than given an
+/// invented code.
+#[test]
+fn error_type_returns_excels_error_numbering() {
+    assert_eq!(ev("=ERROR.TYPE(1/0)", Profile::Compat), n(2.0));
+    assert_eq!(ev("=ERROR.TYPE(NA())", Profile::Compat), n(7.0));
+    assert_eq!(ev("=ERROR.TYPE(SQRT(-1))", Profile::Compat), n(6.0));
+    // Not an error at all: #N/A, which here means "no answer" rather than
+    // "something went wrong".
+    assert_eq!(
+        kind_of(&ev("=ERROR.TYPE(1)", Profile::Compat)),
+        Some(ErrorKind::Na)
+    );
+}
+
 /// TD-51: a direct argument and a range cell coerce differently, and the
 /// documented description of `SUM` covers only the range half — which is
 /// exactly why one rule had been written for both.

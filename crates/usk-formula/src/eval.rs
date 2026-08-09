@@ -144,6 +144,25 @@ pub fn eval<G: Grid>(ast: &Ast, ctx: &Context<G>) -> Value {
 /// W-CHAIN-100K from 92.6 ms to 145.2 ms — the bench caught it during the v0.1
 /// audit, and it is the reason the duplication below is deliberate.
 pub fn eval_top<G: Grid>(ast: &Ast, ctx: &Context<G>) -> Value {
+    materialise_blank(eval_top_inner(ast, ctx))
+}
+
+/// A formula's **result** is never blank — a blank is a property of a *cell*,
+/// and a formula always occupies its cell (TD-52).
+///
+/// So `=A1` over an empty `A1` is `0`, and so are `IF(TRUE,A1,2)`,
+/// `IFERROR(A1,"caught")` and every omitted argument that reaches the top.
+/// Applied here rather than inside `eval`, because a blank *sub*-expression is
+/// meaningful: `COUNTBLANK` and `ISBLANK` exist to see it, and `SUM` must skip
+/// it rather than add a zero.
+fn materialise_blank(v: Value) -> Value {
+    match v {
+        Value::Blank => Value::Number(0.0),
+        other => other,
+    }
+}
+
+fn eval_top_inner<G: Grid>(ast: &Ast, ctx: &Context<G>) -> Value {
     let Ast::Binary(op @ (BinOp::Add | BinOp::Sub), lhs, rhs) = ast else {
         return eval(ast, ctx);
     };

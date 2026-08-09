@@ -22,7 +22,7 @@ use crate::parse::Ast;
 use alloc::string::String;
 use alloc::vec::Vec;
 use usk_types::coerce::{arith, compat_final_adjust, Profile};
-use usk_types::{ArithOp, CellError, Decimal, ErrorKind, Origin, Value};
+use usk_types::{ArithOp, CellError, Decimal, ErrorKind, Origin, TypeTag, Value};
 
 /// Every function this build knows. Used by the catalogue-size test and by
 /// future name-completion; keeping it next to the dispatch keeps them honest.
@@ -62,6 +62,7 @@ pub const CATALOGUE: &[&str] = &[
     "ISTEXT",
     "ISLOGICAL",
     "NA",
+    "ERROR.TYPE",
     // Text
     "CONCAT",
     "CONCATENATE",
@@ -209,18 +210,31 @@ pub fn call<G: Grid>(name: &str, args: &[Ast], ctx: &Context<G>) -> Operand {
             Some(Err(e)) => val(Value::Error(e)),
             None => err(ErrorKind::Value),
         },
+        // XOR skips non-logicals and demands at least one, exactly like
+        // AND/OR — it had been coercing everything, so `XOR(D1:D4)` over a
+        // range containing text was `#VALUE!` and `XOR(A1)` over a blank was
+        // `FALSE` instead of `#VALUE!`.
         "XOR" => {
-            let mut trues = 0usize;
+            let (mut trues, mut seen) = (0usize, false);
             for o in &ops {
                 for c in o.cells() {
-                    match truthy(ctx, &c) {
-                        Ok(true) => trues += 1,
-                        Ok(false) => {}
+                    let Some(b) = logical_operand(ctx, &c) else {
+                        continue;
+                    };
+                    match b {
+                        Ok(b) => {
+                            seen = true;
+                            trues += usize::from(b);
+                        }
                         Err(e) => return val(Value::Error(e)),
                     }
                 }
             }
-            boolean(trues % 2 == 1)
+            if seen {
+                boolean(trues % 2 == 1)
+            } else {
+                err(ErrorKind::Value)
+            }
         }
 
         "ISERROR" => boolean(ops.first().is_some_and(|o| o.as_error().is_some())),
@@ -237,6 +251,25 @@ pub fn call<G: Grid>(name: &str, args: &[Ast], ctx: &Context<G>) -> Operand {
         "ISTEXT" => boolean(matches!(scalar(&ops, 0), Some(Value::Text(_)))),
         "ISLOGICAL" => boolean(matches!(scalar(&ops, 0), Some(Value::Bool(_)))),
         "NA" => err(ErrorKind::Na),
+        // Excel's error *numbering*, which is a published table rather than
+        // anything derivable: #NULL! 1, #DIV/0! 2, #VALUE! 3, #REF! 4, #NAME? 5,
+        // #NUM! 6, #N/A 7. Anything that is not an error is #N/A, which is the
+        // one case where returning an error means "no answer" rather than
+        // "something went wrong".
+        "ERROR.TYPE" => match scalar(&ops, 0).and_then(|v| v.as_error().map(|e| e.kind)) {
+            Some(ErrorKind::Div0) => num(2.0),
+            Some(ErrorKind::Value) => num(3.0),
+            Some(ErrorKind::Ref) => num(4.0),
+            Some(ErrorKind::Name) => num(5.0),
+            Some(ErrorKind::Num) => num(6.0),
+            Some(ErrorKind::Na) => num(7.0),
+            Some(ErrorKind::Spill) => num(9.0),
+            // 1 is `#NULL!`, which this engine does not model, and `Circ` is a
+            // calculation *state* rather than one of Excel's error values, so
+            // it has no code to return. Both fall through to the not-an-error
+            // answer rather than being given an invented number.
+            Some(ErrorKind::Circ) | None => err(ErrorKind::Na),
+        },
 
         "CONCAT" | "CONCATENATE" => f_concat(&ops, ctx),
         "TEXTJOIN" => f_textjoin(&ops, ctx),
@@ -420,11 +453,46 @@ fn numeric_cells_or_err<G: Grid>(ops: &[Operand], ctx: &Context<G>) -> Result<Ve
     numeric_inputs(ops, ctx, false).map_err(|e| val(Value::Error(e)))
 }
 
+/// Excel's condition rule, which is **not** the ordinary text→number coercion
+/// (TD-53). Measured, and inverted from what the engine used to do:
+///
+/// * A number is true when non-zero, so `IF(-1,…)` takes the true branch.
+/// * A blank is false.
+/// * Text is a condition **only** when it spells a logical: `IF("TRUE",…)` and
+///   `IF("true",…)` are true. Numeric text is *not* — `IF("1",…)` is `#VALUE!`,
+///   where the ordinary coercion would have accepted it.
+/// * Everything else is `#VALUE!`, and an error propagates.
+///
+/// The last two are the whole point. Sending the condition through
+/// `to_number` accepts `"1"` and rejects `"TRUE"` — exactly backwards — so an
+/// imported model with a text flag column evaluated wrongly in both directions.
 fn truthy<G: Grid>(ctx: &Context<G>, v: &Value) -> Result<bool, CellError> {
     match v {
         Value::Bool(b) => Ok(*b),
         Value::Error(e) => Err(*e),
+        Value::Blank => Ok(false),
+        Value::Text(s) => text_logical(s).ok_or_else(|| {
+            CellError::new(
+                ErrorKind::Value,
+                Origin::Coercion {
+                    from: TypeTag::Text,
+                    to: TypeTag::Bool,
+                },
+            )
+        }),
         other => ctx.profile.to_number(other).map(|n| n != 0.0),
+    }
+}
+
+/// `"TRUE"`/`"FALSE"`, case-insensitively, and nothing else — not `"1"`, not
+/// `""`, not `" "`.
+fn text_logical(s: &str) -> Option<bool> {
+    if s.eq_ignore_ascii_case("TRUE") {
+        Some(true)
+    } else if s.eq_ignore_ascii_case("FALSE") {
+        Some(false)
+    } else {
+        None
     }
 }
 
@@ -913,16 +981,29 @@ fn f_iferror<G: Grid>(args: &[Ast], ctx: &Context<G>, only_na: bool) -> Operand 
     }
 }
 
+/// How `AND`/`OR`/`XOR` read one value. `None` means "not a logical at all,
+/// skip it" — which is why `AND(TRUE,"x")` is `TRUE` rather than `#VALUE!`,
+/// while `AND("")` is `#VALUE!` because nothing usable remained.
+///
+/// Text that *spells* a logical is still read, so this skips less than a blanket
+/// "ignore all text" would: `NOT("TRUE")` is `FALSE` (TD-53).
+fn logical_operand<G: Grid>(ctx: &Context<G>, v: &Value) -> Option<Result<bool, CellError>> {
+    match v {
+        Value::Blank => None,
+        Value::Text(s) => text_logical(s).map(Ok),
+        other => Some(truthy(ctx, other)),
+    }
+}
+
 fn f_logic<G: Grid>(ops: &[Operand], ctx: &Context<G>, all: bool) -> Operand {
     let mut seen = false;
     let mut acc = all;
     for o in ops {
         for c in o.cells() {
-            // Excel's AND/OR skip blanks and text rather than coercing them.
-            if matches!(c, Value::Blank | Value::Text(_)) {
+            let Some(b) = logical_operand(ctx, &c) else {
                 continue;
-            }
-            match truthy(ctx, &c) {
+            };
+            match b {
                 Err(e) => return val(Value::Error(e)),
                 Ok(b) => {
                     seen = true;

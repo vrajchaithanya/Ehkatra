@@ -1,5 +1,15 @@
 # Changelog — Architecture Repository
 
+## 2026-08-09 (session 21) — TD-52 + TD-53 + `ERROR.TYPE`: **W-ORACLE 89.3% → 90.4%, target met**
+- **TD-52 and TD-53 PAID (D-110)**, and `ERROR.TYPE` implemented. **+15 cases**, where ~10 were forecast. **The ≥90% target in docs/44's W-ORACLE table is met** — 1,235 of 1,366 cases, up from 74.2% two sessions ago.
+- **Every logical and conditional function is now exact**: `IF` 20/20, `IFERROR` 10/10, `IFNA` 8/8, `NA` 6/6, `AND` 12/12, `OR` 10/10, `NOT` 10/10, `XOR` 10/10.
+- **A condition is not a number in disguise (TD-53).** It reads text that *spells* a logical and refuses text that merely looks numeric: `IF("TRUE",1,2)` is 1, `IF("true",1,2)` is 1, and `IF("1",1,2)` is `#VALUE!`. The engine had sent conditions through the ordinary text→number coercion, which accepts `"1"` and rejects `"TRUE"` — wrong in both directions at once.
+- **Two rules for an omitted argument (TD-52).** The argument list now accepts an empty slot (`IF(TRUE,,2)`, `IFERROR(1/0,)`), *and* a blank reaching the top of a formula becomes `0` — because a blank is a property of a **cell** and a formula always occupies its cell. The second is applied at `eval_top` only: a blank *sub*-expression stays blank, or `ISBLANK` and `COUNTBLANK` would have nothing to see and `SUM` would add a zero where it must skip. There are tests for both directions.
+- **The corrected rule paid more than it was priced at.** Sharing `truthy` fixed `NOT("TRUE")`, and giving `XOR` the skip-non-logicals-and-require-one behaviour `AND`/`OR` already had fixed two more — `XOR(D1:D4)` over a range containing text was `#VALUE!`, and `XOR(A1)` over a blank was `FALSE` instead of `#VALUE!`.
+- **`ERROR.TYPE`** maps Excel's published error numbering. `#NULL!` (1) is not modelled by this engine and `Circ` is a calculation *state* rather than one of Excel's error values, so both answer `#N/A` rather than being given an invented code.
+- The empty argument slot contributes no tokens, so the CST still round-trips (ADR-011) — asserted, not assumed.
+- 3 new tests (346 total, from 343). All gates green; replay hashes unchanged.
+
 ## 2026-08-09 (session 20, cont.) — TD-51 + TD-54 paid: W-ORACLE 88.2% → 89.3%
 - **TD-51 and TD-54 PAID (D-109)**, filed and paid in the same session. **+15 cases**; `SUM`, `COUNT`, `MAX`, `MIN`, `AVERAGE`, `PRODUCT` and the `IS` predicates are now clean apart from two `SUM` cancellation cases that belong to D-041.
 - **Two rules where there had been one.** A value written as a **direct argument** is coerced; the same value **inside a range** is skipped. `SUM("7",1)` is 8 and `SUM(TRUE,1)` is 2, while a text or logical *cell* is ignored — and `SUM("abc",1)` is `#VALUE!` where a text cell is simply passed over. The documented description of `SUM` covers only the range half, which is exactly why one rule got written for both. `Operand` already carried the distinction, so the two rules cost one `match`.

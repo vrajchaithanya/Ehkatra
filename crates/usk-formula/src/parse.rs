@@ -511,7 +511,22 @@ impl<'a> Parser<'a> {
 
         if self.peek_kind() != Some(TokenKind::RParen) {
             loop {
-                let (arg_cst, arg_ast) = self.expression(0);
+                // An **omitted argument** — `IF(TRUE,,2)`, `IFERROR(1/0,)` —
+                // is Excel's shorthand for "this slot is empty", and it reads
+                // as blank (TD-52). It is not a parse error, which is what an
+                // unconditional `expression(0)` made of it. The empty slot
+                // contributes no tokens, so the CST node has no children and
+                // the round trip is unaffected.
+                let (arg_cst, arg_ast) = match self.peek_kind() {
+                    Some(TokenKind::Comma) | Some(TokenKind::RParen) | None => (
+                        Cst::Node {
+                            kind: NodeKind::Literal,
+                            children: Vec::new(),
+                        },
+                        Ast::Literal(Value::Blank),
+                    ),
+                    _ => self.expression(0),
+                };
                 arg_children.push(arg_cst);
                 args.push(arg_ast);
                 match self.peek() {

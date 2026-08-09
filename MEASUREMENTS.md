@@ -549,6 +549,7 @@ data point, not a re-run.
 | **After the criteria sub-language (TD-34, session 20)** | 1,366 | **1,189** | **87.0%** |
 | **After the literal parser (TD-32, session 20)** | 1,366 | **1,205** | **88.2%** |
 | **After argument coercion (TD-51, TD-54, session 20)** | 1,366 | **1,220** | **89.3%** |
+| **After conditions and omitted arguments (TD-52, TD-53, session 21)** | 1,366 | **1,235** | **90.4%** |
 
 352 fail at 74.2%, of which **12 are numerically near** (relative difference
 ≤ 1e-12) and are counted as fails anyway. 0 unjudged — a case the runner cannot
@@ -665,6 +666,31 @@ range half, which is why one rule had been written for both.
 **One case left in this area and it is not this cluster's**: `ERROR.TYPE` is
 unimplemented, so `ERROR.TYPE(NA())` is `#NAME?` rather than `7`. That is the
 function catalogue, not argument handling.
+
+### TD-52 + TD-53 + `ERROR.TYPE`: **the 90% target is met** · session 21
+
+| | Cases | Pass | Rate |
+|---|---:|---:|---:|
+| before | 1,366 | 1,220 | 89.3% |
+| after | 1,366 | **1,235** | **90.4%** |
+
+`IF` 20/20 · `IFERROR` 10/10 · `IFNA` 8/8 · `NA` 6/6 · `AND` 12/12 · `OR`
+10/10 · `NOT` 10/10 · `XOR` 10/10 — **every logical and conditional function is
+now exact**.
+
+**The 90% bar in docs/44's table is met and passed**: 1,235 of 1,366 oracle
+cases match real Excel exactly under `Profile::Compat`, up from **74.2%** two
+sessions ago.
+
+**The measurement that inverted a rule.** A condition reads text that *spells* a
+logical and refuses text that merely looks numeric: `IF("TRUE",1,2)` is **1**,
+`IF("true",1,2)` is **1**, and `IF("1",1,2)` is **`#VALUE!`**. The engine had
+sent conditions through the ordinary text→number coercion, which accepts `"1"`
+and rejects `"TRUE"` — wrong in both directions at once.
+
+**+15 where ~10 were forecast.** The extra three came from sharing the corrected
+rule: `NOT("TRUE")`, and two `XOR` cases once `XOR` was given the same
+skip-non-logicals-and-require-one behaviour `AND`/`OR` already had.
 
 **Locale is deliberately excluded.** `YEAR("2024-03-15")` is implemented;
 `YEAR("15/03/2024")` is not, although the fixture for it exists. The second

@@ -185,6 +185,25 @@ docs/16 promises salvage from "the **last valid** snapshot", which presupposes m
 That is not a bug in the salvage path, which behaved exactly as specified — it is a retention policy that was never stated. Recorded as **TD-30** with the two candidate fixes (keep N ≥ 2 snapshots, or retain compacted ops until a second snapshot verifies) rather than picked here: the choice trades file size against recoverability, and docs/16's cadence section is where it belongs.
 Worth noting the smaller-scale test disagrees and is right to: `a_corrupted_snapshot_opens_through_salvage_and_reports_it` keeps every op in `ops`, so it recovers the full workbook. The two together are the actual lesson — **recoverability is a property of the retention policy, not of the salvage code.**
 
+### Session 21 (2026-08-09) — TD-52 and TD-53 paid: a condition is not a number, and a formula is never blank
+
+**D-110 — Conditions get Excel's own truth rule; an omitted argument parses as blank; a blank result materialises as zero.**
+
+W-ORACLE **89.3% → 90.4%** (+15 cases, where ~10 were forecast). **The ≥90% target is met.** Every logical and conditional function is exact: `IF`, `IFERROR`, `IFNA`, `NA`, `AND`, `OR`, `NOT`, `XOR`.
+
+**A condition reads text logicals and refuses numeric text — the exact inverse of what was there.** `IF("TRUE",1,2)` is 1, `IF("true",1,2)` is 1, and `IF("1",1,2)` is `#VALUE!`. The engine had sent conditions through the ordinary text→number coercion, which accepts `"1"` and rejects `"TRUE"`, so an imported model with a text flag column was wrong in *both* directions at once. This is the fourth measured case in three sessions where the natural implementation is the inverse of the real one — see D-106, D-107, D-109 — and it is why ADR-024 exists.
+
+**`truthy` is shared, and that is the point.** Correcting it once fixed `NOT("TRUE")` for free. `AND`/`OR` already skipped what they could not read and failed only when nothing readable remained; `XOR` did not, so it was given the same behaviour and two more cases fell out. The generalisation is worth stating: **a logical operand has three outcomes, not two** — readable, error, or *not a logical at all and therefore skipped* — and the middle layer is what makes `AND(TRUE,"x")` be `TRUE` while `AND("")` is `#VALUE!`.
+
+**An omitted argument is two rules, not one.**
+
+1. **The slot parses as blank.** `IF(TRUE,,2)` and `IFERROR(1/0,)` are Excel's shorthand for "this branch is empty", not syntax errors. The empty slot contributes no tokens, so the CST round trip is untouched — asserted rather than assumed, because ADR-011's losslessness is the kind of property that decays silently.
+2. **A blank reaching the top of a formula becomes `0`.** A blank is a property of a *cell*, and a formula always occupies its cell, so a formula's result is never blank: `=A1` over an empty `A1` is `0`, and so are `IF(TRUE,A1,2)` and `IFERROR(A1,"caught")`.
+
+**Rule 2 is applied at `eval_top` and nowhere else**, which is the load-bearing choice. A blank *sub*-expression is meaningful: `ISBLANK` and `COUNTBLANK` exist to see it, and `SUM` must skip it rather than add a zero. Pushing the materialisation down into `eval` would have made all three wrong to buy the same four cases. Both directions have tests.
+
+**`ERROR.TYPE`** implements Excel's published error numbering. Two kinds get no code rather than an invented one: `#NULL!` (1) is not modelled by this engine at all, and `Circ` is a calculation *state* rather than one of Excel's error values. Both answer `#N/A`, which in this function means "not an error" rather than "something went wrong" — the one place where returning an error is the success path.
+
 ### Session 20 (2026-08-09) — TD-51 and TD-54 paid: an argument and a cell are not the same thing
 
 **D-109 — Aggregation has two coercion rules, chosen by whether the value was written as an argument or read from a range.**
