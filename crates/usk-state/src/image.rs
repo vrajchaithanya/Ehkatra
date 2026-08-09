@@ -60,7 +60,7 @@ use alloc::vec::Vec;
 use usk_oplog::RangeBinding;
 use usk_types::{ActorId, ColId, Decimal, OpId, RowId, Value};
 
-use crate::stamps::{read_varint, unzigzag, write_varint, zigzag, WinnerStamps};
+use crate::stamps::{read_varint, write_varint, WinnerStamps};
 
 use crate::formula::{FormulaCell, FormulaRegistry};
 use crate::tile::{TileKey, TileStore};
@@ -82,8 +82,6 @@ pub(crate) const MAX_AXIS_ENTRIES: usize = 1 << 26;
 pub(crate) const MAX_TILES: usize = 1 << 22;
 const MAX_FORMULAS: usize = 1 << 24;
 const MAX_LOSERS: usize = 1 << 16;
-/// One stamp per cell, so this is the cell bound rather than the tile bound.
-const MAX_STAMPS: usize = 1 << 28;
 const MAX_TEXT_BYTES: usize = 1 << 26;
 
 /// Why a byte string is not an image this build can load. Errors are values
@@ -197,7 +195,7 @@ impl State {
         write_axis(&mut w, &self.cols);
         self.cells.write_image(&mut w);
         write_formulas(&mut w, &self.formulas);
-        write_stamps(&mut w, stamps);
+        write_stamps(&mut w, &self.cells, stamps);
 
         let tiles = core::mem::take(&mut w.tiles);
         (w.out, tiles)
@@ -222,7 +220,7 @@ impl State {
         let cols = read_axis(&mut r)?;
         let cells = TileStore::read_image(&mut r)?;
         let formulas = read_formulas(&mut r)?;
-        let stamps = read_stamps(&mut r)?;
+        let stamps = read_stamps(&mut r, &cells)?;
         if r.at != bytes.len() {
             return Err(ImageError::Malformed("trailing bytes after the image"));
         }
@@ -255,7 +253,7 @@ impl State {
 /// against the previous entry, which is what makes each one a single byte in
 /// the common case: a bulk write assigns lamports and counters that ascend
 /// almost in lockstep (D-102).
-fn write_stamps(w: &mut Writer, stamps: &WinnerStamps) {
+fn write_stamps(w: &mut Writer, cells: &TileStore, stamps: &WinnerStamps) {
     match stamps.greatest() {
         None => w.u8(0),
         Some((lamport, id)) => {
@@ -264,20 +262,17 @@ fn write_stamps(w: &mut Writer, stamps: &WinnerStamps) {
             w.opid(&id);
         }
     }
-    w.len(stamps.len());
-    let (mut last_lamport, mut last_counter) = (0i64, 0i64);
-    for ((row, col), (lamport, id)) in stamps.iter() {
-        w.opid(&row.0);
-        w.opid(&col.0);
-        w.varint(zigzag(*lamport as i64 - last_lamport));
-        w.out.extend_from_slice(&id.actor.0.to_le_bytes());
-        w.varint(zigzag(id.counter as i64 - last_counter));
-        last_lamport = *lamport as i64;
-        last_counter = id.counter as i64;
+    // Empty sidecar: an image written without stamps is still a faithful
+    // image, it just cannot be adopted and continued.
+    if stamps.is_empty() {
+        w.u8(0);
+        return;
     }
+    w.u8(1);
+    cells.write_stamps(w, stamps);
 }
 
-fn read_stamps(r: &mut Reader) -> Result<WinnerStamps, ImageError> {
+fn read_stamps(r: &mut Reader, cells: &TileStore) -> Result<WinnerStamps, ImageError> {
     let mut stamps = WinnerStamps::default();
     match r.u8()? {
         0 => stamps.set_greatest(None),
@@ -288,35 +283,12 @@ fn read_stamps(r: &mut Reader) -> Result<WinnerStamps, ImageError> {
         }
         _ => return Err(ImageError::Malformed("stamp watermark tag")),
     }
-    let n = r.count(MAX_STAMPS, "stamps")?;
-    let (mut last_lamport, mut last_counter) = (0i64, 0i64);
-    for _ in 0..n {
-        let row = RowId(r.opid()?);
-        let col = ColId(r.opid()?);
-        let lamport = last_lamport
-            .checked_add(unzigzag(r.varint()?))
-            .ok_or(ImageError::Malformed("stamp lamport delta overflows"))?;
-        let actor = ActorId(r.u128()?);
-        let counter = last_counter
-            .checked_add(unzigzag(r.varint()?))
-            .ok_or(ImageError::Malformed("stamp counter delta overflows"))?;
-        if lamport < 0 || counter < 0 {
-            return Err(ImageError::Malformed("stamp delta went negative"));
-        }
-        stamps.insert(
-            row,
-            col,
-            (
-                lamport as u64,
-                OpId {
-                    actor,
-                    counter: counter as u64,
-                },
-            ),
-        );
-        last_lamport = lamport;
-        last_counter = counter;
+    match r.u8()? {
+        0 => return Ok(stamps),
+        1 => {}
+        _ => return Err(ImageError::Malformed("stamp section tag")),
     }
+    cells.read_stamps(r, &mut stamps)?;
     Ok(stamps)
 }
 

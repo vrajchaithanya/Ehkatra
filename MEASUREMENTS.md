@@ -910,18 +910,29 @@ Recorded as measured, with three consequences stated plainly:
   benchmark that reports one sample invites exactly this, which is why the
   recalc figures beside it are already medians of five.
 
-## W-OPEN-1M with an image body (docs/38) — **no improvement, and the reason is measured** · session 21
+## W-OPEN-1M with an image body (docs/38) — **TD-45 and TD-31 paid** · session 21
 
 Run: `cargo run --release -p open-bench`. Same 1,000,000-cell corpus (1000 x
 1000) plus a 100,000-op tail, three retained snapshots.
 
-| | before (op-set body) | **after (image body)** |
-|---|---:|---:|
-| cold open to READY | 7.86 s | **7.96 s** |
-| container | 307 MB | **318 MB** |
-| 3 snapshot bodies | — | **265.6 MB** |
+| | before (op-set body) | image, naive sidecar | **image, per-tile sidecar** |
+|---|---:|---:|---:|
+| cold open to READY | 7.86 s | 7.96 s | **1.79 s** |
+| SALVAGE (corrupt page) | 6.49 s | 6.70 s | **2.24 s** |
+| container | 307 MB | 318 MB | **148 MB** |
+| 3 snapshot bodies | — | 265.6 MB | **95.6 MB** |
 
-**TD-45 and TD-31 are not paid.** The container half of ADR-036 is implemented,
+**TD-45 and TD-31 are paid: cold open 7.86 → 1.79 s (4.4×) and container
+307 → 148 MB (2.1×)**, with salvage 6.49 → 2.24 s as well. docs/31 budgets 1.5 s
+for *skeleton + viewport*; this is a full open of a 1M-cell workbook, so it is
+now close to a budget it was 5× outside.
+
+### The middle column is the lesson, and it is kept on purpose
+
+The first implementation was **correct, fully tested, and bought nothing** —
+7.96 s and 318 MB, marginally *worse* than the op-set body it replaced. The
+correctness argument and the encoding were separable, and only the encoding was
+wrong: The container half of ADR-036 is implemented,
 correct and tested — `verify` decodes instead of replaying, coverage excludes
 un-representable ops, DP-A5 holds — and it delivers **none** of the size or
 speed the ADR priced. The measurement says why, and the arithmetic closes:
@@ -943,9 +954,24 @@ against a measured 265.6 MB (the two smaller snapshots hold fewer cells). The
 model and the measurement agree, which is what makes this a diagnosis rather
 than a guess.
 
-Filed as **TD-56**. The target is known, the layout is specified in D-102, and
-the correctness work this sits on is green — so the fix is bounded: change how
-the section is written and read, and change nothing about what it means.
+**Fixed (TD-56 paid).** The section is now laid out per tile and positionally:
+the tile already knows which cells it holds, so no identity is stored, and the
+48 bytes of `row`/`col` `OpId` per entry disappear. Per tile it is a writer
+table (usually one actor) plus a delta-varint `(lamport, counter)` run over
+present cells — exactly what D-102 measured. The images now total ~30.7 MB for
+three snapshots, about **10.2 B/cell** including stamps, against 8.30 B/cell for
+the stamp-less image: the sidecar costs ~1.9 B/cell here, inside D-102's 3.10.
+
+**What the meaning tests did for this.** The round-trip, loser-equivalence and
+refusal tests pin what the section *means*; the encoding change rewrote how it
+is spelled and not one of them needed touching. That is the whole argument for
+writing them first — a 66 → 1.9 B/cell rewrite of a format landed with the
+safety net already in place.
+
+**The remaining cost is now the covered-id list**, not the image: 2.7M ids at
+24 B is **64.9 of the 95.6 MB** of bodies. Filed as **TD-57** — a per-actor run
+encoding would collapse a dense counter range to a pair, and every id in this
+corpus comes from one actor.
 
 ## W-IMAGE-STAMPS (docs/38) — the stamp-carrying tile image vs A-001 · session 18
 

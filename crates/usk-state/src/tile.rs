@@ -22,7 +22,7 @@ use alloc::vec::Vec;
 use core::borrow::Borrow;
 use core::mem::size_of;
 use usk_oplog::{Op, Payload};
-use usk_types::{ActorId, Decimal, Lamport, OpId, Value};
+use usk_types::{ActorId, ColId, Decimal, Lamport, OpId, RowId, Value};
 
 /// Rows per tile (docs/14; frozen by ADR-005 as part of tile granularity).
 pub const TILE_ROWS: u32 = 256;
@@ -963,6 +963,129 @@ impl TileStore {
             }
             w.tiles.push((*key, start, w.out.len()));
         }
+    }
+
+    /// The winner-stamp sidecar, laid out **per tile and positionally**
+    /// (ADR-036, D-102 — and TD-56, which is what happens when it is not).
+    ///
+    /// The tile already knows which cells it holds, so a stamp needs no
+    /// identity: cells are written in presence order and the reader walks the
+    /// same order. That is the whole difference between **3.10 B/cell** and the
+    /// 66 B/cell a flat identity-keyed map costs, because identity is 48 of
+    /// those bytes and it is information the tile already has.
+    ///
+    /// Per tile: a writer table (the distinct actors, usually one), then per
+    /// present cell a writer index and delta-varint `(lamport, counter)`. A
+    /// bulk write assigns lamports and counters that ascend almost in lockstep,
+    /// so each delta is a single byte.
+    pub(crate) fn write_stamps(&self, w: &mut Writer, stamps: &crate::stamps::WinnerStamps) {
+        for (key, tile) in &self.tiles {
+            let mut writers: Vec<ActorId> = Vec::new();
+            let mut cells: Vec<(u32, u64, u64)> = Vec::new();
+            for idx in tile.presence.indices() {
+                let Some(stamp) = self.stamp_of(key, idx, stamps) else {
+                    continue;
+                };
+                let writer = match writers.iter().position(|a| *a == stamp.1.actor) {
+                    Some(i) => i as u32,
+                    None => {
+                        writers.push(stamp.1.actor);
+                        (writers.len() - 1) as u32
+                    }
+                };
+                cells.push((writer, stamp.0, stamp.1.counter));
+            }
+            w.len(writers.len());
+            for actor in &writers {
+                w.out.extend_from_slice(&actor.0.to_le_bytes());
+            }
+            w.len(cells.len());
+            let (mut last_lamport, mut last_counter) = (0i64, 0i64);
+            for (writer, lamport, counter) in cells {
+                w.varint(writer as u64);
+                w.varint(crate::stamps::zigzag(lamport as i64 - last_lamport));
+                w.varint(crate::stamps::zigzag(counter as i64 - last_counter));
+                last_lamport = lamport as i64;
+                last_counter = counter as i64;
+            }
+        }
+    }
+
+    /// Reads the sidecar back, rebuilding identities from the tiles it already
+    /// read. Bounded on every count, because an image is an untrusted input
+    /// (docs/37).
+    pub(crate) fn read_stamps(
+        &self,
+        r: &mut Reader,
+        stamps: &mut crate::stamps::WinnerStamps,
+    ) -> Result<(), ImageError> {
+        for (key, tile) in &self.tiles {
+            let n = r.count(256, "tile stamp writers")?;
+            let mut writers = Vec::with_capacity(n);
+            for _ in 0..n {
+                writers.push(ActorId(r.u128()?));
+            }
+            let present: Vec<u16> = tile.presence.indices().collect();
+            let n = r.count(TILE_CELLS, "tile stamps")?;
+            if n > present.len() {
+                return Err(ImageError::Malformed("more stamps than present cells"));
+            }
+            let (mut last_lamport, mut last_counter) = (0i64, 0i64);
+            for &idx in present.iter().take(n) {
+                let writer = r.varint()? as usize;
+                let actor = *writers
+                    .get(writer)
+                    .ok_or(ImageError::Malformed("stamp names an unknown writer"))?;
+                let lamport = last_lamport
+                    .checked_add(crate::stamps::unzigzag(r.varint()?))
+                    .ok_or(ImageError::Malformed("stamp lamport delta overflows"))?;
+                let counter = last_counter
+                    .checked_add(crate::stamps::unzigzag(r.varint()?))
+                    .ok_or(ImageError::Malformed("stamp counter delta overflows"))?;
+                if lamport < 0 || counter < 0 {
+                    return Err(ImageError::Malformed("stamp delta went negative"));
+                }
+                last_lamport = lamport;
+                last_counter = counter;
+                if let Some((row, col)) = self.identity_of(key, idx) {
+                    stamps.insert(
+                        row,
+                        col,
+                        (
+                            lamport as u64,
+                            OpId {
+                                actor,
+                                counter: counter as u64,
+                            },
+                        ),
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn stamp_of(
+        &self,
+        key: &TileKey,
+        idx: u16,
+        stamps: &crate::stamps::WinnerStamps,
+    ) -> Option<(Lamport, OpId)> {
+        let (row, col) = self.identity_of(key, idx)?;
+        stamps.get(row, col)
+    }
+
+    /// The cell identity a tile slot names, recovered from the slot maps the
+    /// image already carries.
+    fn identity_of(&self, key: &TileKey, idx: u16) -> Option<(RowId, ColId)> {
+        let row_slot =
+            key.row_band as usize * TILE_ROWS as usize + idx as usize / TILE_COLS as usize;
+        let col_slot =
+            key.col_band as usize * TILE_COLS as usize + idx as usize % TILE_COLS as usize;
+        Some((
+            RowId(*self.rows.ids().get(row_slot)?),
+            ColId(*self.cols.ids().get(col_slot)?),
+        ))
     }
 
     pub(crate) fn read_image(r: &mut Reader) -> Result<TileStore, ImageError> {

@@ -68,10 +68,14 @@ impl WinnerStamps {
     pub fn from_log(log: &OpLog) -> WinnerStamps {
         let mut out = WinnerStamps::default();
         for op in log.ops() {
+            // **Tile writes only.** `SetFormula` does not write a tile cell —
+            // it writes the formula registry, which is already a stamped LWW
+            // register that resolves its own ordering (TD-22). Including it
+            // here would be worse than redundant: a formula newer than the last
+            // value write would become the "winner" of a tile cell it never
+            // wrote, and `adopt_stamp` would seed the cell with the wrong stamp.
             let cell = match &op.payload {
-                Payload::SetCell { row, col, .. }
-                | Payload::ClearCell { row, col }
-                | Payload::SetFormula { row, col, .. } => (*row, *col),
+                Payload::SetCell { row, col, .. } | Payload::ClearCell { row, col } => (*row, *col),
                 _ => continue,
             };
             out.observe(op.lamport, op.id);
@@ -120,10 +124,6 @@ impl WinnerStamps {
 
     pub(crate) fn set_greatest(&mut self, greatest: Option<Stamp>) {
         self.greatest = greatest;
-    }
-
-    pub(crate) fn iter(&self) -> impl Iterator<Item = (&(RowId, ColId), &Stamp)> {
-        self.by_cell.iter()
     }
 }
 

@@ -219,6 +219,31 @@ docs/16 promises salvage from "the **last valid** snapshot", which presupposes m
 That is not a bug in the salvage path, which behaved exactly as specified — it is a retention policy that was never stated. Recorded as **TD-30** with the two candidate fixes (keep N ≥ 2 snapshots, or retain compacted ops until a second snapshot verifies) rather than picked here: the choice trades file size against recoverability, and docs/16's cadence section is where it belongs.
 Worth noting the smaller-scale test disagrees and is right to: `a_corrupted_snapshot_opens_through_salvage_and_reports_it` keeps every op in `ops`, so it recovers the full workbook. The two together are the actual lesson — **recoverability is a property of the retention policy, not of the salvage code.**
 
+### Session 21 (2026-08-09) — the container half lands: TD-46, TD-45, TD-31 paid
+
+**D-114 — `snapshots.body` is the tile image, coverage is what the image represents, and verification is a decode.**
+
+Implemented under ADR-036 Amendment 1. The body is `[image][covered op ids]` — the ids in the body rather than a new column, so no schema change and no `user_version` bump. `verify` decodes the image, recomputes `state_hash`, and rebuilds the watermark **from the covered ids** rather than trusting the column beside them, so a body and a watermark that disagree are caught instead of averaged. `VerifiedSnapshot` loses `ops()` and gains `covered()`, `stamps()` and a `state()` that is a decode; `Salvaged` gains `into_state()`; `Opened::ops()`/`log()` are gone, replaced by `state()`, because a method promising "every op recovery believes in" could no longer be honest.
+
+**DP-A5 holds by construction, not by vigilance.** Coverage is exactly the ops the image represents; `prune_floor` is a snapshot's coverage; therefore an op the image cannot represent can never enter the floor. `image_represents` is where the guarantee lives, and its doc says so: a new `Payload` variant must be added to the image *and* to that function, or to neither. Pinned at the source by `a_snapshot_never_covers_an_op_its_image_cannot_represent` and end to end, through a real compaction, by the container round-trip test.
+
+**Two corrections found by implementing.** The image's greatest key bounds **cell writes only** — axis ops are a CRDT and resolve independently of arrival order, opaque ops apply to nothing, and bounding on every op would refuse a tail carrying an older axis or opaque op, which the amendment makes the *expected* shape of a tail. And the sidecar tracks `SetCell`/`ClearCell` only, not `SetFormula`: a formula does not write a tile cell, so including it would let a formula newer than the last value write become the "winner" of a cell it never wrote, and seed `adopt_stamp` with the wrong stamp.
+
+**D-115 — The first implementation was correct, fully tested, and bought nothing. The encoding was the whole difference.**
+
+Measured on W-OPEN-1M: cold open **7.86 → 7.96 s**, container **307 → 318 MB**. Slightly *worse* than the op-set body it replaced, after a change whose entire purpose was to make both smaller.
+
+The cause was the sidecar, written as a flat `BTreeMap<(RowId, ColId), Stamp>` serialised with its keys: `row OpId` 24 B + `col OpId` 24 B + actor `u128` 16 B + two varints = **66 B/cell**, where D-102 priced **3.10**. That is the naive layout D-102 had already measured at 32 B/cell for the stamp alone and rejected as failing A-001 — reached again from a different direction, and worse, because identity was stored per entry. Three images at 66 B/cell plus 2.7M covered ids at 24 B model to ~288 MB against 265.6 measured; the model closing is what made this a diagnosis rather than a guess.
+
+Fixed by laying the section out **per tile and positionally**: the tile already knows which cells it holds, so identity is not stored at all. Result: **cold open 1.79 s (4.4×), container 148 MB (2.1×), salvage 6.49 → 2.24 s**, and the sidecar at ~1.9 B/cell.
+
+**Three things worth carrying forward.**
+1. **Correctness and encoding were separable, and only one was wrong.** Committing the correct-but-fat version as a green checkpoint, with the measurement recorded as a failure, cost one commit and made the fix a bounded follow-up instead of a rewrite under pressure.
+2. **Not one meaning test needed touching.** Round-trip, loser-equivalence and refusal pin what the section *means*; the rewrite changed only how it is spelled. A 66 → 1.9 B/cell format change landed with the safety net already there — which is the argument for writing those tests first, cashed.
+3. **A measurement that had already been taken was ignored in the building.** D-102 measured this exact layout and rejected it; the implementation reproduced it anyway, because the ADR said "delta-varint" and the flat map *was* delta-varint — just not per tile. A priced decision only helps if the thing built is checked against the thing priced, and the check here was the bench, not the review.
+
+**What remains.** The covered-id list is now the dominant snapshot cost — 64.9 of 95.6 MB — so the bookkeeping is 3× the image beside it. Filed as **TD-57** with the fix named: a per-actor run encoding, since every id in this corpus comes from one actor with a dense counter range.
+
 ### Session 21 (2026-08-09) — the container half stops on DP-A5, which ADR-036 does not address
 
 **D-113 — An image body cannot satisfy DP-A5's forward preservation, and ADR-036 never considered it. The container wiring is written, reverted, and blocked on an ADR amendment.**

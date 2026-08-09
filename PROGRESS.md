@@ -79,37 +79,34 @@ redirection in `tools\*.ps1`.
   (also `pwsh -File tools/gates.ps1`). Shell compat · fmt · clippy `-D warnings`
   · tests · no_std wasm32 kernel build · dep budget · supply chain (cargo-deny)
   · differential replay native == wasm32 · purity/host-isolation greps.
-- **Tests:** 352, all passing.
+- **Tests:** 353, all passing.
 - **Replay hashes:** oplog `c79fa533…` · state `b58d5505…` (unchanged by the
   date work — it is additive to the op algebra).
 - **Dependency budget:** kernel direct 1/5 · kernel closure 10/12 · workspace
   closure 29/40.
 - **W-ORACLE:** **90.4%** overall (1,235 / 1,366) — **the ≥90% target is met**.
-- **Open structural debt:** TD-46 (the tile image is built, tested, fuzz-clean
-  and measured — and still not the snapshot body), and with it TD-45, TD-31 and
-  TD-24's residual, all of which close together.
+- **Structural debt: TD-46, TD-45 and TD-31 are PAID.** `snapshots.body` is the
+  tile image; cold open **7.86 → 1.79 s**, container **307 → 148 MB**. What is
+  left there is **TD-57** (the covered-id list is now the dominant snapshot
+  cost, 64.9 of 95.6 MB) and TD-24's residual.
 
 ---
 
 ## NEXT ACTION
 
-**Amend ADR-036 for DP-A5, then finish the container half.** The wiring is
-understood and was proven to compile; it is blocked on a decision, not on
-effort. An image is what the ops *produced*, and `Payload::Opaque` produces
-nothing — so compacting an opaque op away loses it, breaking DP-A5's "files
-written today open in 20 years" (**D-113**). Decide between: retain
-un-representable ops in a third body section; scope DP-A5 to un-compacted
-history (a real weakening, owner's call); or **never prune ops the image cannot
-represent** — the recommendation on record, because opaque ops are rare and
-keeping a frozen principle intact is worth more than the bytes.
+**Step 3 is done as far as its triggers go.** TD-46, TD-45 and TD-31 are paid;
+TD-17, TD-44 and TD-37 are gated and should stay closed (D-112). What is left in
+the structural queue is **TD-57** — the covered-op-id list is now 64.9 of the
+95.6 MB of snapshot bodies, three times the images beside it, and a per-actor
+run encoding collapses it because every id comes from one actor with a dense
+counter range. Not urgent: container size just fell by half.
 
-Then implement what the reverted attempt established: body =
-`[image][covered op ids]` (no schema change, no `user_version` bump);
-`VerifiedSnapshot` loses `ops()` and gains `covered()`/`stamps()`/a decoding
-`state()`; `Salvaged` gains `into_state()`; the container's `covered_ids` and
-`prune_floor` need only the id list. Re-measure **W-OPEN-1M** and
-**W-TILE-10M** afterwards — 153.2 MB is a projection, and a projection is not a
-measurement.
+**So the next real work is Q2** (docs/40, docs/25): the winit+wgpu desktop
+shell, virtual-scroll renderer, editing surface + IME, styles/validation/
+conditional formatting/sort/filter/tables, XLSX **write** plus a round-trip
+corpus and a published fidelity number, and the accesskit a11y tree. Build
+unsigned installers; signing certs go to BLOCKED.md. Commit UI screenshots under
+`demo/` as evidence with each feature.
 
 **The rest of step 3 is gated and should stay closed** (D-112): TD-17 and TD-44
 have triggers that measurement shows are not live, and TD-37 is blocked on
