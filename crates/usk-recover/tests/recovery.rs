@@ -98,13 +98,18 @@ fn tail_bytes(ops: &[Op]) -> Vec<u8> {
 // ------------------------------------------------------------------ snapshot
 
 #[test]
-fn a_snapshot_proves_itself_by_replay_not_by_checksum() {
+fn a_snapshot_proves_itself_by_decoding_not_by_checksum() {
     let snapshot = Snapshot::build(&workbook());
     let verified = snapshot
         .verify()
         .expect("a freshly built snapshot verifies");
-    assert_eq!(verified.ops().len(), 5);
-    assert_eq!(verified.watermark(), &Watermark::of(verified.ops()));
+    // Coverage, not op bodies: since ADR-036 the body is an image, and what a
+    // snapshot records about its ops is which ids it folded.
+    assert_eq!(verified.covered().len(), 5);
+    assert_eq!(
+        verified.watermark(),
+        &Watermark::from_pairs(verified.covered().iter().map(|id| (id.actor, id.counter)))
+    );
 
     // Content addressing is over the body, and is stable.
     assert_eq!(
@@ -114,17 +119,37 @@ fn a_snapshot_proves_itself_by_replay_not_by_checksum() {
 }
 
 /// The check docs/26 asks for: a snapshot whose bytes survived but whose
-/// *meaning* changed must not load. Flipping a value byte keeps the body
-/// decodable and breaks the state hash — the case a checksum would also catch,
-/// but for the wrong reason.
+/// *meaning* changed must not load.
+///
+/// Since ADR-036 the body has two regions and each has its own invariant, so
+/// this tampers both. Tampering the **image** breaks the state hash; tampering
+/// the **covered op ids** breaks the watermark, because `verify` rebuilds the
+/// watermark from those ids instead of trusting the column beside them. Either
+/// way it is refused — but by the invariant that actually caught it, which a
+/// checksum over the whole body could not tell apart.
 #[test]
-fn a_tampered_body_fails_the_state_hash_check() {
-    let mut snapshot = Snapshot::build(&workbook());
-    let last = snapshot.body.len() - 1;
-    snapshot.body[last] ^= 0xFF;
-    match snapshot.verify() {
-        Err(SnapshotFault::StateHashMismatch) | Err(SnapshotFault::Undecodable { .. }) => {}
-        other => panic!("tampered snapshot must not verify: {other:?}"),
+fn a_tampered_body_fails_verification_in_either_region() {
+    // Every byte of the image region, one at a time would be slow; the tail of
+    // it holds cell payload, which is where a meaning change shows up.
+    let good = Snapshot::build(&workbook());
+    let image_len = u64::from_le_bytes(good.body[..8].try_into().expect("len prefix")) as usize;
+
+    let mut tampered = good.clone();
+    tampered.body[8 + image_len / 2] ^= 0xFF;
+    match tampered.verify() {
+        Err(SnapshotFault::StateHashMismatch)
+        | Err(SnapshotFault::ImageFault(_))
+        | Err(SnapshotFault::Undecodable { .. }) => {}
+        other => panic!("a tampered image must not verify: {other:?}"),
+    }
+
+    // The last byte is inside the covered-id list.
+    let mut tampered = good.clone();
+    let last = tampered.body.len() - 1;
+    tampered.body[last] ^= 0xFF;
+    match tampered.verify() {
+        Err(SnapshotFault::WatermarkMismatch) | Err(SnapshotFault::Undecodable { .. }) => {}
+        other => panic!("a tampered id list must not verify: {other:?}"),
     }
 }
 
@@ -172,7 +197,10 @@ fn a_clean_container_needs_no_salvage() {
     assert!(salvaged.report.is_clean(), "{:?}", salvaged.report);
     assert_eq!(salvaged.tail.len(), 2);
     assert_eq!(salvaged.quarantine.len(), 0);
-    assert_eq!(salvaged.ops().len(), 7);
+    // Coverage plus tail is every op still accounted for; they cannot overlap,
+    // because an op is tail precisely when coverage does not hold it.
+    let covered = salvaged.snapshot.as_ref().map_or(0, |s| s.covered().len());
+    assert_eq!(covered + salvaged.tail.len(), 7);
 }
 
 /// docs/16: "last valid snapshot". The newest is corrupt, the one before it is
@@ -257,7 +285,7 @@ fn document_machine_covers_every_listed_transition() {
 
     // RECOVERING ──snapshot ok + tail replay──► READY
     let verified = Snapshot::build(&workbook()).verify().expect("verify");
-    let restored = verified.ops().len();
+    let restored = verified.covered().len();
     assert!(doc
         .step(Event::Recovered {
             snapshot: Some(verified),
@@ -435,4 +463,56 @@ fn ready_document() -> Document {
         tail_ops: 0,
     });
     doc
+}
+
+/// **DP-A5, stated as the coverage rule it now rests on** (ADR-036 Amendment 1).
+///
+/// An image is what the ops *produced*, and an op this build cannot read is
+/// applied to nothing (D-066) — so it produces nothing and an image has nowhere
+/// to put it. The guarantee is therefore not a filter somewhere in compaction;
+/// it is what coverage *means*: a snapshot covers exactly the ops its image
+/// represents, `prune_floor` is a snapshot's coverage, so an un-representable
+/// op can never enter the floor and can never be pruned.
+///
+/// This asserts the rule at its source. `an_unknown_op_type_survives_the_whole_container_round_trip`
+/// asserts the consequence end to end, through a real compaction.
+#[test]
+fn a_snapshot_never_covers_an_op_its_image_cannot_represent() {
+    let mut log = workbook();
+    let opaque = Op {
+        id: OpId {
+            actor: ActorId(99),
+            counter: 1,
+        },
+        lamport: 999,
+        payload: Payload::Opaque(
+            usk_oplog::OpaqueOp::new(0x7f, vec![1, 2, 3, 4]).expect("0x7f is not a known tag"),
+        ),
+    };
+    log.append(opaque.clone());
+
+    let verified = Snapshot::build(&log).verify().expect("verifies");
+    assert!(
+        !verified.covered().contains(&opaque.id),
+        "an opaque op must never be covered, or compaction could prune it"
+    );
+    assert_eq!(
+        verified.covered().len(),
+        log.ops().len() - 1,
+        "and everything else must be, or compaction would stop reclaiming anything"
+    );
+    // The watermark is built from coverage, so it must not claim the op either.
+    assert!(
+        !verified
+            .watermark()
+            .entries()
+            .iter()
+            .any(|(actor, _)| *actor == opaque.id.actor),
+        "a watermark claiming an op the image cannot restore is a promise the body cannot keep"
+    );
+    // The state is unaffected either way: that is what "produces nothing" means.
+    assert_eq!(
+        verified.state().state_hash(),
+        usk_state::State::replay(&log).state_hash()
+    );
 }

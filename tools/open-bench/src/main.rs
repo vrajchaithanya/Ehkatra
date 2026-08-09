@@ -180,7 +180,7 @@ fn main() {
             .salvaged
             .snapshot
             .as_ref()
-            .map_or(0, |s| s.ops().len()),
+            .map_or(0, |s| s.covered().len()),
         opened.salvaged.tail.len(),
         opened.salvaged.report.is_clean()
     );

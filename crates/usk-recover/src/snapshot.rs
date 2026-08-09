@@ -1,35 +1,41 @@
 //! Snapshots: content-addressed, and **verified semantically on every load**
 //! (docs/16, docs/26).
 //!
-//! # What a v0.1 snapshot is
-//! The compacted op set, in canonical total order, framed in the same encoding
-//! the wire and the container use — plus the state hash that op set must
-//! produce.
+//! # What a snapshot body is
+//! docs/16 and docs/26 both specify a **tile image**, and as of ADR-036 that is
+//! what this writes. The body is two sections:
 //!
-//! docs/16 and docs/26 both specify a **tile image** instead, and
-//! `usk_state::image` now builds one (D-101). It is not wired in here, and the
-//! reason is recorded rather than left as an omission: an image throws away op
-//! ids, and a summary tile is correct *only* because ops arrive in canonical
-//! total order. Applying a tail onto an adopted image is therefore sound only
-//! while the tail is entirely canonically after it, and — the part that blocks
-//! it — a cell first written inside the image and rewritten by the tail loses
-//! the identity of its retained loser, which ADR-006 and DP-A8 promise to keep.
-//! Fixing that needs per-cell stamps for present cells, which is the memory
-//! cost TD-09 removed. See TD-46.
+//! 1. the **image** — a materialised `State` plus the winner-stamp sidecar a
+//!    tail needs (`usk_state::image`);
+//! 2. the **covered op ids** — exactly which ops the image folded.
 //!
-//! # Why verification is a replay, not a checksum
+//! Section 2 is here rather than inside the image because it is not state: an
+//! image is what the ops *produced*, and the container separately needs to know
+//! *which* ops those were, to tell a stored op that is already folded from one
+//! that is still tail. Keeping it in the body rather than in a new column means
+//! no schema change and no `user_version` bump — and D-101 records what happened
+//! the last time a stored encoding was asked to carry more than it had room for.
+//!
+//! Before ADR-036 the body was the compacted op set and verification replayed
+//! it, which is why opening a 1M-cell workbook cost 7.86 s (TD-45) and three
+//! retained snapshots cost three copies of the history (TD-31).
+//!
+//! # Why verification is still semantic, not a checksum
 //! docs/26 requires `state_hash` to be checked on load, and docs/16 forbids
 //! silent partial restore. A checksum over the bytes proves only that the bytes
-//! survived; rebuilding the state from them and recomputing
-//! `State::state_hash()` proves the bytes still *mean* what they meant. DP-A2
-//! makes that free — the same state produces the same hash on every platform
-//! forever — and it keeps docs/26's migration rule executable: a migration that
-//! changes the state hash is by definition wrong.
+//! survived; **decoding** them into a `State` and recomputing
+//! `State::state_hash()` proves the bytes still *mean* what they meant. That
+//! property is unchanged by ADR-036 — what changed is that proving it is now a
+//! decode instead of a replay. DP-A2 makes it free: the same state produces the
+//! same hash on every platform forever, so docs/26's migration rule stays
+//! executable — a migration that changes the state hash is by definition
+//! wrong.
 
 use alloc::vec::Vec;
 use usk_oplog::{DecodeError, Op, OpLog};
-use usk_state::State;
-use usk_types::{ActorId, Counter};
+use usk_state::image::ImageError;
+use usk_state::{image_represents, State, WinnerStamps};
+use usk_types::{ActorId, Counter, OpId};
 
 /// A vector-clock watermark: sorted `(actor, max counter)` pairs, canonical
 /// encoding (docs/26 §Identity encodings).
@@ -103,7 +109,7 @@ pub struct Snapshot {
     pub watermark: Watermark,
     /// `snapshots.state_hash` — BLAKE3, verified on load.
     pub state_hash: [u8; 32],
-    /// `snapshots.body` — canonical op bytes (the tile image is TD-46).
+    /// `snapshots.body` — the tile image plus the covered op ids (ADR-036).
     pub body: Vec<u8>,
 }
 
@@ -111,10 +117,12 @@ pub struct Snapshot {
 /// silent partial restore and a user cannot be told "it broke".
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum SnapshotFault {
-    /// The body does not decode as a run of canonical ops.
+    /// The body is not a well-formed image-plus-ids body.
     Undecodable { at_offset: usize, err: DecodeError },
-    /// It decodes, but replaying it does not produce the recorded state hash —
-    /// the bytes survived and their meaning did not.
+    /// The image section is not an image this build can load.
+    ImageFault(ImageError),
+    /// It decodes, but the state it produces does not have the recorded state
+    /// hash — the bytes survived and their meaning did not.
     StateHashMismatch,
     /// It decodes and hashes correctly but covers a different op set than its
     /// watermark claims.
@@ -126,21 +134,99 @@ impl Snapshot {
     /// from a caller — a snapshot that could be told what it hashes to would
     /// verify against nothing.
     pub fn build(log: &OpLog) -> Snapshot {
-        let mut ops: Vec<&Op> = log.ops().iter().collect();
-        ops.sort_by_key(|o| (o.lamport, o.id.actor, o.id.counter));
-        let mut body = Vec::new();
-        for op in &ops {
-            // Framed (TD-25): the same `u32` prefix the wire uses, so an op
-            // this build cannot read still has a knowable extent and survives a
-            // snapshot round trip (DP-A5).
-            body.extend_from_slice(&op.encode_framed());
+        let state = State::replay(log);
+        // The stamps come from the same log the state came from, folded a
+        // second time (ADR-036). No new I/O: the log is already in hand, which
+        // is the reason reconstruction was chosen over keeping stamps resident.
+        let stamps = WinnerStamps::from_log(log);
+        // **Coverage is what the image represents** (ADR-036 Amendment 1), not
+        // what the snapshot was built from. Compaction prunes coverage, so an
+        // op outside it is one compaction can never delete — which is how
+        // DP-A5 survives an image body. `Payload::Opaque` produces no state, so
+        // an image has nowhere to put it and it is never covered.
+        let mut covered: Vec<OpId> = log
+            .ops()
+            .iter()
+            .filter(|o| image_represents(&o.payload))
+            .map(|o| o.id)
+            .collect();
+        covered.sort_unstable();
+
+        let image = state.write_image_with(&stamps);
+        let mut body = Vec::with_capacity(image.len() + covered.len() * 24 + 8);
+        body.extend_from_slice(&(image.len() as u64).to_le_bytes());
+        body.extend_from_slice(&image);
+        body.extend_from_slice(&(covered.len() as u64).to_le_bytes());
+        for id in &covered {
+            body.extend_from_slice(&id.actor.0.to_le_bytes());
+            body.extend_from_slice(&id.counter.to_le_bytes());
         }
-        let owned: Vec<Op> = ops.into_iter().cloned().collect();
+
+        // The watermark is built from the *covered* set for the same reason —
+        // a watermark claiming ops the image cannot restore would be a promise
+        // the body cannot keep, and `verify` compares the two.
+        let owned: Vec<Op> = log
+            .ops()
+            .iter()
+            .filter(|o| image_represents(&o.payload))
+            .cloned()
+            .collect();
         Snapshot {
             watermark: Watermark::of(&owned),
-            state_hash: *State::replay(log).state_hash().as_bytes(),
+            state_hash: *state.state_hash().as_bytes(),
             body,
         }
+    }
+
+    /// Splits the body into its image bytes and its covered op ids.
+    ///
+    /// Total: a malformed body names the byte offset it failed at, so SALVAGE
+    /// can quarantine rather than discard (DP-A10).
+    fn split_body(&self) -> Result<(&[u8], Vec<OpId>), SnapshotFault> {
+        let bad = |at: usize| SnapshotFault::Undecodable {
+            at_offset: at,
+            err: DecodeError::Truncated,
+        };
+        let b = &self.body;
+        let take_u64 = |at: usize| -> Result<u64, SnapshotFault> {
+            let end = at.checked_add(8).ok_or_else(|| bad(at))?;
+            let slice = b.get(at..end).ok_or_else(|| bad(at))?;
+            let mut a = [0u8; 8];
+            a.copy_from_slice(slice);
+            Ok(u64::from_le_bytes(a))
+        };
+
+        let image_len = take_u64(0)? as usize;
+        let image_end = 8usize.checked_add(image_len).ok_or_else(|| bad(0))?;
+        let image = b.get(8..image_end).ok_or_else(|| bad(8))?;
+
+        let count = take_u64(image_end)? as usize;
+        let mut at = image_end + 8;
+        // Bounded before allocating: a corrupted count is an arbitrary u64, and
+        // reserving on it is the cheapest way to turn a bad file into an OOM
+        // (docs/37). 24 bytes per id is the floor, so the byte length is the
+        // bound.
+        if count > b.len().saturating_sub(at) / 24 {
+            return Err(bad(image_end));
+        }
+        let mut covered = Vec::with_capacity(count);
+        for _ in 0..count {
+            let end = at + 24;
+            let slice = b.get(at..end).ok_or_else(|| bad(at))?;
+            let mut actor = [0u8; 16];
+            actor.copy_from_slice(&slice[..16]);
+            let mut counter = [0u8; 8];
+            counter.copy_from_slice(&slice[16..]);
+            covered.push(OpId {
+                actor: ActorId(u128::from_le_bytes(actor)),
+                counter: u64::from_le_bytes(counter),
+            });
+            at = end;
+        }
+        if at != b.len() {
+            return Err(bad(at));
+        }
+        Ok((image, covered))
     }
 
     /// The content address of the body — what "content-addressed" means in
@@ -149,22 +235,9 @@ impl Snapshot {
         *blake3::hash(&self.body).as_bytes()
     }
 
-    /// Decodes the body back into ops. Total: a malformed body names the byte
-    /// offset it failed at, so SALVAGE can quarantine the remainder rather than
-    /// discard the whole file (DP-A10).
-    pub fn decode_body(&self) -> Result<Vec<Op>, SnapshotFault> {
-        let mut ops = Vec::new();
-        let mut at = 0usize;
-        while at < self.body.len() {
-            match Op::decode_framed(&self.body[at..]) {
-                Ok((op, used)) => {
-                    at += used;
-                    ops.push(op);
-                }
-                Err(err) => return Err(SnapshotFault::Undecodable { at_offset: at, err }),
-            }
-        }
-        Ok(ops)
+    /// The op ids this snapshot folded, without decoding the image.
+    pub fn covered_ids(&self) -> Result<Vec<OpId>, SnapshotFault> {
+        self.split_body().map(|(_, ids)| ids)
     }
 
     /// Loads the snapshot **only if it proves itself**: the body decodes, its
@@ -176,31 +249,49 @@ impl Snapshot {
     /// hash-verifying the loaded snapshot" is structurally unreachable rather
     /// than checked at runtime (D-060).
     pub fn verify(&self) -> Result<VerifiedSnapshot, SnapshotFault> {
-        let ops = self.decode_body()?;
-        let mut log = OpLog::new();
-        for op in &ops {
-            log.append(op.clone());
-        }
-        let state = State::replay(&log);
+        let (image, covered) = self.split_body()?;
+        let (state, stamps) =
+            State::from_image_with_stamps(image).map_err(SnapshotFault::ImageFault)?;
         if state.state_hash().as_bytes() != &self.state_hash {
             return Err(SnapshotFault::StateHashMismatch);
         }
-        if Watermark::of(&ops) != self.watermark {
+        // The watermark is rebuilt from the covered ids rather than trusted, so
+        // a body and a watermark column that disagree are caught rather than
+        // averaged.
+        let rebuilt = Watermark::from_pairs(covered.iter().map(|id| (id.actor, id.counter)));
+        if rebuilt != self.watermark {
             return Err(SnapshotFault::WatermarkMismatch);
         }
         Ok(VerifiedSnapshot {
             watermark: self.watermark.clone(),
-            ops,
+            state,
+            stamps,
+            covered,
         })
     }
 }
 
 /// Proof that a snapshot verified. Cannot be constructed except by
 /// [`Snapshot::verify`], which is the point.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct VerifiedSnapshot {
     watermark: Watermark,
-    ops: Vec<Op>,
+    state: State,
+    stamps: WinnerStamps,
+    covered: Vec<OpId>,
+}
+
+/// Hand-written, not derived: a `VerifiedSnapshot` now carries a whole
+/// materialised `State`, and deriving `Debug` would print a workbook into a
+/// test failure or a log line. `Event` derives `Debug`, so it needs one.
+impl core::fmt::Debug for VerifiedSnapshot {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("VerifiedSnapshot")
+            .field("watermark", &self.watermark)
+            .field("covered", &self.covered.len())
+            .field("stamps", &self.stamps.len())
+            .finish()
+    }
 }
 
 impl VerifiedSnapshot {
@@ -208,16 +299,28 @@ impl VerifiedSnapshot {
         &self.watermark
     }
 
-    pub fn ops(&self) -> &[Op] {
-        &self.ops
+    /// The op ids this snapshot folded — sorted, so a container can binary
+    /// search it to separate stored ops into "already in the image" and "tail".
+    ///
+    /// This is what the op *bodies* used to be needed for, and it is all they
+    /// were needed for.
+    pub fn covered(&self) -> &[OpId] {
+        &self.covered
     }
 
-    /// The state this snapshot restores, before any tail is replayed onto it.
+    /// The winner stamps the image carries, which a tail needs (ADR-036).
+    pub fn stamps(&self) -> &WinnerStamps {
+        &self.stamps
+    }
+
+    /// The state this snapshot restores, before any tail is applied.
+    ///
+    /// A decode, not a replay — the whole point of ADR-036.
     pub fn into_state(self) -> State {
-        let mut log = OpLog::new();
-        for op in self.ops {
-            log.append(op);
-        }
-        State::replay(&log)
+        self.state
+    }
+
+    pub fn state(&self) -> &State {
+        &self.state
     }
 }

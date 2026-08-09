@@ -16,7 +16,7 @@ use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 pub use formula::FormulaCell;
 use formula::FormulaRegistry;
-pub use stamps::{Stamp, WinnerStamps};
+pub use stamps::{image_represents, Stamp, WinnerStamps};
 use tile::{PromotionStats, TileStore};
 use usk_oplog::{Anchor, Op, OpLog, Payload};
 use usk_types::{ColId, Lamport, OpId, RowId, Value};

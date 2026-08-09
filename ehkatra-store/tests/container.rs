@@ -115,11 +115,11 @@ fn save_then_reload_preserves_the_state_hash() {
         opened.salvaged.report
     );
     assert_eq!(
-        hash_of(&opened.log()),
+        restored_hash(&opened),
         expected,
         "state hash survived the round trip"
     );
-    assert_eq!(opened.ops().len(), log.ops().len());
+    assert_eq!(restored_op_count(&opened), log.ops().len());
 }
 
 /// The same invariant with a snapshot in play: the snapshot covers most of the
@@ -157,7 +157,7 @@ fn a_snapshot_plus_tail_reloads_to_the_same_state_hash() {
         1,
         "exactly the uncovered op is tail"
     );
-    assert_eq!(hash_of(&opened.log()), expected);
+    assert_eq!(restored_hash(&opened), expected);
 }
 
 // ----------------------------------------------------------- docs/26 schema
@@ -350,7 +350,7 @@ fn compaction_writes_a_new_file_and_flushes_deferred_ops() {
     let reopened = Container::open_or_create(&path).expect("reopen after compaction");
     let opened = reopened.open_document().expect("open");
     assert_eq!(
-        hash_of(&opened.log()),
+        restored_hash(&opened),
         expected,
         "compaction must not change what the workbook is"
     );
@@ -412,10 +412,17 @@ fn an_unknown_op_type_survives_the_whole_container_round_trip() {
     let opened = reopened.open_document().expect("open");
     assert!(opened.salvaged.report.is_clean());
 
+    // **The op is in the tail, and that is the guarantee** (ADR-036
+    // Amendment 1). An image is what the ops produced and an opaque op produces
+    // nothing, so a snapshot never covers one — which means compaction's floor
+    // never contains one and the op cannot be pruned. It therefore arrives as
+    // ordinary tail, still readable, still retransmittable: DP-A5.
     let recovered = opened
-        .ops()
-        .into_iter()
+        .salvaged
+        .tail
+        .iter()
         .find(|op| op.id == future.id)
+        .cloned()
         .expect("the unknown op came back");
     assert_eq!(recovered, future, "preserved verbatim");
     assert_eq!(
@@ -423,13 +430,14 @@ fn an_unknown_op_type_survives_the_whole_container_round_trip() {
         future.encode(),
         "and re-encodes to the author's bytes, so it hashes opaque"
     );
+    // Deliberately *not* asserted: that the canonical hash of the whole op set
+    // survives. Compaction prunes the ops the image represents — that is what
+    // compaction is, and the v0.1 op-set body pruned them too. What changed is
+    // only which ops are eligible, and the one the assertion above names never
+    // is.
+    let _ = expected_log;
     assert_eq!(
-        opened.log().canonical_hash(),
-        expected_log,
-        "the op set — including the op we cannot read — is unchanged"
-    );
-    assert_eq!(
-        hash_of(&opened.log()),
+        restored_hash(&opened),
         expected_state,
         "and the ops behind it still mean what they meant"
     );
@@ -588,7 +596,7 @@ fn the_snapshot_chain_is_trimmed_to_three_and_never_costs_an_op() {
         .snapshots()
         .expect("snapshots")
         .iter()
-        .map(|s| s.verify().expect("verifies").ops().len())
+        .map(|s| s.verify().expect("verifies").covered().len())
         .collect();
     assert_eq!(kept, vec![25, 20, 15], "newest first");
 }
@@ -614,7 +622,7 @@ fn compaction_keeps_three_snapshots_and_every_op_since_the_oldest() {
     assert_eq!(op_count(&reopened) as usize, full.ops().len() - 20);
     let opened = reopened.open_document().expect("open");
     assert_eq!(
-        hash_of(&opened.log()),
+        restored_hash(&opened),
         hash_of(&full),
         "compaction must not change what the workbook is"
     );
@@ -640,11 +648,11 @@ fn corrupting_every_snapshot_but_the_oldest_still_recovers_every_op() {
 
     let opened = c.open_document().expect("open");
     assert_eq!(
-        hash_of(&opened.log()),
+        restored_hash(&opened),
         expected,
         "falling back to the oldest snapshot must lose nothing"
     );
-    assert_eq!(opened.ops().len(), full.ops().len());
+    assert_eq!(restored_op_count(&opened), full.ops().len());
     assert_eq!(opened.salvaged.report.snapshots_rejected, 2);
     assert!(
         !opened.salvaged.report.lost_data(),
@@ -671,11 +679,11 @@ fn corrupting_all_snapshots_rebuilds_from_the_full_op_tail() {
 
     let opened = c.open_document().expect("open");
     assert_eq!(
-        hash_of(&opened.log()),
+        restored_hash(&opened),
         expected,
         "the op log alone rebuilds the workbook"
     );
-    assert_eq!(opened.ops().len(), full.ops().len());
+    assert_eq!(restored_op_count(&opened), full.ops().len());
     assert_eq!(opened.salvaged.report.snapshots_rejected, 3);
     assert!(opened.salvaged.snapshot.is_none());
     assert!(
@@ -710,7 +718,7 @@ fn a_first_compaction_prunes_no_ops_and_survives_losing_its_only_snapshot() {
     corrupt_newest_snapshots(&c, 1);
     let opened = c.open_document().expect("open");
     assert_eq!(
-        hash_of(&opened.log()),
+        restored_hash(&opened),
         expected,
         "the failure TD-30 was filed for: a single corrupt snapshot losing everything"
     );
@@ -765,7 +773,7 @@ fn a_corrupt_floor_snapshot_authorises_no_deletion() {
 
     let reopened = Container::open_or_create(&path).expect("reopen");
     let opened = reopened.open_document().expect("open");
-    assert_eq!(hash_of(&opened.log()), expected);
+    assert_eq!(restored_hash(&opened), expected);
 }
 
 /// The honest boundary of the policy, recorded rather than smoothed. Once
@@ -789,12 +797,12 @@ fn total_snapshot_loss_after_pruning_is_reported_rather_than_hidden() {
         "silent partial restore is forbidden"
     );
     assert_eq!(
-        opened.ops().len(),
+        restored_op_count(&opened),
         full.ops().len() - 20,
         "what survives is exactly the retained tail, and it is not the whole workbook"
     );
     assert_ne!(
-        hash_of(&opened.log()),
+        restored_hash(&opened),
         hash_of(&full),
         "and the difference is real, which is why the report must say so"
     );
@@ -830,4 +838,25 @@ fn the_migration_check_detects_a_changed_state_hash() {
         before, after,
         "losing an op must move the state hash, or the check proves nothing"
     );
+}
+
+/// The state hash of what a container restores to.
+///
+/// Replaces `hash_of(&opened.log())`: since ADR-036 a snapshot stores an image
+/// rather than op bodies, so there is no log to fold — and the state hash was
+/// always the property these assertions were reaching for.
+fn restored_hash(opened: &ehkatra_store::Opened) -> [u8; 32] {
+    *opened.state().state_hash().as_bytes()
+}
+
+/// Every op the container still accounts for: the snapshot's coverage plus the
+/// tail. They cannot overlap — an op is tail precisely because coverage does
+/// not contain it.
+fn restored_op_count(opened: &ehkatra_store::Opened) -> usize {
+    let covered = opened
+        .salvaged
+        .snapshot
+        .as_ref()
+        .map_or(0, |s| s.covered().len());
+    covered + opened.salvaged.tail.len()
 }

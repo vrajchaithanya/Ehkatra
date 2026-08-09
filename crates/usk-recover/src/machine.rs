@@ -230,11 +230,11 @@ impl Document {
 
     fn adopt(&mut self, snapshot: Option<VerifiedSnapshot>, tail_ops: usize) {
         // Only a `VerifiedSnapshot` can get here, and it can only exist if
-        // `Snapshot::verify` replayed the body and matched the recorded state
+        // `Snapshot::verify` decoded the image and matched the recorded state
         // hash. docs/27's "opening READY without hash-verifying the loaded
         // snapshot" is therefore not a check that could be forgotten — it is a
         // state the type system does not let the caller construct.
-        let from_snapshot = snapshot.as_ref().map(|s| s.ops().len()).unwrap_or(0);
+        let from_snapshot = snapshot.as_ref().map(|s| s.covered().len()).unwrap_or(0);
         self.restored_from = snapshot.map(|s| s.watermark().encode());
         self.acked_ops += from_snapshot + tail_ops;
     }

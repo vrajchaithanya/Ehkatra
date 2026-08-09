@@ -910,6 +910,43 @@ Recorded as measured, with three consequences stated plainly:
   benchmark that reports one sample invites exactly this, which is why the
   recalc figures beside it are already medians of five.
 
+## W-OPEN-1M with an image body (docs/38) — **no improvement, and the reason is measured** · session 21
+
+Run: `cargo run --release -p open-bench`. Same 1,000,000-cell corpus (1000 x
+1000) plus a 100,000-op tail, three retained snapshots.
+
+| | before (op-set body) | **after (image body)** |
+|---|---:|---:|
+| cold open to READY | 7.86 s | **7.96 s** |
+| container | 307 MB | **318 MB** |
+| 3 snapshot bodies | — | **265.6 MB** |
+
+**TD-45 and TD-31 are not paid.** The container half of ADR-036 is implemented,
+correct and tested — `verify` decodes instead of replaying, coverage excludes
+un-representable ops, DP-A5 holds — and it delivers **none** of the size or
+speed the ADR priced. The measurement says why, and the arithmetic closes:
+
+| | per cell | at 1M cells |
+|---|---:|---:|
+| D-102 priced (per-tile writer index + delta-varint) | **3.10 B** | 3.1 MB |
+| **what was implemented** (global map, full identity keys per entry) | **66 B** | 66 MB |
+
+Each stamp was written as `row OpId` (24 B) + `col OpId` (24 B) + lamport varint
++ actor `u128` (16 B) + counter varint. That is **the naive layout D-102
+explicitly measured and rejected**, arrived at again by storing the sidecar as a
+flat `BTreeMap<(RowId, ColId), Stamp>` and serialising its keys — instead of
+laying it out *per tile*, positionally, where the tile already knows which cells
+it holds and no identity needs storing at all.
+
+Three images at 66 B/cell plus 2.7M covered op ids at 24 B come to ~288 MB
+against a measured 265.6 MB (the two smaller snapshots hold fewer cells). The
+model and the measurement agree, which is what makes this a diagnosis rather
+than a guess.
+
+Filed as **TD-56**. The target is known, the layout is specified in D-102, and
+the correctness work this sits on is green — so the fix is bounded: change how
+the section is written and read, and change nothing about what it means.
+
 ## W-IMAGE-STAMPS (docs/38) — the stamp-carrying tile image vs A-001 · session 18
 
 **The question.** `usk_state::image` round-trips a `State` to the same hash, but

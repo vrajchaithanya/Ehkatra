@@ -11,7 +11,8 @@
 //! loudly, because the user goes on trusting it.
 
 use alloc::vec::Vec;
-use usk_oplog::{DecodeError, Op};
+use usk_oplog::{DecodeError, Op, OpLog};
+use usk_state::State;
 
 use crate::snapshot::{Snapshot, SnapshotFault, VerifiedSnapshot, Watermark};
 
@@ -31,6 +32,19 @@ pub enum SalvageReason {
     NoValidSnapshot,
     /// Snapshots were fine; the op tail was truncated or corrupt.
     TailCorrupt { at_offset: usize, err: DecodeError },
+    /// The tail held **cell writes** canonically at or before the snapshot
+    /// image, which an adopted image cannot place (ADR-036).
+    ///
+    /// Almost always duplicates the image already folded, in which case nothing
+    /// is lost. It can also be a genuinely late remote op, which *is* a loss —
+    /// so it is reported either way rather than judged silently, because
+    /// docs/16 forbids a silent partial restore and this path cannot tell the
+    /// two apart.
+    ///
+    /// Note what this is *not*: an op the image could not represent. Those are
+    /// never covered and never pruned (ADR-036 Amendment 1), so they arrive as
+    /// ordinary tail and apply normally.
+    TailPredatesSnapshot { ops: usize },
 }
 
 /// What the user is told. Every field exists so the report can be specific:
@@ -69,7 +83,7 @@ impl SalvageReport {
 
 /// Everything recovery produced: the ops to rebuild from, the bytes that could
 /// not be read, and the report that must be shown before the document opens.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Salvaged {
     pub snapshot: Option<VerifiedSnapshot>,
     pub tail: Vec<Op>,
@@ -80,16 +94,57 @@ pub struct Salvaged {
 }
 
 impl Salvaged {
-    /// Every op the recovery believes in, snapshot first then tail, ready to
-    /// fold into a `State`.
-    pub fn ops(&self) -> Vec<Op> {
-        let mut out = match &self.snapshot {
-            Some(s) => s.ops().to_vec(),
-            None => Vec::new(),
+    /// The state this recovery restores.
+    ///
+    /// With a snapshot: **decode the image and apply the tail** (ADR-036),
+    /// where v0.1 replayed the entire history. Without one: fold the tail
+    /// alone, which is ops-as-truth doing its job.
+    ///
+    /// Cell writes the image already covers are dropped rather than applied.
+    /// `State::apply_tail` refuses them by contract and is right to: the
+    /// summary path trusts arrival order, so replaying one would overwrite a
+    /// newer value with an older one. The drop is not silent — `recover` counts
+    /// them into `TailPredatesSnapshot` first.
+    pub fn into_state(self) -> State {
+        let Some(snapshot) = self.snapshot else {
+            let mut log = OpLog::new();
+            for op in self.tail {
+                log.append(op);
+            }
+            return State::replay(&log);
         };
-        out.extend(self.tail.iter().cloned());
-        out
+        let stamps = snapshot.stamps().clone();
+        let greatest = stamps.greatest();
+        let mut state = snapshot.into_state();
+        let fresh: Vec<Op> = self
+            .tail
+            .into_iter()
+            .filter(|op| !predates(op, greatest))
+            .collect();
+        // Cannot fail: every op left is outside the only condition
+        // `apply_tail` refuses on.
+        let _ = state.apply_tail(&stamps, &fresh);
+        state
     }
+}
+
+/// Whether an op is a cell write the image has already folded.
+///
+/// Only cell writes can predate an image in a way that matters — the refusal
+/// exists because a summary tile trusts arrival order, and nothing else has
+/// one. An axis op resolves independently of arrival order and an opaque op
+/// applies to nothing, so both are ordinary tail however old they are.
+fn predates(op: &Op, greatest: Option<(u64, usk_types::OpId)>) -> bool {
+    let Some(greatest) = greatest else {
+        return false;
+    };
+    let writes_cell = matches!(
+        op.payload,
+        usk_oplog::Payload::SetCell { .. }
+            | usk_oplog::Payload::ClearCell { .. }
+            | usk_oplog::Payload::SetFormula { .. }
+    );
+    writes_cell && (op.lamport, op.id) <= greatest
 }
 
 /// Reads the op tail, stopping at the first byte it cannot decode.
@@ -161,10 +216,18 @@ pub fn recover(snapshots: &[Snapshot], tail_bytes: &[u8]) -> Salvaged {
     }
     let quarantine = tail_bytes[consumed..].to_vec();
 
+    // Counted before the report is built, so a tail the image already covers is
+    // named rather than discovered later by a user wondering where an edit went.
+    let greatest = chosen.as_ref().and_then(|s| s.stamps().greatest());
+    let predating = tail.iter().filter(|op| predates(op, greatest)).count();
+    if predating > 0 {
+        reasons.push(SalvageReason::TailPredatesSnapshot { ops: predating });
+    }
+
     let report = SalvageReport {
         snapshot_used: chosen.as_ref().map(|s| s.watermark().clone()),
         snapshots_rejected,
-        tail_ops_recovered: tail.len(),
+        tail_ops_recovered: tail.len() - predating,
         quarantined_bytes: quarantine.len(),
         reasons,
     };

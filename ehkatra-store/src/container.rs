@@ -30,6 +30,7 @@ use usk_oplog::{Op, OpLog};
 use usk_recover::machine::{Action, Document, Event};
 use usk_recover::salvage::{recover, Salvaged};
 use usk_recover::snapshot::{Snapshot, VerifiedSnapshot};
+use usk_state::State;
 use usk_types::{ActorId, OpId};
 
 use crate::schema::{APPLICATION_ID, SCHEMA_V1, USER_VERSION};
@@ -131,18 +132,17 @@ pub struct Opened {
 }
 
 impl Opened {
-    /// Every op recovery believes in, snapshot then tail.
-    pub fn ops(&self) -> Vec<Op> {
-        self.salvaged.ops()
-    }
-
-    /// The log this container restores to.
-    pub fn log(&self) -> OpLog {
-        let mut log = OpLog::new();
-        for op in self.ops() {
-            log.append(op);
-        }
-        log
+    /// The state this container restores to.
+    ///
+    /// A decode of the snapshot image plus the tail (ADR-036), where v0.1
+    /// replayed the whole history. There is deliberately **no `ops()`**: a
+    /// snapshot no longer stores op *bodies*, only the ids its image covers, so
+    /// a method returning "every op recovery believes in" could not be honest.
+    /// The ops that *are* still individually present — the tail, which by
+    /// ADR-036 Amendment 1 always includes anything the image cannot represent
+    /// — are on `salvaged.tail`.
+    pub fn state(&self) -> State {
+        self.salvaged.clone().into_state()
     }
 
     /// True when the open was not clean and docs/16 requires the user to be
@@ -467,15 +467,15 @@ impl Container {
         // `Watermark::covers` is now exact (it records the gaps below each
         // actor's max), but building the set from the snapshot's own ops needs
         // no such argument, and the snapshot still carries them.
+        //
+        // The snapshot's own **covered id list** (ADR-036). It used to be
+        // derived from the op bodies the snapshot stored; the bodies are gone,
+        // and the ids are all they were ever used for here. Read without
+        // decoding the image, which is the expensive half of the body.
         let covered_ids: std::collections::HashSet<(u128, u64)> = snapshots
             .iter()
-            .find_map(|s| s.verify().ok())
-            .map(|v| {
-                v.ops()
-                    .iter()
-                    .map(|o| (o.id.actor.0, o.id.counter))
-                    .collect()
-            })
+            .find_map(|s| s.covered_ids().ok())
+            .map(|ids| ids.iter().map(|id| (id.actor.0, id.counter)).collect())
             .unwrap_or_default();
         let tail = self.tail_bytes(&|id| covered_ids.contains(&(id.actor.0, id.counter)))?;
 
@@ -631,11 +631,15 @@ impl Container {
         }
         // `chain` is newest first, so the last verified entry is the oldest
         // snapshot that proved itself — docs/16 consequence 2 and 3 together.
+        // Coverage, which by ADR-036 Amendment 1 excludes every op the image
+        // cannot represent — so those are never in the floor and compaction
+        // cannot delete them. DP-A5 holds here because of what coverage
+        // *means*, not because a filter was remembered.
         match verified.last() {
             Some(oldest) => oldest
-                .ops()
+                .covered()
                 .iter()
-                .map(|op| (op.id.actor.0, op.id.counter))
+                .map(|id| (id.actor.0, id.counter))
                 .collect(),
             None => BTreeSet::new(),
         }

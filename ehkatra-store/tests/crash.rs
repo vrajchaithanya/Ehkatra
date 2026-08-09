@@ -114,7 +114,14 @@ fn a_killed_process_keeps_every_op_it_acknowledged() {
     let container = Container::open_or_create(&path).expect("reopen after kill");
     let opened = container.open_document().expect("open");
 
-    let recovered = opened.ops();
+    // No snapshot here by construction: `crash-writer` only appends. Asserted
+    // rather than assumed, because the check below reads the tail directly and
+    // would quietly weaken if a snapshot ever appeared.
+    assert!(
+        opened.salvaged.snapshot.is_none(),
+        "this corpus is append-only; a snapshot would change what `tail` means"
+    );
+    let recovered = opened.salvaged.tail.clone();
     assert!(
         recovered.len() >= acknowledged,
         "container lost acknowledged work: {} recovered, {acknowledged} acknowledged",
@@ -191,7 +198,7 @@ fn a_corrupted_snapshot_opens_through_salvage_and_reports_it() {
 
     // Ops are the truth: the workbook is still recoverable in full from them.
     assert_eq!(
-        hash_of(&opened.log()),
+        *opened.state().state_hash().as_bytes(),
         expected,
         "the op log rebuilt the workbook the corrupt snapshot could not"
     );

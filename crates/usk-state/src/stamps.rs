@@ -38,13 +38,22 @@ pub type Stamp = (Lamport, OpId);
 #[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct WinnerStamps {
     by_cell: BTreeMap<(RowId, ColId), Stamp>,
-    /// The greatest canonical key in the log this was built from.
+    /// The greatest canonical key among the log's **cell-writing** ops.
     ///
     /// ADR-036 requires the image to record it so a tail op that is canonically
     /// *earlier* than the image is **refused rather than misplaced** — the
     /// ordering half of D-101, which D-102 explicitly left open. Applying such
     /// an op to a summary tile would silently overwrite a newer value, because
     /// the summary path trusts arrival order instead of comparing stamps.
+    ///
+    /// Cell writes **only**, and that is the amendment's second consequence:
+    /// the refusal exists because of the summary tile, and nothing else has one.
+    /// Axis ops are a CRDT and resolve independently of arrival order
+    /// (`order_independence_basic`); an opaque op applies to nothing (D-066).
+    /// Bounding on every op would refuse a tail carrying a perfectly applicable
+    /// older axis or opaque op — which ADR-036 Amendment 1 makes the *expected*
+    /// shape of a tail, since ops the image cannot represent are never pruned
+    /// and therefore always arrive as tail.
     greatest: Option<Stamp>,
 }
 
@@ -63,10 +72,7 @@ impl WinnerStamps {
                 Payload::SetCell { row, col, .. }
                 | Payload::ClearCell { row, col }
                 | Payload::SetFormula { row, col, .. } => (*row, *col),
-                _ => {
-                    out.observe(op.lamport, op.id);
-                    continue;
-                }
+                _ => continue,
             };
             out.observe(op.lamport, op.id);
             let stamp = (op.lamport, op.id);
@@ -94,7 +100,8 @@ impl WinnerStamps {
         self.by_cell.get(&(row, col)).copied()
     }
 
-    /// The greatest canonical key covered. `None` for an empty log.
+    /// The greatest canonical key among the cell writes covered. `None` when
+    /// the log wrote no cells.
     pub fn greatest(&self) -> Option<Stamp> {
         self.greatest
     }
@@ -117,6 +124,35 @@ impl WinnerStamps {
 
     pub(crate) fn iter(&self) -> impl Iterator<Item = (&(RowId, ColId), &Stamp)> {
         self.by_cell.iter()
+    }
+}
+
+/// Whether a tile image can represent what this op did (ADR-036 Amendment 1).
+///
+/// An image stores what the ops *produced*. An op this build cannot read is
+/// applied to nothing by design (D-066), so it produces nothing and an image
+/// has nowhere to put it. That is the entire un-representable set, and it is
+/// why a snapshot's coverage is defined as "the ops its image represents"
+/// rather than "the ops it was built from": compaction prunes coverage, so an
+/// op outside coverage is one compaction can never delete.
+///
+/// **DP-A5 lives here.** If this ever returns `true` for a payload the image
+/// does not actually encode, an op becomes prunable that nothing could
+/// reconstruct, and "files written today open in 20 years" quietly stops being
+/// true. A new `Payload` variant must be added to the image *and* to this
+/// function, or to neither.
+pub fn image_represents(payload: &Payload) -> bool {
+    match payload {
+        Payload::Opaque(_) => false,
+        Payload::InsertRow { .. }
+        | Payload::DeleteRow { .. }
+        | Payload::InsertCol { .. }
+        | Payload::DeleteCol { .. }
+        | Payload::UndeleteRow { .. }
+        | Payload::UndeleteCol { .. }
+        | Payload::SetCell { .. }
+        | Payload::ClearCell { .. }
+        | Payload::SetFormula { .. } => true,
     }
 }
 
