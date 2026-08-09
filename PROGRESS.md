@@ -94,19 +94,24 @@ redirection in `tools\*.ps1`.
 
 ## NEXT ACTION
 
-**Step 3 is done as far as its triggers go.** TD-46, TD-45 and TD-31 are paid;
-TD-17, TD-44 and TD-37 are gated and should stay closed (D-112). What is left in
-the structural queue is **TD-57** — the covered-op-id list is now 64.9 of the
-95.6 MB of snapshot bodies, three times the images beside it, and a per-actor
-run encoding collapses it because every id comes from one actor with a dense
-counter range. Not urgent: container size just fell by half.
+**Q2 is open and its platform question is settled: ADR-037** — native winit +
+wgpu desktop shell, superseding ADR-033's web-first PWA. docs/33 and docs/40
+already said this; ADR-033 was never propagated into them, which is the
+contradiction Q2 surfaced.
 
-**So the next real work is Q2** (docs/40, docs/25): the winit+wgpu desktop
-shell, virtual-scroll renderer, editing surface + IME, styles/validation/
-conditional formatting/sort/filter/tables, XLSX **write** plus a round-trip
-corpus and a published fidelity number, and the accesskit a11y tree. Build
-unsigned installers; signing certs go to BLOCKED.md. Commit UI screenshots under
-`demo/` as evidence with each feature.
+**First step, and it is a measurement, not a feature.** ADR-037 requires the
+shell's dependency ceiling to be **measured before the first GPU dependency is
+committed**. `tools/dep-budget.mjs` now reports a shell line and says plainly
+that the ceiling is UNSET. So: create `ehkatra-shell`, add `winit` and `wgpu`,
+run the gate, record the real closure in MEASUREMENTS.md, and set the ceiling
+from it. D-115 is why this order and not the other one.
+
+Then docs/40's Q2 list, in its order: renderer + virtual scroll, editing
+surface + native IME overlay, menus/dialogs/file-association adapters, accesskit
+tree v1, styles/validation/cond-format/sort/filter/tables, XLSX **write** +
+corpus v1 + a published fidelity number, installers (unsigned; signing certs go
+to BLOCKED.md). Commit UI screenshots under `demo/` as evidence with each
+feature.
 
 **The rest of step 3 is gated and should stay closed** (D-112): TD-17 and TD-44
 have triggers that measurement shows are not live, and TD-37 is blocked on

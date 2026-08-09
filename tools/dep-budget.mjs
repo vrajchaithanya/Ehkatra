@@ -33,7 +33,22 @@ const KERNEL = [
 ];
 const KERNEL_DIRECT_MAX = 5; // DP-S2 as written in docs/07 §3
 const KERNEL_CLOSURE_MAX = 12; // D-035; today 10 (blake3's build+SIMD support crates)
-const WORKSPACE_CLOSURE_MAX = 40; // DP-S2
+const WORKSPACE_CLOSURE_MAX = 40; // DP-S2 — the NON-shell workspace.
+
+// The shell is budgeted separately (ADR-037). DP-S2's intent is "one of each
+// hard thing" and "what a solo maintainer can carry"; a GPU stack is one hard
+// thing, bought whole from upstream, behind the platform boundary DP-C2's gate
+// already enforces. Counting it against the kernel's neighbours would say
+// nothing useful about either.
+//
+// Members whose name starts with this prefix are the shell.
+const SHELL_PREFIX = 'ehkatra-shell';
+// `null` means **unmeasured, and therefore unenforced**: ADR-037 requires the
+// real closure to be measured and recorded in MEASUREMENTS.md before a ceiling
+// is written here. D-115 is why — a number priced without measurement is what
+// made the first stamp sidecar 21x too large. The gate reports the figure from
+// the first day a shell crate exists, so the ceiling is set from evidence.
+const SHELL_CLOSURE_MAX = null;
 
 const meta = JSON.parse(
   execFileSync('cargo', ['metadata', '--format-version', '1'], {
@@ -97,12 +112,38 @@ for (const name of KERNEL) {
   for (const d of externalClosure(pkg.id)) kernelClosure.add(d);
 }
 
+const isShell = (id) => (byId.get(id)?.name ?? '').startsWith(SHELL_PREFIX);
+
 const workspaceClosure = new Set();
-for (const id of workspaceIds) for (const d of externalClosure(id)) workspaceClosure.add(d);
+for (const id of workspaceIds) {
+  if (isShell(id)) continue;
+  for (const d of externalClosure(id)) workspaceClosure.add(d);
+}
+
+const shellClosure = new Set();
+for (const id of workspaceIds) {
+  if (!isShell(id)) continue;
+  for (const d of externalClosure(id)) shellClosure.add(d);
+}
+// A crate the non-shell workspace already carries is not a cost the shell
+// added, so the shell line measures what the shell *brought*.
+for (const name of workspaceClosure) shellClosure.delete(name);
 
 report('kernel direct deps (DP-S2)', kernelDirect, KERNEL_DIRECT_MAX);
 report('kernel dep closure (D-035)', kernelClosure, KERNEL_CLOSURE_MAX);
-report('workspace dep closure (DP-S2)', workspaceClosure, WORKSPACE_CLOSURE_MAX);
+report('workspace dep closure, non-shell (DP-S2)', workspaceClosure, WORKSPACE_CLOSURE_MAX);
+
+if (SHELL_CLOSURE_MAX === null) {
+  // Reported, not enforced. Saying which it is matters: a gate that prints a
+  // number nobody set is not a gate, and pretending otherwise is how a budget
+  // becomes decorative.
+  console.log(
+    `INFO  shell dep closure (ADR-037): ${shellClosure.size}, ceiling UNSET — ` +
+      'measure and record in MEASUREMENTS.md before setting one',
+  );
+} else {
+  report('shell dep closure (ADR-037)', shellClosure, SHELL_CLOSURE_MAX);
+}
 
 if (failed) {
   console.error('\ndep-budget: complexity budget exceeded — raising a ceiling requires an ADR.');

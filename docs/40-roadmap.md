@@ -5,6 +5,8 @@ Status: Approved · Owner: Chief Architect + Product Architect
 Headless kernel: op log, order CRDT, tile store, 60 functions, incremental parallel calc, two-replica WS sync, snapshots/recovery, REST L1 subset, MCP 7-tool subset (DataFusion SQL), CSV + XLSX-read in sandbox. Proof rig: differential replay CI, property suites, **TLA+ models checked**, memory/promotion harness, wasm32 harness, oracle capture start, fuzz, adversarial ops. **Exit: MEASUREMENTS.md — every §31 target confirmed/revised/failed-with-consequence; the two-terminal concurrent-edit demo; Claude doing describe→query→preview→apply→undo.**
 
 ## Q2 — Desktop foundation
+*Platform authority: **ADR-037** (native winit + wgpu is the product, superseding ADR-033's web-first PWA). The shell's dependency ceiling is a separate budget line and must be **measured before the first GPU dependency lands** — see ADR-037 and MEASUREMENTS.md.*
+
 winit+wgpu shell on Win+macOS: renderer, virtual scroll, editing surface, native IME overlay, menus/dialogs/file-association adapters, accesskit tree v1; container file format (SQLite) with crash-injection suite; styles/formats, validation, cond-format, sort/filter, tables; XLSX write + corpus v1 + first published fidelity number; presence; installer/signing/update pipeline (rings). *Exit: dogfood-daily internal alpha; canvas-a11y spike resolved with Narrator+VoiceOver evidence.*
 
 ## Q3 — Collaboration + agents in product

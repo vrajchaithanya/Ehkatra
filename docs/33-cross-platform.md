@@ -1,5 +1,5 @@
 # 33 — Cross-Platform & Desktop Strategy
-Status: Approved · Owner: Chief Architect · Normative: yes · New for desktop-first mandate (ADR-027/028)
+Status: Approved · Owner: Chief Architect · Normative: yes · Desktop-first mandate: ADR-027/028, briefly superseded by ADR-033 (web-first) and **restored by ADR-037**. This document was never changed for ADR-033, which is how the contradiction survived two days — see ADR-037.
 
 ## Priority order
 **Windows and macOS are the product.** Linux: kernel + server first-class (the server plane runs on it); desktop preserved through the PAL seam, shipped only on demonstrated demand. Web: future target — the wgpu scene graph maps to WebGPU and the kernel to wasm32 (kept honest by the permanent wasm32 differential-replay gate), but no web product before desktop earns its users. Mobile: Horizon 3 via UniFFI.
