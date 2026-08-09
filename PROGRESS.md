@@ -12,8 +12,18 @@ registers (docs/43 decisions, docs/44 debt, MEASUREMENTS.md numbers) are for.
 
 **Where the tree is:** v0.1 is complete and tagged `v0.1.0`. Q1 is done. The
 work in flight is the compatibility-debt push toward **W-ORACLE ≥ 90%**
-(currently **74.2%**, 1,014 / 1,366 cases), followed by the structural debt
-around the tile image, then Q2's shell.
+(now **83.5%**, 1,140 / 1,366 cases — up from 74.2% this session), followed by
+the structural debt around the tile image, then Q2's shell.
+
+**Session 20 paid TD-33, the largest cluster.** Excel's two date systems are now
+an explicit `DateSystem` on the evaluation context (**D-105**): +126 cases, and
+the 1904 corpus went **20.0% → 87.7%** because the engine had had no 1904 mode
+at all — every serial was off by the same 1,462, so nearly every case failed for
+one reason. `DATE`, `DAY`, `MONTH`, `WEEKDAY` and `YEAR` are now **100% in both
+corpora**. Six rules, none of which follows from the others, all measured from
+the Excel COM capture rather than from documentation. Locale date text is
+deliberately excluded and filed as **TD-49** — `"15/03/2024"` means different
+days on differently-configured hosts, so the corpus cannot settle it.
 
 **Session 20 closed TD-47 and found it was never true.** `tools/gates.ps1` was
 recorded as requiring PowerShell 7 and aborting on this 5.1-only host. Measured:
@@ -48,11 +58,12 @@ keeps its number forever.
   (also `pwsh -File tools/gates.ps1`). Shell compat · fmt · clippy `-D warnings`
   · tests · no_std wasm32 kernel build · dep budget · supply chain (cargo-deny)
   · differential replay native == wasm32 · purity/host-isolation greps.
-- **Tests:** 323, all passing.
-- **Replay hashes:** oplog `c79fa533…` · state `b58d5505…`.
+- **Tests:** 331, all passing.
+- **Replay hashes:** oplog `c79fa533…` · state `b58d5505…` (unchanged by the
+  date work — it is additive to the op algebra).
 - **Dependency budget:** kernel direct 1/5 · kernel closure 10/12 · workspace
   closure 29/40.
-- **W-ORACLE:** 74.2% overall; the 1904 corpus scores 20.0%, which is TD-33.
+- **W-ORACLE:** **83.5%** overall — 1900 at 83.0%, 1904 at 87.7%.
 - **Open structural debt:** TD-46 (the tile image is built, tested, fuzz-clean
   and measured — and still not the snapshot body), and with it TD-45, TD-31 and
   TD-24's residual, all of which close together.
@@ -65,11 +76,11 @@ keeps its number forever.
 case count** — the ranking is the point of having a runner, so follow it rather
 than re-guessing:
 
-1. **TD-33 — date semantics** (~98 cases, plus 104 of the 130 1904 cases). The
-   largest single cluster and the one that moves the headline most: the 1900
-   calendar's self-contradictions, `DATE`'s sub-1900 year offset, month/day
-   rollover, and the 1904 system, which is not implemented at all.
+1. ~~TD-33 — date semantics~~ **PAID (session 20)**, +126 cases.
 2. **TD-36 — `TEXT()`** (~28), unimplemented; needs the number-format grammar.
+   Now the largest remaining cluster, and it also unblocks the residual
+   `__compat_1900_leap` / `__compat_serial_boundary` cases that TD-33 left —
+   they fail on `TEXT`, `DATEVALUE` and `EOMONTH`, not on date arithmetic.
 3. **TD-14 — approximate-match lookup** (~24), a deliberate v0.1 refusal that
    now has vectors to gate the fix.
 4. **TD-34 — the `COUNTIF`/`SUMIF` criteria sub-language** (~20).

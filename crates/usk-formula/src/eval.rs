@@ -9,6 +9,7 @@
 //! propagation behave identically whether a value was produced by a formula or
 //! written directly.
 
+use crate::functions::DateSystem;
 use crate::parse::{Ast, BinOp, UnOp, A1};
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -51,6 +52,11 @@ pub struct Context<'a, G: Grid> {
     pub today: i32,
     /// Materialised `NOW()` as a date serial plus fraction of day.
     pub now: f64,
+    /// Which date system the workbook uses (TD-33). This is a workbook-level
+    /// property in the file format (`workbookPr/@date1904`), so it belongs on
+    /// the evaluation context rather than on any one function: it changes what
+    /// every serial in the workbook *means*, not how a function behaves.
+    pub dates: DateSystem,
 }
 
 impl<'a, G: Grid> Context<'a, G> {
@@ -60,7 +66,15 @@ impl<'a, G: Grid> Context<'a, G> {
             profile,
             today: 0,
             now: 0.0,
+            dates: DateSystem::default(),
         }
+    }
+
+    /// Selects the workbook's date system. Chainable, so a caller needing the
+    /// non-default one says so where the context is built.
+    pub fn with_dates(mut self, dates: DateSystem) -> Self {
+        self.dates = dates;
+        self
     }
 }
 

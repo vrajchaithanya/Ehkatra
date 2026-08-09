@@ -19,6 +19,7 @@ use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::string::String;
 use alloc::vec::Vec;
 use usk_formula::eval::{eval, Context, Grid};
+use usk_formula::functions::DateSystem;
 use usk_formula::parse::{parse, Ast, BinOp, UnOp, A1};
 use usk_oplog::{Op, Payload, RangeBinding};
 use usk_state::State;
@@ -188,6 +189,11 @@ pub struct Engine {
     /// Materialised volatiles (docs/13 T2): read, never computed ambiently.
     pub today: i32,
     pub now: f64,
+    /// The workbook's date system (TD-33). A workbook-level property, so it
+    /// belongs beside `profile` rather than being decided per formula — a
+    /// 1904 workbook that recalculated under 1900 semantics would shift every
+    /// date it computed by 1,462 days.
+    pub dates: DateSystem,
     generation: u64,
 }
 
@@ -202,6 +208,7 @@ impl Engine {
             profile,
             today: 0,
             now: 0.0,
+            dates: DateSystem::default(),
             generation: 0,
         };
         engine.regroup(state);
@@ -575,6 +582,7 @@ impl Engine {
                         profile: self.profile,
                         today: self.today,
                         now: self.now,
+                        dates: self.dates,
                     };
                     for (_, _, ast) in &members {
                         computed.push(eval(ast, &ctx));

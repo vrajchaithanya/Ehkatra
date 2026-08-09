@@ -319,6 +319,21 @@ fn num_arg<G: Grid>(ops: &[Operand], i: usize, ctx: &Context<G>) -> Result<f64, 
     }
 }
 
+/// Like `num_arg`, but for an optional argument whose default is not zero.
+/// `WEEKDAY`'s return type defaults to 1, and a *present* zero is `#NUM!`, so
+/// the two cases cannot share `num_arg`'s "missing means 0".
+fn num_arg_or<G: Grid>(
+    ops: &[Operand],
+    i: usize,
+    ctx: &Context<G>,
+    default: f64,
+) -> Result<f64, CellError> {
+    match ops.get(i) {
+        Some(o) if o.scalar() != Value::Blank => ctx.profile.to_number(&o.scalar()),
+        _ => Ok(default),
+    }
+}
+
 /// Numeric cells only. Text and blanks are *skipped*, not coerced — that is
 /// Excel's aggregation rule and it is why `COUNT` and `COUNTA` differ.
 fn numeric_cells(ops: &[Operand]) -> Vec<Value> {
@@ -1394,44 +1409,109 @@ fn f_ifs_agg<G: Grid>(ops: &[Operand], ctx: &Context<G>, summing: bool) -> Opera
 
 // --------------------------------------------------------------- dates
 
-/// Excel's 1900 date system: serial 1 is 1900-01-01.
+/// Excel's two date systems, and the fictions each one carries.
 ///
-/// Serial 60 is 1900-02-29 — a date that never existed, inherited from Lotus
-/// 1-2-3. `Compat` reproduces it, because every serial after it would otherwise
-/// shift by a day against real Excel files. `Strict` does not, so its serials
-/// are one *larger* than Excel's for any date from 1900-03-01 onward. That
-/// divergence is the point of the profile split (docs/32).
-fn serial_to_ymd(profile: &Profile, serial: i64) -> Option<(i64, u32, u32)> {
-    if serial < 1 {
-        return None;
-    }
-    let adjusted = match profile {
-        Profile::Compat => {
-            if serial == 60 {
-                // The phantom day. Excel reports 29 February 1900.
-                return Some((1900, 2, 29));
-            } else if serial > 60 {
-                serial - 1
-            } else {
-                serial
-            }
-        }
-        Profile::Strict => serial,
-    };
-    // Days since 1899-12-31, converted via the civil-from-days algorithm.
-    Some(civil_from_days(adjusted + DAYS_1899_12_31))
+/// Every rule below is **measured** against real Excel 16.0 over COM (ADR-024,
+/// docs/50) rather than taken from documentation, which docs/32 warns lies
+/// about exactly this area. TD-33 is the debt this pays; the vectors are
+/// `tools/oracle-capture/vectors{,-1904}/{DATE,DAY,MONTH,YEAR,WEEKDAY}.json`.
+///
+/// # 1900 (the default, and the one with the fictions)
+/// * Serial 1 is 1900-01-01.
+/// * **Serial 0 is "1900-01-00"** — `YEAR(0)=1900`, `MONTH(0)=1`, `DAY(0)=0`.
+///   Not an error and not 1899-12-31: a day-zero that Excel prints as such.
+/// * **Serial 60 is 1900-02-29**, a date that never existed, inherited from
+///   Lotus 1-2-3. Every serial from 61 on is therefore one *larger* than the
+///   true day count. `Compat` reproduces this because otherwise every date in
+///   every imported file shifts by a day.
+/// * The last serial is 2,958,465 (9999-12-31); 2,958,466 is `#NUM!`.
+///
+/// # 1904 (the Macintosh system, `workbookPr/@date1904`)
+/// * Serial 0 is 1904-01-01, and it is a **real** date — `DAY(0)` is 1, not 0.
+/// * No phantom leap day: the system starts after 1900, so the Lotus bug has
+///   nothing to be compatible with.
+/// * The last serial is 2,957,003, exactly 1,462 less than the 1900 system's —
+///   which is also the constant offset between the two for every shared date.
+///
+/// `Strict` keeps neither fiction: its serials run from a real 1900-01-01 with
+/// no phantom day, so they are one *smaller* than Excel's from 1900-03-01 on.
+/// That divergence is the point of the profile split (docs/32).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum DateSystem {
+    /// Serial 1 = 1900-01-01, with the day-zero and phantom-leap-day fictions.
+    #[default]
+    Excel1900,
+    /// Serial 0 = 1904-01-01, no fictions.
+    Excel1904,
 }
 
-fn ymd_to_serial(profile: &Profile, y: i64, m: u32, d: u32) -> Option<i64> {
-    let days = days_from_civil(y, m, d) - DAYS_1899_12_31;
-    if days < 1 {
+impl DateSystem {
+    /// Days from the Unix epoch to this system's serial 0.
+    fn day_zero(self) -> i64 {
+        match self {
+            // 1899-12-31, the day *before* serial 1.
+            DateSystem::Excel1900 => DAYS_1899_12_31,
+            DateSystem::Excel1904 => DAYS_1904_01_01,
+        }
+    }
+
+    /// The largest serial the system accepts: 9999-12-31 in each.
+    fn max_serial(self) -> i64 {
+        match self {
+            DateSystem::Excel1900 => 2_958_465,
+            DateSystem::Excel1904 => 2_957_003,
+        }
+    }
+}
+
+/// Serial → calendar date, or `None` when the serial is outside the system.
+///
+/// The two fictions live here and nowhere else, which is what lets `f_date`,
+/// `date_part` and `f_weekday` stay ordinary.
+fn serial_to_ymd(profile: &Profile, sys: DateSystem, serial: i64) -> Option<(i64, u32, u32)> {
+    if serial < 0 || serial > sys.max_serial() {
         return None;
     }
-    Some(match profile {
-        // Re-insert the phantom day for anything at or after 1900-03-01.
-        Profile::Compat if days >= 60 => days + 1,
-        _ => days,
-    })
+    if sys == DateSystem::Excel1900 && *profile == Profile::Compat {
+        // Day zero, which Excel renders as the 0th of January 1900.
+        if serial == 0 {
+            return Some((1900, 1, 0));
+        }
+        // The phantom day.
+        if serial == 60 {
+            return Some((1900, 2, 29));
+        }
+    }
+    let real = phantom_removed(profile, sys, serial);
+    Some(civil_from_days(real + sys.day_zero()))
+}
+
+/// Undoes the phantom day, mapping a serial onto a true count of days since
+/// the system's day zero. A no-op everywhere except 1900/`Compat` past day 60.
+fn phantom_removed(profile: &Profile, sys: DateSystem, serial: i64) -> i64 {
+    if sys == DateSystem::Excel1900 && *profile == Profile::Compat && serial > 60 {
+        serial - 1
+    } else {
+        serial
+    }
+}
+
+/// Calendar date → serial, or `None` when it falls outside the system.
+///
+/// The inverse of `phantom_removed`: February 1900 gains a day because serial
+/// 60 falls inside it, which is why `DATE(1900,2,29)` is 60 rather than an
+/// error and why `DATE(1900,3,1)` is 61 rather than 60.
+fn ymd_to_serial(profile: &Profile, sys: DateSystem, y: i64, m: u32, d: i64) -> Option<i64> {
+    let days = days_from_civil(y, m, 1) - sys.day_zero();
+    let mut serial = days;
+    if sys == DateSystem::Excel1900 && *profile == Profile::Compat && days >= 60 {
+        serial += 1;
+    }
+    // Days are added *after* the mapping, so a day index that walks across the
+    // phantom picks it up. Excel's own out-of-range day rollover is exactly
+    // this addition, which is why `DATE(2024,1,32)` needs no separate rule.
+    serial = serial.checked_add(d - 1)?;
+    (0..=sys.max_serial()).contains(&serial).then_some(serial)
 }
 
 /// Days from the Unix epoch (1970-01-01) back to 1899-12-31, the day *before*
@@ -1441,6 +1521,12 @@ fn ymd_to_serial(profile: &Profile, y: i64, m: u32, d: u32) -> Option<i64> {
 /// 17 leap days from 1904 to 1968), so 1899-12-31 is 25,568. Getting this off
 /// by one shifted every date in the engine by a day.
 const DAYS_1899_12_31: i64 = -25568;
+
+/// Days from the Unix epoch back to 1904-01-01, the 1904 system's serial 0.
+/// 1,460 days after 1900-01-01 — four years none of which is a leap year,
+/// because 1900 is not one. That is also why the two systems differ by 1,462
+/// rather than 1,461: the 1900 system counts a day that does not exist.
+const DAYS_1904_01_01: i64 = DAYS_1899_12_31 + 1 + 1460;
 
 /// Howard Hinnant's `days_from_civil`: exact, integer-only, valid for any
 /// proleptic Gregorian date. No calendar library, no `std` (DP-A3).
@@ -1467,21 +1553,35 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
     (if m <= 2 { y + 1 } else { y }, m, d)
 }
 
+/// `DATE(year, month, day)`.
+///
+/// Three separate normalisations, none of which follows from the others, all
+/// measured (docs/50 finding 6):
+/// * **Years 0–1899 mean 1900+year.** `DATE(0,1,1)` is 1900-01-01 and
+///   `DATE(1899,12,31)` is **3799**-12-31, not 1899-12-31. A year above 9999,
+///   or below zero, is `#NUM!`.
+/// * **Months roll over**, so `DATE(2024,13,1)` is January 2025 and
+///   `DATE(2024,0,1)` is December 2023. The offset above is applied to the
+///   *argument*, before this rollover — which is why `DATE(1900,0,1)` lands in
+///   December 1899 and is `#NUM!` rather than being rescued by it.
+/// * **Days roll over too**, and do it in serial space, so a day index that
+///   crosses the phantom picks it up (`ymd_to_serial`).
 fn f_date<G: Grid>(ops: &[Operand], ctx: &Context<G>) -> Operand {
     let (y, m, d) = match (
         num_arg(ops, 0, ctx),
         num_arg(ops, 1, ctx),
         num_arg(ops, 2, ctx),
     ) {
-        (Ok(a), Ok(b), Ok(c)) => (a as i64, b as i64, c as i64),
+        // Truncation, not rounding: DATE(2024,1,1.9) is 1 January.
+        (Ok(a), Ok(b), Ok(c)) => (floor(a) as i64, floor(b) as i64, floor(c) as i64),
         (Err(e), _, _) | (_, Err(e), _) | (_, _, Err(e)) => return val(Value::Error(e)),
     };
-    // Excel normalises out-of-range months and days by rolling over, so
-    // DATE(2024, 13, 1) is January 2025.
+    if !(0..=9999).contains(&y) {
+        return err(ErrorKind::Num);
+    }
+    let y = if y < 1900 { y + 1900 } else { y };
     let (y, m) = (y + (m - 1).div_euclid(12), (m - 1).rem_euclid(12) + 1);
-    let base = days_from_civil(y, m as u32, 1);
-    let (ny, nm, nd) = civil_from_days(base + d - 1);
-    match ymd_to_serial(&ctx.profile, ny, nm, nd) {
+    match ymd_to_serial(&ctx.profile, ctx.dates, y, m as u32, d) {
         Some(s) => num(s as f64),
         None => err(ErrorKind::Num),
     }
@@ -1492,8 +1592,8 @@ fn date_part<G: Grid, F: Fn(i64, u32, u32) -> f64>(
     ctx: &Context<G>,
     f: F,
 ) -> Operand {
-    match num_arg(ops, 0, ctx) {
-        Ok(s) => match serial_to_ymd(&ctx.profile, floor(s) as i64) {
+    match date_serial_arg(ops, 0, ctx) {
+        Ok(s) => match serial_to_ymd(&ctx.profile, ctx.dates, s) {
             Some((y, m, d)) => num(f(y, m, d)),
             None => err(ErrorKind::Num),
         },
@@ -1501,19 +1601,87 @@ fn date_part<G: Grid, F: Fn(i64, u32, u32) -> f64>(
     }
 }
 
+/// `WEEKDAY(serial, [return_type])`.
+///
+/// The weekday is `serial mod 7` in Excel's own numbering, *not* the true
+/// weekday of the date: in the 1900 system serial 1 is reported as a Sunday
+/// where 1900-01-01 was really a Monday, because the phantom day has not been
+/// inserted yet at that point in the sequence. Reproducing the arithmetic
+/// rather than consulting the calendar is what makes serials 1–59 agree with
+/// Excel (measured: `WEEKDAY(0)` is 7 in 1900 and 6 in 1904).
 fn f_weekday<G: Grid>(ops: &[Operand], ctx: &Context<G>) -> Operand {
-    match num_arg(ops, 0, ctx) {
-        Ok(s) => {
-            let serial = floor(s) as i64;
-            if serial < 1 {
-                return err(ErrorKind::Num);
-            }
-            // Serial 1 (1900-01-01) is a Sunday in Excel's world, which is
-            // weekday 1 under the default return type.
-            num(((serial - 1).rem_euclid(7) + 1) as f64)
-        }
-        Err(e) => val(Value::Error(e)),
+    let serial = match date_serial_arg(ops, 0, ctx) {
+        Ok(s) => s,
+        Err(e) => return val(Value::Error(e)),
+    };
+    let kind = match num_arg_or(ops, 1, ctx, 1.0) {
+        Ok(k) => floor(k) as i64,
+        Err(e) => return val(Value::Error(e)),
+    };
+    if serial < 0 || serial > ctx.dates.max_serial() {
+        return err(ErrorKind::Num);
     }
+    // Sunday = 0. The offsets place each system's serial 0 on its real
+    // weekday: 1900-01-00 is a Saturday, 1904-01-01 a Friday.
+    let shift = match ctx.dates {
+        DateSystem::Excel1900 => 6,
+        DateSystem::Excel1904 => 5,
+    };
+    let sunday_zero = (serial + shift).rem_euclid(7);
+    // `start` is the weekday that the return type calls 1, in Sunday-zero
+    // terms. Types 11..=17 name Monday..Sunday; 1/2/3 are the legacy spellings
+    // (2 == 11 and 1 == 17, which the vectors confirm). Everything else,
+    // including 0 and 4..=10, is #NUM!.
+    let (start, base) = match kind {
+        1 => (0, 1),
+        2 => (1, 1),
+        3 => (1, 0),
+        11..=17 => (((kind - 11) + 1).rem_euclid(7), 1),
+        _ => return err(ErrorKind::Num),
+    };
+    num(((sunday_zero - start).rem_euclid(7) + base) as f64)
+}
+
+/// A serial argument for a date function, which also accepts an ISO-8601 date
+/// string — `YEAR("2024-03-15")` is 2024 in Excel, under both date systems.
+///
+/// Deliberately ISO only. Excel additionally parses locale-dependent forms
+/// (`15/03/2024` is in the fixtures), and those depend on the capture host's
+/// locale, so implementing them from this corpus would encode one machine's
+/// regional settings as engine behaviour. Recorded as TD-49 rather than
+/// guessed at.
+fn date_serial_arg<G: Grid>(ops: &[Operand], i: usize, ctx: &Context<G>) -> Result<i64, CellError> {
+    if let Some(op) = ops.get(i) {
+        if let Value::Text(s) = op.scalar() {
+            if let Some(serial) = parse_iso_date(&s, &ctx.profile, ctx.dates) {
+                return Ok(serial);
+            }
+        }
+    }
+    num_arg(ops, i, ctx).map(|s| floor(s) as i64)
+}
+
+/// `yyyy-mm-dd`, strictly: four digits, two, two, ASCII hyphens, nothing else.
+fn parse_iso_date(text: &str, profile: &Profile, sys: DateSystem) -> Option<i64> {
+    let b = text.as_bytes();
+    if b.len() != 10 || b[4] != b'-' || b[7] != b'-' {
+        return None;
+    }
+    let digits = |r: core::ops::Range<usize>| -> Option<i64> {
+        let mut n: i64 = 0;
+        for &c in &b[r] {
+            if !c.is_ascii_digit() {
+                return None;
+            }
+            n = n * 10 + (c - b'0') as i64;
+        }
+        Some(n)
+    };
+    let (y, m, d) = (digits(0..4)?, digits(5..7)?, digits(8..10)?);
+    if !(1..=12).contains(&m) || !(1..=31).contains(&d) {
+        return None;
+    }
+    ymd_to_serial(profile, sys, y, m as u32, d)
 }
 
 const _: () = {

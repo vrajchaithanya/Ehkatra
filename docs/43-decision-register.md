@@ -185,6 +185,29 @@ docs/16 promises salvage from "the **last valid** snapshot", which presupposes m
 That is not a bug in the salvage path, which behaved exactly as specified — it is a retention policy that was never stated. Recorded as **TD-30** with the two candidate fixes (keep N ≥ 2 snapshots, or retain compacted ops until a second snapshot verifies) rather than picked here: the choice trades file size against recoverability, and docs/16's cadence section is where it belongs.
 Worth noting the smaller-scale test disagrees and is right to: `a_corrupted_snapshot_opens_through_salvage_and_reports_it` keeps every op in `ops`, so it recovers the full workbook. The two together are the actual lesson — **recoverability is a property of the retention policy, not of the salvage code.**
 
+### Session 20 (2026-08-09) — TD-33 paid: the date system is a workbook property, not a profile
+
+**D-105 — Excel's two date systems are modelled as an explicit `DateSystem` on the evaluation context, and every rule in them is oracle-measured.**
+
+TD-33 was the largest cluster in the W-ORACLE table (~98 cases plus 104 of the 130 1904 cases). Paid: **74.2% → 83.5% overall**, with the 1904 corpus going **20.0% → 87.7%** and `DATE`/`DAY`/`MONTH`/`WEEKDAY`/`YEAR` reaching **100% in both corpora**.
+
+**Where it lives, and why not on `Profile`.** `Profile::{Compat,Strict}` says *how faithfully to reproduce Excel*; the date system says *which calendar this workbook uses*. They are orthogonal — a 1904 workbook still wants compat coercion — and the file format agrees: `workbookPr/@date1904` is a per-workbook property. So `DateSystem` is a third axis on `Context`, defaulting to 1900, and `usk-calc`'s `Engine` carries it beside `profile` so a recalculated 1904 workbook does not silently shift every computed date by 1,462 days.
+
+**The rules, none of which follows from the others** (docs/50 finding 6 said there were five; the corpus shows six):
+
+1. **Serial 0 is a position, not an error.** 1900 calls it "1900-01-00" — `DAY(0)=0`, `MONTH(0)=1`, `YEAR(0)=1900`. 1904 calls it 1904-01-01, a real date with `DAY(0)=1`.
+2. **Serial 60 is 1900-02-29**, the Lotus phantom. Reproduced, because otherwise every date in every imported file shifts by a day.
+3. **Years 0–1899 mean 1900+year.** `DATE(1899,12,31)` is in the 38th century. The offset applies to the *argument*, before month rollover — which is why `DATE(1900,0,1)` lands in December 1899 and is `#NUM!` rather than being rescued by it.
+4. **Months and days roll over** rather than erroring, and the day rollover happens **in serial space**, so an index crossing the phantom picks it up. That one choice is why `DATE(1900,2,29)=60` and `DATE(2024,1,32)=45323` need no separate rules.
+5. **The serial range is closed at both ends**: 0..=2,958,465 in 1900, 0..=2,957,003 in 1904 — 9999-12-31 in each.
+6. **`WEEKDAY` is `serial mod 7`, not the true weekday.** In 1900, serial 1 reports Sunday where 1900-01-01 was really a Monday, because the phantom has not been inserted yet at that point in the sequence. Consulting the calendar instead would have made serials 1–59 disagree with Excel. Return types are 1/2/3 and 11–17; **0 and 4–10 are `#NUM!`**, a gap in the numbering that only measurement would have found.
+
+**The 1904 offset is 1,462, not 1,461** — four years between the epochs, plus the day the 1900 system counts that never existed. The constant falling out of the phantom rather than being pasted in is what makes the two systems one model.
+
+**Deliberately not done: locale date text.** `YEAR("2024-03-15")` is implemented; `YEAR("15/03/2024")` is not, although its fixture is in the corpus. That string means 15 March here and 3 December on a US host, so implementing it from this capture would encode one machine's regional settings as engine behaviour — the exact failure an oracle exists to prevent. Filed as **TD-49** with the condition that would clear it (a locale model, or a second capture on a differently-configured host), per D-104's rule.
+
+**The corpus tells the runner which system it is**, read from `_index.json`'s `provenance.date_system` rather than from the directory name, and a corpus that does not say is a hard error. A mislabelled folder would otherwise turn 104 real divergences into an invisible pass.
+
 ### Session 20 (2026-08-09) — TD-47 was false, and the register has now produced the same defect twice
 
 **D-104 — `gates.ps1` is 5.1-compatible and always was. The debt entry accusing it was written from a true fact about the shell and never run against the script.**

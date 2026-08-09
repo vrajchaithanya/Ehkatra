@@ -542,10 +542,40 @@ data point, not a re-run.
 | **After the cheap docs/50 §7 fixes** | 1,366 | **1,014** | **74.2%** |
 | — 1900 date system | 1,236 | 988 | 79.9% |
 | — 1904 date system | 130 | 26 | 20.0% |
+| **After the date model (TD-33, session 20)** | 1,366 | **1,140** | **83.5%** |
+| — 1900 date system | 1,236 | 1,026 | 83.0% |
+| — 1904 date system | 130 | 114 | **87.7%** |
 
-352 fail, of which **12 are numerically near** (relative difference ≤ 1e-12) and
-are counted as fails anyway. 0 unjudged — a case the runner cannot score is
-reported, never dropped.
+352 fail at 74.2%, of which **12 are numerically near** (relative difference
+≤ 1e-12) and are counted as fails anyway. 0 unjudged — a case the runner cannot
+score is reported, never dropped. At 83.5% it is 226 fail, the same 12 near, and
+still 0 unjudged.
+
+### TD-33: +126 cases, and the 1904 corpus stops being a hole · session 20
+
+`cargo run --release -p conformance`, same corpus, same Excel build. The five
+date functions reach **100% in both corpora** — `DATE` 30/30, `DAY` 12/12,
+`MONTH` 11/11, `WEEKDAY` 22/22, `YEAR` 14/14 — from 76.7 / 75.0 / 72.7 / 45.5 /
+64.3% under 1900 and 26.7 / 16.7 / 54.5 / 13.6 / 14.3% under 1904.
+
+The 1904 corpus scored 20% because the engine had **no 1904 mode at all**: every
+serial was off by the constant 1,462, so nearly every case failed for a single
+reason. That is why it was the cheapest 104 cases in the register — one model,
+not a hundred fixes.
+
+**What this number does not include, stated so it is not read as more than it
+is.** The residual date-adjacent failures are not date arithmetic:
+`__compat_1900_leap` (13/22) and `__compat_serial_boundary` (12/19) are now held
+down by `TEXT()` (TD-36), `DATEVALUE` and `EOMONTH`, each of which returns
+`#NAME?` because it is unimplemented. Those cases belong to TD-36 and to the
+function catalogue; counting them against TD-33 would make this row look worse
+than the work was, and counting them *for* it would be worse still.
+
+**Locale is deliberately excluded.** `YEAR("2024-03-15")` is implemented;
+`YEAR("15/03/2024")` is not, although the fixture for it exists. The second
+form's meaning depends on the capture host's regional settings, so implementing
+it from this corpus would encode one machine's locale as engine behaviour.
+Filed as TD-49 rather than guessed at.
 
 **What the 8.6-point movement was.** The cancellation work alone moved 79 cases:
 the positional `+`/`-` rule (`eval_top`, and an `Ast::Paren` node so

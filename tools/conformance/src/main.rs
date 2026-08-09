@@ -37,6 +37,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use usk_formula::eval::{Context, Grid};
+use usk_formula::functions::DateSystem;
 use usk_formula::parse::{self, Ast};
 use usk_json::Json;
 use usk_types::coerce::Profile;
@@ -69,7 +70,12 @@ fn main() {
         ("1900", root.join("tools/oracle-capture/vectors")),
         ("1904", root.join("tools/oracle-capture/vectors-1904")),
     ] {
-        match run_corpus(&dir) {
+        // The date system comes from the corpus's own provenance, not from the
+        // directory name: `_index.json` records what the capturing workbook's
+        // `Date1904` property actually was, so the runner cannot drift from
+        // the oracle by mislabelling a folder.
+        let dates = corpus_date_system(&dir);
+        match run_corpus(&dir, dates) {
             Ok(report) => corpora.push((label, dir, report)),
             Err(err) => {
                 eprintln!("conformance: cannot read {}: {err}", dir.display());
@@ -167,7 +173,41 @@ struct CorpusReport {
 
 // ------------------------------------------------------------------- driver
 
-fn run_corpus(dir: &Path) -> std::io::Result<CorpusReport> {
+/// Reads `_index.json`'s `provenance.date_system`. A corpus that does not say
+/// is a hard error rather than a silent default: the whole point of the 1904
+/// corpus is that the same formulas mean different things, so guessing here
+/// would turn 104 real divergences into an invisible pass or fail.
+fn corpus_date_system(dir: &Path) -> DateSystem {
+    let path = dir.join("_index.json");
+    let Ok(bytes) = std::fs::read(&path) else {
+        eprintln!("conformance: {} is missing", path.display());
+        std::process::exit(1);
+    };
+    let doc = match usk_json::parse(&bytes) {
+        Ok(doc) => doc,
+        Err(err) => {
+            eprintln!("conformance: {} is not JSON: {err:?}", path.display());
+            std::process::exit(1);
+        }
+    };
+    match doc
+        .get("provenance")
+        .and_then(|p| p.get("date_system"))
+        .and_then(Json::as_str)
+    {
+        Some("1900") => DateSystem::Excel1900,
+        Some("1904") => DateSystem::Excel1904,
+        other => {
+            eprintln!(
+                "conformance: {} records date_system {other:?}, which is neither 1900 nor 1904",
+                path.display()
+            );
+            std::process::exit(1);
+        }
+    }
+}
+
+fn run_corpus(dir: &Path, dates: DateSystem) -> std::io::Result<CorpusReport> {
     let mut report = CorpusReport::default();
     let mut files: Vec<PathBuf> = std::fs::read_dir(dir)?
         .filter_map(|e| e.ok().map(|e| e.path()))
@@ -201,7 +241,7 @@ fn run_corpus(dir: &Path) -> std::io::Result<CorpusReport> {
             .entry(function)
             .or_insert_with(Tally::default);
         for case in cases {
-            let (outcome, failure) = judge(case);
+            let (outcome, failure) = judge(case, dates);
             tally.add(outcome);
             if let Some(failure) = failure {
                 report.failures.push(failure);
@@ -224,12 +264,12 @@ fn file_stem(path: &Path) -> String {
 }
 
 /// Evaluates one case and decides whether it matches Excel.
-fn judge(case: &Json) -> (Outcome, Option<Failure>) {
+fn judge(case: &Json, dates: DateSystem) -> (Outcome, Option<Failure>) {
     let id = case.get("id").and_then(Json::as_str).unwrap_or("?");
     let Some(formula) = case.get("formula").and_then(Json::as_str) else {
         return (Outcome::Unjudged, None);
     };
-    let grid = build_grid(case.get("fixture"));
+    let grid = build_grid(case.get("fixture"), dates);
     let parsed = parse::parse(formula);
 
     // Excel refused to store this formula at all (D-081). We pass only by
@@ -245,7 +285,7 @@ fn judge(case: &Json) -> (Outcome, Option<Failure>) {
                     id: id.to_string(),
                     formula: formula.to_string(),
                     expected: String::from("rejected by Excel's parser"),
-                    actual: describe(&evaluate(&parsed.ast, &grid)),
+                    actual: describe(&evaluate(&parsed.ast, &grid, dates)),
                     near: false,
                 }),
             )
@@ -255,7 +295,7 @@ fn judge(case: &Json) -> (Outcome, Option<Failure>) {
     let Some(observed) = case.get("observed").filter(|o| !o.is_null()) else {
         return (Outcome::Unjudged, None);
     };
-    let actual = evaluate(&parsed.ast, &grid);
+    let actual = evaluate(&parsed.ast, &grid, dates);
     let (outcome, expected) = compare(observed, &actual);
     let failure = match outcome {
         Outcome::Pass | Outcome::Unjudged => None,
@@ -270,8 +310,8 @@ fn judge(case: &Json) -> (Outcome, Option<Failure>) {
     (outcome, failure)
 }
 
-fn evaluate(ast: &Ast, grid: &FixtureGrid) -> Value {
-    let mut ctx = Context::new(grid, Profile::Compat);
+fn evaluate(ast: &Ast, grid: &FixtureGrid, dates: DateSystem) -> Value {
+    let mut ctx = Context::new(grid, Profile::Compat).with_dates(dates);
     ctx.today = TODAY_SERIAL;
     ctx.now = NOW_SERIAL;
     // `eval_top`, because a corpus case *is* a whole formula — the position
@@ -393,7 +433,7 @@ impl Grid for FixtureGrid {
 /// already there. Two passes, because a fixture cell may name another one and
 /// the corpus does not promise a topological order — this is a fixture loader,
 /// not the dependency graph, and two passes cover every shape the corpus has.
-fn build_grid(fixture: Option<&Json>) -> FixtureGrid {
+fn build_grid(fixture: Option<&Json>, dates: DateSystem) -> FixtureGrid {
     let mut grid = FixtureGrid {
         cells: BTreeMap::new(),
     };
@@ -418,7 +458,7 @@ fn build_grid(fixture: Option<&Json>) -> FixtureGrid {
     for _ in 0..2 {
         for (at, source) in &formulas {
             let parsed = parse::parse(source);
-            let value = evaluate(&parsed.ast, &grid);
+            let value = evaluate(&parsed.ast, &grid, dates);
             grid.cells.insert(*at, value);
         }
     }

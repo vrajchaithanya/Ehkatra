@@ -9,7 +9,7 @@
 //! contradicts is a bug here, not in the oracle.
 
 use usk_formula::eval::{eval, Context, Grid, NoGrid, Operand};
-use usk_formula::functions::CATALOGUE;
+use usk_formula::functions::{DateSystem, CATALOGUE};
 use usk_formula::parse::{parse, Ast, A1};
 use usk_formula::{evaluate, parse as parse_mod};
 use usk_types::coerce::Profile;
@@ -63,6 +63,14 @@ fn evg(src: &str, grid: &Fixture, profile: Profile) -> Value {
 
 fn kind_of(v: &Value) -> Option<ErrorKind> {
     v.as_error().map(|e| e.kind)
+}
+
+/// Evaluate under the 1904 date system (TD-33), which is a workbook property
+/// rather than a profile, so it cannot go through `ev`.
+fn ev_1904(src: &str) -> Value {
+    let parsed = parse(src);
+    let ctx = Context::new(&NoGrid, Profile::Compat).with_dates(DateSystem::Excel1904);
+    eval(&parsed.ast, &ctx)
 }
 
 // ----------------------------------------------------------- the CST
@@ -544,6 +552,165 @@ fn compat_reproduces_the_1900_leap_year_fiction() {
             "profiles should agree before the phantom day, at serial {serial}"
         );
     }
+}
+
+// The date tests below are TD-33. **Every expected value is what real Excel
+// 16.0 returned over COM** (ADR-024), taken from
+// `tools/oracle-capture/vectors{,-1904}/{DATE,DAY,MONTH,YEAR,WEEKDAY}.json`.
+// None of them is derived from documentation, which docs/32 warns lies about
+// precisely this area — and docs/50 finding 6 recorded five date rules none of
+// which follows from the others.
+
+#[test]
+fn the_phantom_day_is_reachable_from_date_and_is_exactly_one_day_wide() {
+    // DAY(60)=29 already proves the read direction; this is the write one.
+    assert_eq!(ev("=DATE(1900,2,29)", Profile::Compat), n(60.0));
+    assert_eq!(ev("=DATE(1900,2,28)", Profile::Compat), n(59.0));
+    assert_eq!(ev("=DATE(1900,3,1)", Profile::Compat), n(61.0));
+    // Excel's own self-contradiction: February 1900 has 29 days going in and
+    // the gap between 28 Feb and 1 Mar is two days coming out.
+    assert_eq!(
+        ev("=DATE(1900,3,1)-DATE(1900,2,28)", Profile::Compat),
+        n(2.0)
+    );
+}
+
+#[test]
+fn serial_zero_is_a_real_position_in_both_date_systems() {
+    // 1900 calls it the 0th of January - a day number of zero, not an error
+    // and not 1899-12-31.
+    assert_eq!(ev("=DAY(0)", Profile::Compat), n(0.0));
+    assert_eq!(ev("=MONTH(0)", Profile::Compat), n(1.0));
+    assert_eq!(ev("=YEAR(0)", Profile::Compat), n(1900.0));
+    // 1904 has no such fiction: serial 0 is an ordinary 1 January 1904.
+    assert_eq!(ev_1904("=DAY(0)"), n(1.0));
+    assert_eq!(ev_1904("=MONTH(0)"), n(1.0));
+    assert_eq!(ev_1904("=YEAR(0)"), n(1904.0));
+}
+
+#[test]
+fn date_arguments_roll_over_instead_of_erroring() {
+    assert_eq!(ev("=DATE(2024,13,1)", Profile::Compat), n(45658.0));
+    assert_eq!(ev("=DATE(2024,25,1)", Profile::Compat), n(46023.0));
+    assert_eq!(ev("=DATE(2024,0,1)", Profile::Compat), n(45261.0));
+    assert_eq!(ev("=DATE(2024,-1,1)", Profile::Compat), n(45231.0));
+    assert_eq!(ev("=DATE(2024,1,32)", Profile::Compat), n(45323.0));
+    assert_eq!(ev("=DATE(2024,2,30)", Profile::Compat), n(45352.0));
+    assert_eq!(ev("=DATE(2024,1,0)", Profile::Compat), n(45291.0));
+    assert_eq!(ev("=DATE(2024,1,-5)", Profile::Compat), n(45286.0));
+    // 2023 is not a leap year, so 29 February rolls into March.
+    assert_eq!(ev("=DATE(2023,2,29)", Profile::Compat), n(44986.0));
+    // Fractional arguments truncate rather than round.
+    assert_eq!(ev("=DATE(2024,1,1.9)", Profile::Compat), n(45292.0));
+}
+
+#[test]
+fn a_year_below_1900_means_1900_plus_that_year() {
+    // The rule that surprises people: DATE(1899,12,31) is in the *38th*
+    // century, because 1899 is read as an offset rather than as a year.
+    assert_eq!(ev("=DATE(0,1,1)", Profile::Compat), n(1.0));
+    assert_eq!(ev("=DATE(100,1,1)", Profile::Compat), n(36526.0));
+    assert_eq!(ev("=DATE(1899,1,1)", Profile::Compat), n(693598.0));
+    assert_eq!(ev("=DATE(1899,12,31)", Profile::Compat), n(693962.0));
+    // It applies to the argument, before month rollover — so a month of 0 in
+    // year 1900 lands in December 1899 and is refused rather than rescued.
+    assert_eq!(
+        kind_of(&ev("=DATE(1900,0,1)", Profile::Compat)),
+        Some(ErrorKind::Num)
+    );
+}
+
+#[test]
+fn the_serial_range_is_closed_at_both_ends() {
+    assert_eq!(ev("=DATE(9999,12,31)", Profile::Compat), n(2_958_465.0));
+    assert_eq!(ev_1904("=DATE(9999,12,31)"), n(2_957_003.0));
+    for (src, why) in [
+        ("=DATE(10000,1,1)", "a year past 9999"),
+        ("=DATE(-1,1,1)", "a negative year"),
+        ("=DATE(1900,1,-1)", "a day before serial 0"),
+        ("=YEAR(2958466)", "a serial past 9999-12-31"),
+    ] {
+        assert_eq!(
+            kind_of(&ev(src, Profile::Compat)),
+            Some(ErrorKind::Num),
+            "{why} should be #NUM!: {src}"
+        );
+    }
+    // The lower bound is inclusive, and reachable by rollover.
+    assert_eq!(ev("=DATE(1900,1,0)", Profile::Compat), n(0.0));
+}
+
+#[test]
+fn weekday_return_types_follow_excels_numbering() {
+    // 45292 is Monday 1 January 2024, so every return type below is the same
+    // day read through a different convention.
+    for (kind, expected) in [
+        ("", 2.0),
+        (",1", 2.0),
+        (",2", 1.0),
+        (",3", 0.0),
+        (",11", 1.0),
+        (",12", 7.0),
+        (",13", 6.0),
+        (",14", 5.0),
+        (",15", 4.0),
+        (",16", 3.0),
+        (",17", 2.0),
+    ] {
+        let src = alloc::format!("=WEEKDAY(45292{kind})");
+        assert_eq!(ev(&src, Profile::Compat), n(expected), "{src}");
+    }
+    // The gap in the numbering is real: 0 and 4..=10 are not return types.
+    for kind in ["0", "4"] {
+        let src = alloc::format!("=WEEKDAY(45292,{kind})");
+        assert_eq!(
+            kind_of(&ev(&src, Profile::Compat)),
+            Some(ErrorKind::Num),
+            "{src}"
+        );
+    }
+    // Serial 0 has a weekday, and the two systems disagree about which,
+    // because their day zeros are different real days.
+    assert_eq!(ev("=WEEKDAY(0)", Profile::Compat), n(7.0));
+    assert_eq!(ev_1904("=WEEKDAY(0)"), n(6.0));
+}
+
+#[test]
+fn the_1904_system_is_1462_days_behind_and_carries_no_phantom() {
+    // The offset is 1462, not 1461: the 1900 system counts a day that never
+    // existed, so the two calendars differ by one more than the four years
+    // between their epochs.
+    assert_eq!(ev("=DATE(2024,1,1)", Profile::Compat), n(45292.0));
+    assert_eq!(ev_1904("=DATE(2024,1,1)"), n(43830.0));
+    assert_eq!(ev_1904("=YEAR(45292)"), n(2028.0));
+    // Nothing before 1904-01-01 exists in it — including the phantom day and
+    // every date the 1900 system's fictions were invented for.
+    for src in [
+        "=DATE(1900,1,1)",
+        "=DATE(1900,2,29)",
+        "=DATE(1900,3,1)",
+        "=DATE(0,1,1)",
+    ] {
+        assert_eq!(kind_of(&ev_1904(src)), Some(ErrorKind::Num), "{src}");
+    }
+    // The year offset rule is not a 1900-system quirk; it survives the switch.
+    assert_eq!(ev_1904("=DATE(1899,12,31)"), n(692_500.0));
+}
+
+#[test]
+fn an_iso_date_string_is_a_date_argument() {
+    // Excel coerces a date-shaped string to its serial, and the *calendar*
+    // date is what survives the switch of system, not the serial.
+    assert_eq!(ev("=YEAR(\"2024-03-15\")", Profile::Compat), n(2024.0));
+    assert_eq!(ev("=MONTH(\"2024-03-15\")", Profile::Compat), n(3.0));
+    assert_eq!(ev("=DAY(\"2024-03-15\")", Profile::Compat), n(15.0));
+    assert_eq!(ev_1904("=YEAR(\"2024-03-15\")"), n(2024.0));
+    assert_eq!(ev_1904("=DAY(\"2024-03-15\")"), n(15.0));
+    // Text that is not a date is still a coercion failure, not a silent zero.
+    assert_eq!(
+        kind_of(&ev("=YEAR(\"not a date\")", Profile::Compat)),
+        Some(ErrorKind::Value)
+    );
 }
 
 #[test]
