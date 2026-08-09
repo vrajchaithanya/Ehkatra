@@ -93,17 +93,23 @@ redirection in `tools\*.ps1`.
 
 ## NEXT ACTION
 
-**The container half of ADR-036 — make `snapshots.body` the image.** The kernel
-half is built and proven; this is what actually closes **TD-45** (7.86 s cold
-open), **TD-31** (307 MB container) and **TD-24's residual**. Concretely:
-`Snapshot::build` writes `State::write_image_with(&WinnerStamps::from_log(log))`
-instead of the compacted op set; `verify` decodes and re-hashes instead of
-replaying; `decode_body` and the salvage path follow. **D-101 records the two
-traps**, including that `Watermark` gaps do not survive the stored encoding
-without a `user_version` bump. Budget a session: it touches 18 container, 3
-crash and 15 recovery tests, and those tests are the guarantee TD-30 was closed
-to buy. Re-measure **W-OPEN-1M** and **W-TILE-10M** afterwards — 153.2 MB is a
-projection, and a projection is not a measurement.
+**Amend ADR-036 for DP-A5, then finish the container half.** The wiring is
+understood and was proven to compile; it is blocked on a decision, not on
+effort. An image is what the ops *produced*, and `Payload::Opaque` produces
+nothing — so compacting an opaque op away loses it, breaking DP-A5's "files
+written today open in 20 years" (**D-113**). Decide between: retain
+un-representable ops in a third body section; scope DP-A5 to un-compacted
+history (a real weakening, owner's call); or **never prune ops the image cannot
+represent** — the recommendation on record, because opaque ops are rare and
+keeping a frozen principle intact is worth more than the bytes.
+
+Then implement what the reverted attempt established: body =
+`[image][covered op ids]` (no schema change, no `user_version` bump);
+`VerifiedSnapshot` loses `ops()` and gains `covered()`/`stamps()`/a decoding
+`state()`; `Salvaged` gains `into_state()`; the container's `covered_ids` and
+`prune_floor` need only the id list. Re-measure **W-OPEN-1M** and
+**W-TILE-10M** afterwards — 153.2 MB is a projection, and a projection is not a
+measurement.
 
 **The rest of step 3 is gated and should stay closed** (D-112): TD-17 and TD-44
 have triggers that measurement shows are not live, and TD-37 is blocked on

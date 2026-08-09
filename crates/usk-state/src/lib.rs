@@ -251,10 +251,16 @@ impl State {
         }
         for op in tail {
             if let Some((row, col)) = cell_of(&op.payload) {
-                // Promote only where the image actually holds a winner: a cell
-                // the tail creates has nothing to lose to.
+                // Promote wherever the image holds a winner, whoever wrote it.
+                // Restricting this to a *different* actor is the tempting
+                // optimisation and it is wrong: the summary path trusts arrival
+                // order, so a same-actor op that is not the newest would
+                // overwrite a newer value. The stamped path compares
+                // `(lamport, id)` and gets both cases right, and the cost stays
+                // bounded by the tail rather than the workbook — a cell the
+                // tail never touches is never promoted.
                 if let Some(stamp) = stamps.get(row, col) {
-                    if stamp.1.actor != op.id.actor && !self.cells.is_contested(row.0, col.0) {
+                    if !self.cells.is_contested(row.0, col.0) {
                         self.cells.adopt_stamp(row.0, col.0, stamp);
                     }
                 }
