@@ -1056,6 +1056,28 @@ fn f_find<G: Grid>(ops: &[Operand], ctx: &Context<G>, case_sensitive: bool) -> O
     if start > hay.len() {
         return err(ErrorKind::Value);
     }
+    // SEARCH takes wildcards; FIND does not (TD-35). That split is exactly the
+    // case-sensitivity split, so the one flag decides both — which is not a
+    // coincidence: FIND is the literal, byte-faithful one in both respects.
+    if !case_sensitive && has_wildcard(&n) {
+        // The pattern anchors at some start position and may end anywhere, so
+        // it is a prefix match tried at each position, left to right.
+        for at in start..=hay.len() {
+            let tail: String = hay[at..].iter().collect();
+            if wildcard_prefix_match(&n, &tail) {
+                return num((at + 1) as f64);
+            }
+        }
+        return err(ErrorKind::Value);
+    }
+    // Even with no active wildcard the escapes are still escapes, so `~*`
+    // searches for a literal asterisk. FIND has no sub-language at all and
+    // keeps the tilde.
+    let n = if case_sensitive {
+        n
+    } else {
+        unescape_wildcards(&n)
+    };
     let tail: String = hay[start..].iter().collect();
     match tail.find(&n) {
         // Excel positions are 1-based and in characters, not bytes.
@@ -1065,6 +1087,16 @@ fn f_find<G: Grid>(ops: &[Operand], ctx: &Context<G>, case_sensitive: bool) -> O
         }
         None => err(ErrorKind::Value),
     }
+}
+
+/// `wildcard_match` where the text may continue past the pattern — SEARCH asks
+/// "does the pattern occur here", not "is the whole cell this pattern".
+fn wildcard_prefix_match(pattern: &str, text: &str) -> bool {
+    let t: Vec<char> = text.chars().collect();
+    (0..=t.len()).any(|end| {
+        let head: String = t[..end].iter().collect();
+        wildcard_match(pattern, &head)
+    })
 }
 
 fn f_rept<G: Grid>(ops: &[Operand], ctx: &Context<G>) -> Operand {
@@ -1112,6 +1144,149 @@ fn cell_at(cells: &[Value], cols: u32, r: u32, c: u32) -> Value {
         .unwrap_or(Value::Blank)
 }
 
+/// Excel's wildcard sub-language (TD-35): `*` any run, `?` any single
+/// character, `~` escaping the next wildcard so `a~*c` means a literal `a*c`.
+/// Case-insensitive, like every other text comparison in a lookup.
+///
+/// Iterative with a backtrack point rather than recursive: a `no_std` kernel
+/// evaluating a hostile formula must not be able to blow the stack, and
+/// `"*a*a*a*..."` against a long string is the classic way to do it (DP-E2).
+fn wildcard_match(pattern: &str, text: &str) -> bool {
+    let p: Vec<char> = pattern.chars().flat_map(|c| c.to_lowercase()).collect();
+    let t: Vec<char> = text.chars().flat_map(|c| c.to_lowercase()).collect();
+    let (mut pi, mut ti) = (0usize, 0usize);
+    // Where to resume if the current `*` turns out to have matched too little.
+    let (mut star, mut resume) = (None, 0usize);
+    while ti < t.len() {
+        let lit = match p.get(pi) {
+            Some('*') => {
+                star = Some(pi);
+                pi += 1;
+                resume = ti;
+                continue;
+            }
+            Some('?') => {
+                pi += 1;
+                ti += 1;
+                continue;
+            }
+            // `~` escapes only a wildcard; before anything else it is literal.
+            Some('~') if matches!(p.get(pi + 1), Some('*' | '?' | '~')) => p[pi + 1],
+            Some(c) => *c,
+            None => {
+                // Pattern exhausted with text left over: only a `*` saves it.
+                match star {
+                    Some(s) => {
+                        pi = s + 1;
+                        resume += 1;
+                        ti = resume;
+                        continue;
+                    }
+                    None => return false,
+                }
+            }
+        };
+        let width = if p.get(pi) == Some(&'~') { 2 } else { 1 };
+        if t[ti] == lit {
+            pi += width;
+            ti += 1;
+        } else if let Some(s) = star {
+            pi = s + 1;
+            resume += 1;
+            ti = resume;
+        } else {
+            return false;
+        }
+    }
+    // Trailing `*`s may match nothing.
+    while p.get(pi) == Some(&'*') {
+        pi += 1;
+    }
+    pi >= p.len()
+}
+
+/// Whether a lookup pattern contains an *active* wildcard. `a~*c` does not:
+/// its `*` is escaped, so the whole string is a literal and must compare by
+/// equality — which is what makes `VLOOKUP("a~*c", …)` find the cell holding
+/// the three characters `a*c`.
+fn has_wildcard(pattern: &str) -> bool {
+    let mut chars = pattern.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '*' | '?' => return true,
+            '~' => {
+                chars.next();
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
+/// Drops the `~` from each escaped wildcard, turning a pattern with no *active*
+/// wildcard back into the literal text it denotes: `a~*c` is the three
+/// characters `a*c`. Without this the literal path searches for the tilde
+/// itself and finds nothing, which is a silent `#N/A` rather than a visible
+/// bug.
+fn unescape_wildcards(pattern: &str) -> String {
+    let mut out = String::new();
+    let mut chars = pattern.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '~' && matches!(chars.peek(), Some('*' | '?' | '~')) {
+            out.push(chars.next().unwrap_or(c));
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// Equality *or* wildcard match — Excel's exact-match lookups accept patterns.
+/// A non-text needle can never be a pattern, and a non-text candidate can
+/// never be matched by one.
+fn matches_needle(candidate: &Value, needle: &Value) -> bool {
+    if let (Value::Text(pattern), Value::Text(text)) = (needle, candidate) {
+        if has_wildcard(pattern) {
+            return wildcard_match(pattern, text);
+        }
+        return unescape_wildcards(pattern).eq_ignore_ascii_case(text);
+    }
+    // A blank needle is not a value that matches other blanks: Excel reads the
+    // empty cell as 0, so `MATCH(A1, …, 0)` over a column containing blanks is
+    // #N/A rather than the position of the first hole.
+    if *needle == Value::Blank {
+        return matches!(candidate, Value::Number(n) if *n == 0.0);
+    }
+    values_equal(candidate, needle)
+}
+
+/// Excel's cross-type ordering for a sorted lookup key: numbers before text
+/// before logicals, each ordered naturally, text case-insensitively. `None`
+/// means the candidate takes no part in the ordering — a blank cell in a key
+/// column is a hole, not a value that sorts somewhere.
+fn lookup_order(a: &Value, b: &Value) -> Option<core::cmp::Ordering> {
+    fn rank(v: &Value) -> Option<u8> {
+        match v {
+            Value::Number(_) | Value::Decimal(_) => Some(0),
+            Value::Text(_) => Some(1),
+            Value::Bool(_) => Some(2),
+            Value::Blank | Value::Error(_) => None,
+        }
+    }
+    let (ra, rb) = (rank(a)?, rank(b)?);
+    if ra != rb {
+        return Some(ra.cmp(&rb));
+    }
+    match (a, b) {
+        (Value::Text(x), Value::Text(y)) => {
+            let (x, y) = (x.to_lowercase(), y.to_lowercase());
+            Some(x.cmp(&y))
+        }
+        (Value::Bool(x), Value::Bool(y)) => Some(x.cmp(y)),
+        _ => numeric(a)?.partial_cmp(&numeric(b)?),
+    }
+}
+
 fn values_equal(a: &Value, b: &Value) -> bool {
     match (a, b) {
         (Value::Text(x), Value::Text(y)) => x.eq_ignore_ascii_case(y),
@@ -1146,42 +1321,92 @@ fn f_lookup_table<G: Grid>(ops: &[Operand], ctx: &Context<G>, vertical: bool) ->
         Ok(_) => return err(ErrorKind::Value),
         Err(e) => return val(Value::Error(e)),
     };
-    // v0.1 implements exact match only. Excel's default is the *approximate*
-    // match, which requires a sorted key and a binary search; supporting it
-    // without the sortedness contract would return confidently wrong answers,
-    // so an explicit TRUE 4th argument is rejected rather than faked.
-    if let Some(o) = ops.get(3) {
-        match truthy(ctx, &o.scalar()) {
-            Ok(true) => return err(ErrorKind::Na),
-            Ok(false) => {}
+    // Excel's *default* is the approximate match, so omitting the 4th argument
+    // means TRUE (TD-14). v0.1 refused it rather than fake it; it is faked no
+    // longer — see `approximate_index`.
+    let approximate = match ops.get(3) {
+        Some(o) => match truthy(ctx, &o.scalar()) {
+            Ok(b) => b,
             Err(e) => return val(Value::Error(e)),
-        }
-    }
+        },
+        None => true,
+    };
 
     let (scan, other) = if vertical { (rows, cols) } else { (cols, rows) };
     if index >= other {
         return err(ErrorKind::Ref);
     }
-    for i in 0..scan {
-        let key = if vertical {
+    let key_at = |i: u32| {
+        if vertical {
             cell_at(&cells, cols, i, 0)
         } else {
             cell_at(&cells, cols, 0, i)
-        };
-        if values_equal(&key, &needle) {
-            let found = if vertical {
-                cell_at(&cells, cols, i, index)
-            } else {
-                cell_at(&cells, cols, index, i)
-            };
-            return val(found);
         }
+    };
+    let hit = if approximate {
+        approximate_index(scan, &key_at, &needle)
+    } else {
+        (0..scan).find(|i| matches_needle(&key_at(*i), &needle))
+    };
+    match hit {
+        Some(i) => val(if vertical {
+            cell_at(&cells, cols, i, index)
+        } else {
+            cell_at(&cells, cols, index, i)
+        }),
+        None => err(ErrorKind::Na),
     }
-    err(ErrorKind::Na)
 }
 
+/// Excel's approximate match: the **binary search** it really performs, not a
+/// linear scan for the largest key below the needle (TD-14).
+///
+/// The distinction is load-bearing on *unsorted* data, which Excel does not
+/// detect and does not refuse. Measured: over the key column `30, 10, 50, 10,
+/// (blank)`, `VLOOKUP(35, …, TRUE)` returns the row holding **10**, because the
+/// search probes the middle, finds 50 above the needle, halves downward and
+/// lands on the second row. A linear "largest key ≤ 35" would answer 30 — a
+/// defensible number that real Excel does not produce.
+///
+/// This is why the old refusal was the right call at the time and why the fix
+/// had to wait for the oracle: the correct behaviour here is not derivable from
+/// the documented contract, only from the implementation.
+fn approximate_index<F: Fn(u32) -> Value>(len: u32, key_at: &F, needle: &Value) -> Option<u32> {
+    if len == 0 {
+        return None;
+    }
+    let below = |i: u32| {
+        lookup_order(&key_at(i), needle)
+            .map(|o| o != core::cmp::Ordering::Greater)
+            // A blank or error in the key column takes no part in the order;
+            // treating it as "not below" keeps the search descending past it
+            // instead of anchoring on a hole.
+            .unwrap_or(false)
+    };
+    let (mut lo, mut hi) = (0u32, len - 1);
+    while lo < hi {
+        let mid = lo + (hi - lo).div_ceil(2);
+        if below(mid) {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    below(lo).then_some(lo)
+}
+
+/// `XLOOKUP(needle, keys, values, [if_missing], [match_mode], [search_mode])`.
+///
+/// Match modes: `0` exact (the default, and the reason XLOOKUP exists), `-1`
+/// exact or next smaller, `1` exact or next larger, `2` wildcard. Search modes:
+/// `1` first-to-last (default) and `-1` last-to-first; `2`/`-2` ask for a binary
+/// search, which over sorted data finds the same cell, so they are accepted and
+/// answered linearly rather than refused.
+///
+/// Unlike `VLOOKUP`'s approximate mode, `-1` and `1` do **not** binary-search:
+/// they take the best candidate anywhere in the vector, which is what makes
+/// XLOOKUP safe on unsorted data and VLOOKUP not.
 fn f_xlookup<G: Grid>(ops: &[Operand], ctx: &Context<G>) -> Operand {
-    let _ = ctx;
     let needle = match scalar(ops, 0) {
         Some(v) => v,
         None => return err(ErrorKind::Value),
@@ -1191,16 +1416,89 @@ fn f_xlookup<G: Grid>(ops: &[Operand], ctx: &Context<G>) -> Operand {
     };
     let keys = lookup.cells();
     let values = result.cells();
-    for (i, k) in keys.iter().enumerate() {
-        if values_equal(k, &needle) {
-            return val(values.get(i).cloned().unwrap_or(Value::Blank));
+    // The two vectors must line up. Excel refuses a mismatch rather than
+    // padding it with blanks, and so must we: silently returning the fallback
+    // would hide a broken formula.
+    if keys.len() != values.len() {
+        return err(ErrorKind::Value);
+    }
+    let match_mode = match ops.get(4) {
+        Some(_) => match num_arg(ops, 4, ctx) {
+            Ok(m) => floor(m) as i64,
+            Err(e) => return val(Value::Error(e)),
+        },
+        None => 0,
+    };
+    let reverse = match ops.get(5) {
+        Some(_) => match num_arg(ops, 5, ctx) {
+            Ok(m) => floor(m) < 0.0,
+            Err(e) => return val(Value::Error(e)),
+        },
+        None => false,
+    };
+
+    let order: Vec<usize> = if reverse {
+        (0..keys.len()).rev().collect()
+    } else {
+        (0..keys.len()).collect()
+    };
+    let hit = match match_mode {
+        0 => order
+            .iter()
+            .copied()
+            .find(|i| values_equal(&keys[*i], &needle)),
+        2 => order
+            .iter()
+            .copied()
+            .find(|i| matches_needle(&keys[*i], &needle)),
+        // Exact first, then the nearest candidate on the requested side.
+        m => order
+            .iter()
+            .copied()
+            .find(|i| values_equal(&keys[*i], &needle))
+            .or_else(|| nearest(&keys, &order, &needle, m < 0)),
+    };
+    match hit {
+        Some(i) => val(values[i].clone()),
+        // XLOOKUP's 4th argument is the not-found fallback.
+        None => match ops.get(3) {
+            Some(o) => val(o.scalar()),
+            None => err(ErrorKind::Na),
+        },
+    }
+}
+
+/// The closest key strictly below (`smaller`) or above the needle. Ties keep
+/// the first candidate in `order`, so the search mode decides them.
+fn nearest(keys: &[Value], order: &[usize], needle: &Value, smaller: bool) -> Option<usize> {
+    let mut best: Option<(usize, &Value)> = None;
+    for &i in order {
+        let Some(side) = lookup_order(&keys[i], needle) else {
+            continue;
+        };
+        let wanted = if smaller {
+            side == core::cmp::Ordering::Less
+        } else {
+            side == core::cmp::Ordering::Greater
+        };
+        if !wanted {
+            continue;
+        }
+        let better = match best {
+            None => true,
+            Some((_, b)) => match lookup_order(&keys[i], b) {
+                // Closer to the needle means larger among the smaller ones,
+                // and smaller among the larger ones.
+                Some(core::cmp::Ordering::Greater) => smaller,
+                Some(core::cmp::Ordering::Less) => !smaller,
+                _ => false,
+            },
+        };
+        if better {
+            best = Some((i, &keys[i]));
         }
     }
-    // XLOOKUP's 4th argument is the not-found fallback — the reason it exists.
-    match ops.get(3) {
-        Some(o) => val(o.scalar()),
-        None => err(ErrorKind::Na),
-    }
+    best.map(|(i, _)| i)
 }
 
 fn f_index<G: Grid>(ops: &[Operand], ctx: &Context<G>) -> Operand {
@@ -1219,18 +1517,54 @@ fn f_index<G: Grid>(ops: &[Operand], ctx: &Context<G>) -> Operand {
         },
         None => 0,
     };
+    // A negative index is a different failure from an out-of-range one: Excel
+    // says #VALUE! for "that is not an index" and #REF! for "that index is off
+    // the end". Collapsing them loses which mistake was made.
+    if r < 0 || c < 0 {
+        return err(ErrorKind::Value);
+    }
     // A single-row or single-column range indexes with one coordinate.
     let (ri, ci) = if rows == 1 && c == 0 {
-        (0i64, r)
+        (1i64, r)
     } else if cols == 1 && c == 0 {
         (r, 1i64)
     } else {
         (r, c)
     };
-    if ri < 1 || ci < 1 || ri as u32 > rows || ci as u32 > cols {
+    if ri as u32 > rows || ci as u32 > cols {
         return err(ErrorKind::Ref);
     }
-    val(cell_at(&cells, cols, ri as u32 - 1, ci as u32 - 1))
+    // Index 0 means "the whole row" or "the whole column" — an array, which is
+    // why `SUM(INDEX(A1:B5,0,1))` totals a column. In a scalar context it still
+    // collapses to the top-left (TD-16: implicit intersection needs the calling
+    // cell's position, which arrives with the dependency graph).
+    match (ri, ci) {
+        (0, 0) => val(Value::Error(CellError::new(
+            ErrorKind::Value,
+            Origin::Authored,
+        ))),
+        (0, c) => {
+            let column: Vec<Value> = (0..rows)
+                .map(|r| cell_at(&cells, cols, r, c as u32 - 1))
+                .collect();
+            Operand::Range {
+                rows,
+                cols: 1,
+                cells: column,
+            }
+        }
+        (r, 0) => {
+            let row: Vec<Value> = (0..cols)
+                .map(|c| cell_at(&cells, cols, r as u32 - 1, c))
+                .collect();
+            Operand::Range {
+                rows: 1,
+                cols,
+                cells: row,
+            }
+        }
+        (r, c) => val(cell_at(&cells, cols, r as u32 - 1, c as u32 - 1)),
+    }
 }
 
 fn f_match<G: Grid>(ops: &[Operand], ctx: &Context<G>) -> Operand {
@@ -1241,20 +1575,58 @@ fn f_match<G: Grid>(ops: &[Operand], ctx: &Context<G>) -> Operand {
     let Some(range) = ops.get(1) else {
         return err(ErrorKind::Ref);
     };
-    // Match type 0 (exact) only, for the same reason VLOOKUP is exact-only.
-    if let Some(_o) = ops.get(2) {
-        match num_arg(ops, 2, ctx) {
-            Ok(t) if t != 0.0 => return err(ErrorKind::Na),
-            Ok(_) => {}
+    // MATCH wants a vector. A range that is neither a single row nor a single
+    // column is #N/A — measured, and worth stating because scanning it in
+    // row-major order returns a confident, wrong ordinal instead.
+    let (rows, cols, _) = range_dims(range);
+    if rows > 1 && cols > 1 {
+        return err(ErrorKind::Na);
+    }
+    // Type 1 (the default) wants the largest value <= needle in an ascending
+    // vector; 0 is exact; -1 wants the smallest value >= needle in a
+    // descending one.
+    let kind = match ops.get(2) {
+        Some(_) => match num_arg(ops, 2, ctx) {
+            Ok(t) => floor(t) as i64,
             Err(e) => return val(Value::Error(e)),
+        },
+        None => 1,
+    };
+    let cells = range.cells();
+    let len = cells.len() as u32;
+    let key_at = |i: u32| cells.get(i as usize).cloned().unwrap_or(Value::Blank);
+    let hit = match kind {
+        0 => (0..len).find(|i| matches_needle(&key_at(*i), &needle)),
+        1 => approximate_index(len, &key_at, &needle),
+        _ => descending_index(len, &key_at, &needle),
+    };
+    match hit {
+        Some(i) => num((i + 1) as f64),
+        None => err(ErrorKind::Na),
+    }
+}
+
+/// `MATCH(..., -1)`: the mirror of `approximate_index` over a descending
+/// vector — the last position whose key is still at or above the needle.
+fn descending_index<F: Fn(u32) -> Value>(len: u32, key_at: &F, needle: &Value) -> Option<u32> {
+    if len == 0 {
+        return None;
+    }
+    let above = |i: u32| {
+        lookup_order(&key_at(i), needle)
+            .map(|o| o != core::cmp::Ordering::Less)
+            .unwrap_or(false)
+    };
+    let (mut lo, mut hi) = (0u32, len - 1);
+    while lo < hi {
+        let mid = lo + (hi - lo).div_ceil(2);
+        if above(mid) {
+            lo = mid;
+        } else {
+            hi = mid - 1;
         }
     }
-    for (i, c) in range.cells().iter().enumerate() {
-        if values_equal(c, &needle) {
-            return num((i + 1) as f64);
-        }
-    }
-    err(ErrorKind::Na)
+    above(lo).then_some(lo)
 }
 
 // -------------------------------------------------- conditional aggregation

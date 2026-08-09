@@ -545,6 +545,7 @@ data point, not a re-run.
 | **After the date model (TD-33, session 20)** | 1,366 | **1,140** | **83.5%** |
 | — 1900 date system | 1,236 | 1,026 | 83.0% |
 | — 1904 date system | 130 | 114 | **87.7%** |
+| **After lookup + wildcards (TD-14, TD-35, session 20)** | 1,366 | **1,171** | **85.7%** |
 
 352 fail at 74.2%, of which **12 are numerically near** (relative difference
 ≤ 1e-12) and are counted as fails anyway. 0 unjudged — a case the runner cannot
@@ -570,6 +571,31 @@ down by `TEXT()` (TD-36), `DATEVALUE` and `EOMONTH`, each of which returns
 `#NAME?` because it is unimplemented. Those cases belong to TD-36 and to the
 function catalogue; counting them against TD-33 would make this row look worse
 than the work was, and counting them *for* it would be worse still.
+
+### TD-14 + TD-35: +31 cases, and every lookup function reaches 100% · session 20
+
+`VLOOKUP` 24/24 · `HLOOKUP` 12/12 · `XLOOKUP` 15/15 · `MATCH` 16/16 · `FIND`
+14/14 · `SEARCH` 13/13 — from 66.7 / 75.0 / 60.0 / 56.2 / 100 / 69.2%.
+
+| | Cases | Pass | Rate |
+|---|---:|---:|---:|
+| before | 1,366 | 1,140 | 83.5% |
+| after | 1,366 | **1,171** | **85.7%** |
+
+**The measurement that decided the algorithm.** Over the *unsorted* key column
+`30, 10, 50, 10, (blank)`, `VLOOKUP(35, …, TRUE)` returns the row holding **10**
+— Excel's binary search probes the middle, finds 50 above the needle, halves
+downward and lands there. A linear "largest key ≤ 35" scan answers 30. Both are
+defensible; only one is Excel. This is the clearest case in the corpus for
+ADR-024's premise that the binary is the spec, and the reason TD-14's refusal
+was correct until vectors existed.
+
+**Three `INDEX` cases still diverge and are *not* counted here.** All three are
+TD-16 (implicit intersection needs the calling cell's position, which arrives
+with the dependency graph). `INDEX(range,0,n)` now returns the whole column
+correctly — `SUM(INDEX(A1:B5,0,1))` is 150 — but collapsing that array in a
+scalar context still takes the top-left where Excel intersects against the
+caller.
 
 **Locale is deliberately excluded.** `YEAR("2024-03-15")` is implemented;
 `YEAR("15/03/2024")` is not, although the fixture for it exists. The second

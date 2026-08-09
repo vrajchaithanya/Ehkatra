@@ -185,6 +185,24 @@ docs/16 promises salvage from "the **last valid** snapshot", which presupposes m
 That is not a bug in the salvage path, which behaved exactly as specified — it is a retention policy that was never stated. Recorded as **TD-30** with the two candidate fixes (keep N ≥ 2 snapshots, or retain compacted ops until a second snapshot verifies) rather than picked here: the choice trades file size against recoverability, and docs/16's cadence section is where it belongs.
 Worth noting the smaller-scale test disagrees and is right to: `a_corrupted_snapshot_opens_through_salvage_and_reports_it` keeps every op in `ops`, so it recovers the full workbook. The two together are the actual lesson — **recoverability is a property of the retention policy, not of the salvage code.**
 
+### Session 20 (2026-08-09) — TD-14 and TD-35 paid: the lookup algorithm is the one Excel runs, not the one it documents
+
+**D-106 — Approximate match is implemented as Excel's binary search, and the wildcard sub-language is one matcher shared by every function that has it.**
+
+W-ORACLE **83.5% → 85.7%** (+31 cases). `VLOOKUP`, `HLOOKUP`, `XLOOKUP`, `MATCH`, `FIND` and `SEARCH` all reach **100%**.
+
+**Why the old refusal (D-044) was right, and what changed.** TD-14 refused approximate match because Excel's contract requires a sorted key and v0.1 could not verify sortedness — a binary search over unsorted data returns a confidently wrong number. That reasoning still holds; what changed is that the oracle now says *which* wrong number, and reproducing Excel means reproducing it. Over the unsorted key column `30, 10, 50, 10, (blank)`, `VLOOKUP(35, …, TRUE)` returns the row holding **10**: the search probes the middle, finds 50 above the needle, halves downward and lands there. A linear "largest key ≤ 35" scan answers 30 — defensible, documented, and not what Excel does. **This is the clearest case yet for ADR-024's premise that the binary is the spec**: the correct behaviour is not derivable from the contract, only from the implementation, so the debt could only be paid after the capture existed. The refusal was the right call for eleven sessions and the wrong one the moment vectors landed.
+
+**`XLOOKUP` deliberately does not binary-search.** Its `-1`/`1` modes take the nearest candidate anywhere in the vector, which is why XLOOKUP is safe on unsorted data and VLOOKUP is not. Two different algorithms behind two similar-sounding arguments — measured, not assumed, and worth stating because unifying them would have been the natural refactor and would have been wrong.
+
+**One matcher, three call sites.** `*`, `?` and `~`-escape are implemented once and shared by `SEARCH`, the exact-match lookups and (next) the criteria sub-language. Two things the corpus forced:
+* The matcher is **iterative with a backtrack point, not recursive** — a `no_std` kernel evaluating a hostile formula must not be able to blow its stack on `"*a*a*a*…"` (DP-E2).
+* The escape has to work on **both** paths. `a~*c` has no *active* wildcard, so it takes the literal path — and the literal still needs its tilde stripped before comparison, or the engine searches for a tilde and returns a silent `#N/A`. Both `VLOOKUP("a~*c", …)` and `SEARCH("~*", "a*b")` failed on exactly that.
+
+**Two smaller measured rules taken with them.** `MATCH` refuses a range that is neither a row nor a column (`#N/A`) rather than scanning it row-major and returning a confident wrong ordinal; and a **blank lookup value matches nothing**, because Excel reads the empty cell as 0 — so `MATCH(A1, …, 0)` over a column containing blanks is `#N/A`, not the position of the first hole.
+
+**Left open on purpose.** Three `INDEX` cases still diverge, and all three are **TD-16** (implicit intersection needs the calling cell's row and column, which arrives with the dependency graph). `INDEX(range, 0, n)` now correctly returns the whole column — `SUM(INDEX(A1:B5,0,1))` is 150 — but collapsing that array in a *scalar* context still takes the top-left where Excel intersects against the caller. Attributing those to TD-14 would have overstated this row.
+
 ### Session 20 (2026-08-09) — TD-33 paid: the date system is a workbook property, not a profile
 
 **D-105 — Excel's two date systems are modelled as an explicit `DateSystem` on the evaluation context, and every rule in them is oracle-measured.**

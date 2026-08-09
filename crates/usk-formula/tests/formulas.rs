@@ -433,10 +433,21 @@ fn lookup_functions_find_and_report_misses() {
         evg("=VLOOKUP(\"banana\",A1:C3,3)", &g, Profile::Compat),
         t("yellow")
     );
-    // A miss is #N/A, and lookups are case-insensitive like Excel's.
+    // A miss is #N/A **under exact match**, and lookups are case-insensitive
+    // like Excel's. The 4th argument has to be spelled out: Excel's default is
+    // the *approximate* match (TD-14), under which "durian" is past the end of
+    // the key column and returns the last row rather than failing.
     assert_eq!(
-        kind_of(&evg("=VLOOKUP(\"durian\",A1:C3,2)", &g, Profile::Compat)),
+        kind_of(&evg(
+            "=VLOOKUP(\"durian\",A1:C3,2,FALSE)",
+            &g,
+            Profile::Compat
+        )),
         Some(ErrorKind::Na)
+    );
+    assert_eq!(
+        evg("=VLOOKUP(\"durian\",A1:C3,2,TRUE)", &g, Profile::Compat),
+        n(30.0)
     );
     assert_eq!(
         evg("=VLOOKUP(\"BANANA\",A1:C3,2)", &g, Profile::Compat),
@@ -464,22 +475,207 @@ fn lookup_functions_find_and_report_misses() {
     );
 }
 
-/// Approximate-match lookup is **refused**, not approximated. Excel's default
-/// requires a sorted key; guessing without that contract returns confidently
-/// wrong answers, which is worse than an error.
+// The lookup tests below are TD-14 and TD-35. Every expected value is what real
+// Excel 16.0 returned over COM (ADR-024), from
+// `tools/oracle-capture/vectors/{VLOOKUP,MATCH,XLOOKUP,SEARCH}.json`.
+
+/// The key column the oracle used, deliberately *not* sorted, because the
+/// unsorted case is the one that distinguishes Excel's algorithm from a
+/// plausible one. Keys `30, 10, 50, 10, blank`; values name their row.
+fn unsorted_key_grid() -> Fixture {
+    Fixture::new(
+        5,
+        2,
+        alloc_cells(&[
+            n(30.0),
+            t("c-thirty"),
+            n(10.0),
+            t("c-ten-first"),
+            n(50.0),
+            t("c-fifty"),
+            n(10.0),
+            t("c-ten-second"),
+            Value::Blank,
+            t("c-blank"),
+        ]),
+    )
+}
+
+/// A sorted ascending key column, `10..50` by tens, with names in column B.
+fn sorted_key_grid() -> Fixture {
+    Fixture::new(
+        5,
+        2,
+        alloc_cells(&[
+            n(10.0),
+            t("ten"),
+            n(20.0),
+            t("twenty"),
+            n(30.0),
+            t("thirty"),
+            n(40.0),
+            t("forty"),
+            n(50.0),
+            t("fifty"),
+        ]),
+    )
+}
+
+/// TD-14. Excel's approximate match is a **binary search**, and the difference
+/// from "scan for the largest key below the needle" is visible — which is why
+/// this could only be implemented once the oracle existed.
 #[test]
-fn approximate_lookup_is_refused_rather_than_faked() {
-    let g = lookup_grid();
+fn approximate_lookup_is_the_binary_search_excel_actually_runs() {
+    let sorted = sorted_key_grid();
+    // TRUE is the default, so these two must agree.
     assert_eq!(
-        kind_of(&evg(
-            "=VLOOKUP(\"banana\",A1:C3,2,TRUE)",
-            &g,
+        evg("=VLOOKUP(35,A1:B5,2,TRUE)", &sorted, Profile::Compat),
+        t("thirty")
+    );
+    assert_eq!(
+        evg("=VLOOKUP(35,A1:B5,2)", &sorted, Profile::Compat),
+        t("thirty")
+    );
+    // Past the end takes the last key; below the first is #N/A, not the first.
+    assert_eq!(
+        evg("=VLOOKUP(99,A1:B5,2,TRUE)", &sorted, Profile::Compat),
+        t("fifty")
+    );
+    assert_eq!(
+        kind_of(&evg("=VLOOKUP(5,A1:B5,2,TRUE)", &sorted, Profile::Compat)),
+        Some(ErrorKind::Na)
+    );
+
+    // THE case that pins the algorithm. Over the unsorted keys 30,10,50,10,
+    // Excel answers the row holding **10**, because the search probes the
+    // middle, finds 50 above the needle and halves downward. A linear "largest
+    // key <= 35" would answer 30 — defensible, and not what Excel does.
+    let unsorted = unsorted_key_grid();
+    assert_eq!(
+        evg("=VLOOKUP(35,A1:B5,2,TRUE)", &unsorted, Profile::Compat),
+        t("c-ten-first")
+    );
+}
+
+/// `MATCH`'s three match types, and its refusal of a two-dimensional range.
+#[test]
+fn match_types_and_the_shape_match_wants() {
+    let g = sorted_key_grid();
+    assert_eq!(evg("=MATCH(35,A1:A5,1)", &g, Profile::Compat), n(3.0));
+    // Type 1 is the default.
+    assert_eq!(evg("=MATCH(35,A1:A5)", &g, Profile::Compat), n(3.0));
+    assert_eq!(evg("=MATCH(99,A1:A5,1)", &g, Profile::Compat), n(5.0));
+    assert_eq!(evg("=MATCH(30,A1:A5,0)", &g, Profile::Compat), n(3.0));
+    // A range that is neither a row nor a column is #N/A — scanning it in
+    // row-major order would return a confident, wrong ordinal instead.
+    assert_eq!(
+        kind_of(&evg("=MATCH(30,A1:B5,0)", &g, Profile::Compat)),
+        Some(ErrorKind::Na)
+    );
+}
+
+/// `XLOOKUP`'s match and search modes. Unlike `VLOOKUP`, the nearest-neighbour
+/// modes take the best candidate anywhere in the vector, which is what makes
+/// XLOOKUP safe on unsorted data.
+#[test]
+fn xlookup_match_and_search_modes() {
+    let g = sorted_key_grid();
+    assert_eq!(
+        evg("=XLOOKUP(35,A1:A5,B1:B5,\"none\",-1)", &g, Profile::Compat),
+        t("thirty")
+    );
+    assert_eq!(
+        evg("=XLOOKUP(35,A1:A5,B1:B5,\"none\",1)", &g, Profile::Compat),
+        t("forty")
+    );
+    assert_eq!(
+        evg("=XLOOKUP(99,A1:A5,B1:B5,\"none\",-1)", &g, Profile::Compat),
+        t("fifty")
+    );
+    // Search mode -1 walks from the end, so a duplicated key resolves to the
+    // *last* one rather than the first.
+    let dup = unsorted_key_grid();
+    assert_eq!(
+        evg(
+            "=XLOOKUP(10,A1:A5,B1:B5,\"none\",0,-1)",
+            &dup,
             Profile::Compat
-        )),
+        ),
+        t("c-ten-second")
+    );
+    assert_eq!(
+        evg("=XLOOKUP(10,A1:A5,B1:B5,\"none\",0)", &dup, Profile::Compat),
+        t("c-ten-first")
+    );
+    // Mismatched vector lengths are refused, not padded with blanks.
+    assert_eq!(
+        kind_of(&evg("=XLOOKUP(30,A1:A5,B1:B4)", &g, Profile::Compat)),
+        Some(ErrorKind::Value)
+    );
+}
+
+/// TD-35: `*`, `?`, and `~` as the escape. The escape matters twice — it turns
+/// a pattern into a literal, and that literal still has to have its tildes
+/// removed before it is compared.
+#[test]
+fn wildcards_match_and_the_tilde_escapes_them() {
+    let g = Fixture::new(
+        5,
+        2,
+        alloc_cells(&[
+            t("apple"),
+            n(1.0),
+            t("Banana"),
+            n(2.0),
+            t("cherry"),
+            n(3.0),
+            t("7"),
+            n(4.0),
+            t("a*c"),
+            n(5.0),
+        ]),
+    );
+    assert_eq!(
+        evg("=VLOOKUP(\"a*\",A1:B5,2,FALSE)", &g, Profile::Compat),
+        n(1.0)
+    );
+    assert_eq!(
+        evg("=VLOOKUP(\"a?ple\",A1:B5,2,FALSE)", &g, Profile::Compat),
+        n(1.0)
+    );
+    // `a~*c` is the literal three characters `a*c`, so it finds the cell that
+    // holds them — not `apple`, which a live `*` would have matched.
+    assert_eq!(
+        evg("=VLOOKUP(\"a~*c\",A1:B5,2,FALSE)", &g, Profile::Compat),
+        n(5.0)
+    );
+    assert_eq!(evg("=MATCH(\"a*\",A1:A5,0)", &g, Profile::Compat), n(1.0));
+    // Text and numbers never match each other, whichever side the text is on.
+    assert_eq!(
+        kind_of(&evg("=VLOOKUP(7,A1:B5,2,FALSE)", &g, Profile::Compat)),
         Some(ErrorKind::Na)
     );
     assert_eq!(
-        kind_of(&evg("=MATCH(\"banana\",A1:A3,1)", &g, Profile::Compat)),
+        evg("=VLOOKUP(\"7\",A1:B5,2,FALSE)", &g, Profile::Compat),
+        n(4.0)
+    );
+
+    // SEARCH takes wildcards; FIND does not, and keeps the tilde literal.
+    assert_eq!(ev("=SEARCH(\"a*c\",\"xxabcyy\")", Profile::Compat), n(3.0));
+    assert_eq!(ev("=SEARCH(\"~*\",\"a*b\")", Profile::Compat), n(2.0));
+    assert_eq!(
+        kind_of(&ev("=FIND(\"a*c\",\"xxabcyy\")", Profile::Compat)),
+        Some(ErrorKind::Value)
+    );
+}
+
+/// A blank needle is not a value that matches other blanks: Excel reads the
+/// empty cell as 0, so a column full of holes still answers #N/A.
+#[test]
+fn a_blank_lookup_value_matches_nothing() {
+    let g = unsorted_key_grid();
+    assert_eq!(
+        kind_of(&evg("=MATCH(A5,A1:A5,0)", &g, Profile::Compat)),
         Some(ErrorKind::Na)
     );
 }
