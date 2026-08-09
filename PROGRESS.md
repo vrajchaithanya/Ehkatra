@@ -12,8 +12,33 @@ registers (docs/43 decisions, docs/44 debt, MEASUREMENTS.md numbers) are for.
 
 **Where the tree is:** v0.1 is complete and tagged `v0.1.0`. Q1 is done. The
 work in flight is the compatibility-debt push toward **W-ORACLE ≥ 90%**
-(now **88.2%**, 1,205 / 1,366 cases — up from 74.2% this session), followed by
-the structural debt around the tile image, then Q2's shell.
+(now **88.2%**, 1,205 / 1,366 cases — up from 74.2% at the start of session 20),
+followed by the structural debt around the tile image, then Q2's shell.
+
+**Session 20 in one paragraph.** Paid **six** debt items — TD-47, TD-33, TD-14,
+TD-35, TD-34, TD-32 — moving W-ORACLE **74.2% → 88.2%**, +191 cases. Every unit
+is committed and pushed with CI green. Eleven functions reached 100% — `DATE`,
+`DAY`, `MONTH`, `YEAR`, `WEEKDAY`, `VLOOKUP`, `HLOOKUP`, `XLOOKUP`, `MATCH`,
+`FIND`, `SEARCH` — plus the whole `__compat_literal_parser` corpus. Tests
+323 → 341. The replay hashes never moved, which is the evidence that none of it
+touched the op algebra.
+
+**The through-line, worth reading before the next cluster.** Four of the six
+were paid by finding that the *documented* rule and the *implemented* rule
+differ, and only the oracle could say which one is Excel: approximate lookup is
+a binary search whose answer on unsorted data no reasonable linear scan
+reproduces (D-106); criteria coerce across the text boundary where lookups do
+not (D-107); the 15-digit truncation happens on the source text before
+conversion, and truncates rather than rounds (D-108). ADR-024's premise — the
+binary is the spec — earned its keep this session, and the same should be
+expected of what is left.
+
+**The remaining 161 failures are less scattered than the per-function table
+makes them look.** Most of the thin spread across `SUM`, `COUNT`, `MAX`, `MIN`,
+`IF`, `NA` and the `IS` predicates is **four** rules, now measured and filed as
+**TD-51 to TD-54** with case counts and fix sites. TD-51 alone is ~15 cases and
+is a single rule. Read those rows before touching anything — they were written
+so the next session does not have to re-derive them.
 
 **Session 20 paid TD-33, the largest cluster.** Excel's two date systems are now
 an explicit `DateSystem` on the evaluation context (**D-105**): +126 cases, and
@@ -104,10 +129,18 @@ case count** — the ranking is the point of having a runner, so follow it rathe
 than re-guessing:
 
 1. ~~TD-33 — date semantics~~ **PAID (session 20)**, +126 cases.
-2. **TD-36 — `TEXT()`** (~28), unimplemented; needs the number-format grammar.
-   Now the largest remaining cluster, and it also unblocks the residual
-   `__compat_1900_leap` / `__compat_serial_boundary` cases that TD-33 left —
-   they fail on `TEXT`, `DATEVALUE` and `EOMONTH`, not on date arithmetic.
+2. **TD-51 — direct arguments vs range cells** (~15). **Start here.** It is
+   the largest remaining cluster, it is *one rule* spread across eight
+   functions, and it is already fully characterised in docs/44: `Operand`
+   distinguishes `Value` from `Range`, so the fix is to coerce in
+   `numeric_cells`'s `Value` arm and keep skipping in the `Range` arm. Take
+   **TD-52, TD-53 and TD-54** in the same pass — all three are argument and
+   error handling in the same functions, ~13 more cases between them.
+2b. **TD-36 — `TEXT()`** (~28), unimplemented; needs the number-format grammar,
+   which is a language of its own and the largest *single* item left. It also
+   unblocks the residual `__compat_1900_leap` / `__compat_serial_boundary`
+   cases TD-33 left — they fail on `TEXT`, `DATEVALUE` and `EOMONTH`, not on
+   date arithmetic. Budget a session for it rather than starting it late.
 3. ~~TD-14 — approximate-match lookup~~ **PAID (session 20)**, with ~~TD-35~~.
 4. ~~TD-34 — the criteria sub-language~~ **PAID (session 20)**, +18 cases.
 5. ~~TD-32 — `compat_parse_15`~~ **PAID (session 20)**, +16 cases.

@@ -1,5 +1,11 @@
 # Changelog — Architecture Repository
 
+## 2026-08-09 (session 20, close) — the residual, measured and filed
+- **Five new debt rows, TD-51 to TD-55**, characterising what is left of the W-ORACLE gap. Filed with measured case counts and named fix sites rather than left as "161 failures spread across forty functions", because the spread is misleading: most of it is four rules.
+- **TD-51 (~15 cases, the largest remaining cluster)**: a direct argument and a range cell coerce differently, and the engine treats them alike. `SUM("7",1)` is 8 and `SUM(TRUE,1)` is 2, while the same values *inside a range* are skipped, and `SUM("abc",1)` is `#VALUE!` where a text cell in a range is ignored. Same split in `COUNT`, `MAX`, `MIN`, `PRODUCT`. The documented description of `SUM` describes only the range half, which is why one rule was written for both. `Operand` already distinguishes `Value` from `Range`, so the fix site is `numeric_cells`.
+- **TD-52 (~5)**: an omitted argument is a parse error rather than a blank — `=IF(TRUE,,2)` is `0` in Excel and `#NAME?` here. **TD-53 (~4)**: `IF`'s condition coerces text logicals but not numeric text, and the engine does exactly the opposite. **TD-54 (~4)**: errors are not transparent to the `IS` predicates or to `COUNT`, so `ISNUMBER(1/0)` propagates where Excel answers `false`. **TD-55 (3)**: `LOWER`/`UPPER` lack the Unicode special cases, and is explicitly low priority.
+- No code changed. This entry exists because a measured, scoped residual is worth more to the next session than fifteen more cases would have been — and starting a cluster this large late is how a session ends mid-refactor.
+
 ## 2026-08-09 (session 20, cont.) — TD-32 paid: W-ORACLE 87.0% → 88.2%
 - **TD-32 PAID (D-108).** Excel's literal rules now run at parse time. `__compat_literal_parser` reaches **100%** (29/29, from 51.7%); **+16 cases**.
 - **The truncation is on the source text, not the parsed double** — and only measurement shows why. Excel truncates to 15 significant digits *before* converting, and truncates rather than rounds: `=9999999999999999` is **9999999999999990**, where rounding gives `1e16`. Truncating the double cannot reproduce it, because `9999999999999999` has no exact `f64` and lands on `1e16` with the dropped digits already gone.
