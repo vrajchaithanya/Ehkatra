@@ -185,6 +185,29 @@ docs/16 promises salvage from "the **last valid** snapshot", which presupposes m
 That is not a bug in the salvage path, which behaved exactly as specified — it is a retention policy that was never stated. Recorded as **TD-30** with the two candidate fixes (keep N ≥ 2 snapshots, or retain compacted ops until a second snapshot verifies) rather than picked here: the choice trades file size against recoverability, and docs/16's cadence section is where it belongs.
 Worth noting the smaller-scale test disagrees and is right to: `a_corrupted_snapshot_opens_through_salvage_and_reports_it` keeps every op in `ops`, so it recovers the full workbook. The two together are the actual lesson — **recoverability is a property of the retention policy, not of the salvage code.**
 
+### Session 20 (2026-08-09) — TD-47 was false, and the register has now produced the same defect twice
+
+**D-104 — `gates.ps1` is 5.1-compatible and always was. The debt entry accusing it was written from a true fact about the shell and never run against the script.**
+
+TD-47 asserted that `tools/gates.ps1` "requires PowerShell 7 and aborts on a Windows PowerShell 5.1 host". Measured on this host (Windows PowerShell **5.1.26100.8875**, the only PowerShell present — `pwsh` is not installed): the script runs top to bottom in **one invocation, every gate green, exit 0**. Verified in all three ways it is ever invoked — bare `powershell -File`, with every stream redirected to a file, and dot-sourced inside a `Stop`-preference session.
+
+**The mechanism TD-47 names is nevertheless real, and was reproduced rather than taken on faith.** Under `$ErrorActionPreference = 'Stop'`:
+
+* `cargo clippy -p usk-types --all-targets -- -D warnings` — exit 0, no throw.
+* the same command with its stderr merged into the pipeline — **`NativeCommandError`**, thrown purely because cargo prints `Finished ...` to stderr.
+
+So 5.1 wraps a native command's stderr in an `ErrorRecord` **only when that stderr is merged into the PowerShell pipeline**, not merely when it is written. `gates.ps1` never merges it: stderr goes to the console and every native command is judged by `$LASTEXITCODE`. The trap is therefore **latent — one redirection operator away — and was never armed**.
+
+**Rejected: install PowerShell 7.** The obvious reading of the repair instruction, and wrong twice over. It is a machine-wide MSI needing elevation, which DP-S5 and CLAUDE.md's workspace boundary both bar; and it would have "fixed" a script that already worked, leaving the real hazard (the latent redirection) in place and unmeasured.
+
+**Taken instead: two gates where the assumption was.** A runtime probe asserting that a native command which writes to stderr and exits 0 does not derail the run, and a static grep refusing any stderr-into-pipeline redirection in `tools\*.ps1`. Both run first and cost milliseconds, so an incompatible shell is named in two seconds instead of three minutes into a cargo build. The grep is the one that matters: it makes re-arming the trap a gate failure rather than a silent regression.
+
+**The defect this is really about is the register, not the shell.** TD-47 is the *second* row to assert an unverified host condition that measurement then refuted — TD-48 (filed in session 18 under TD-28's number) was the first, and D-078 already drew the lesson: *a status note must name the condition that would clear it, or it ages into a false statement.* D-078 was not enough, because both rows named a clearing condition and neither was ever **run**. So the rule is strengthened:
+
+> **A debt row that asserts something about this host is not filed until the command that demonstrates it has been executed and its output pasted into the row.** An assertion derived from a true general fact is a hypothesis, and hypotheses go in the row as hypotheses.
+
+Register IDs are also confirmed **append-only**: a paid row is struck through and keeps its number forever. TD-28's second occupant is re-filed as TD-48 in docs/44, because a vacated-looking ID is what invited the reuse in the first place.
+
 ### Session 19 (2026-08-09) — where the stamps have to live: an ADR-level fork, not written
 
 **D-103 — Implementing the stamp-carrying image needs an ADR-005 amendment, so it is NOT implemented here. The fork is stated with both costs measured.**

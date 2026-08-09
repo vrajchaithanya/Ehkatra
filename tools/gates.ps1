@@ -1,6 +1,23 @@
-# gates.ps1 — run the whole CLAUDE.md gate set locally, in CI order.
-# Solo rule (docs/07 §2): if a check is not one command, it does not get run.
-#   pwsh -File tools/gates.ps1
+# gates.ps1 -- run the whole CLAUDE.md gate set locally, in CI order.
+# Solo rule (docs/07 section 2): if a check is not one command, it does not get run.
+#
+#   powershell -File tools\gates.ps1     # Windows PowerShell 5.1 -- supported
+#   pwsh -File tools/gates.ps1           # PowerShell 7+          -- supported
+#
+# SHELL COMPATIBILITY (TD-47, D-104). Windows PowerShell 5.1 turns a native
+# command's stderr into an ErrorRecord *only when that stderr is merged into the
+# PowerShell pipeline* -- by a stderr-into-stdout redirection operator, or by
+# piping it into a cmdlet. Under `$ErrorActionPreference = 'Stop'` that
+# ErrorRecord is terminating, so one such redirection anywhere below would make
+# a green `cargo clippy` abort the run purely because cargo prints
+# "Finished ..." to stderr. This script therefore never merges a native
+# command's stderr into the pipeline; it lets stderr reach the console and
+# judges every native command by `$LASTEXITCODE` alone. Two gates below keep it
+# that way -- a runtime probe and a static grep -- because the trap is one
+# character away and invisible until it fires.
+#
+# ASCII only, for the reason cc-env.ps1 states: 5.1 reads a BOM-less .ps1 as
+# ANSI, so a stray em dash is a parse error rather than a typo.
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
 $env:PATH = "$env:USERPROFILE\.cargo\bin;" + $env:PATH
@@ -15,6 +32,32 @@ function Step($name, [scriptblock]$body) {
     & $body
     if ($LASTEXITCODE -ne 0) { throw "GATE FAILED: $name" }
 }
+
+# --------------------------------------------------------- shell compatibility
+# Runs first and costs milliseconds, so an incompatible shell is named in two
+# seconds rather than three minutes into a cargo build. It proves the property
+# the rest of the script depends on -- that a native command writing to stderr
+# and exiting 0 does not derail the run -- instead of assuming it.
+Write-Host "`n=== Shell compatibility (TD-47) ===" -ForegroundColor Cyan
+Write-Host "  host: PowerShell $($PSVersionTable.PSVersion) ($($PSVersionTable.PSEdition))"
+cmd /c "echo gates-stderr-probe 1>&2"
+if ($LASTEXITCODE -ne 0) {
+    throw "GATE FAILED: a native command that writes to stderr and exits 0 did not survive this shell"
+}
+Write-Host '  PASS  native stderr does not derail the run'
+
+# The static half. The probe proves this script is safe as written; this proves
+# it stays that way, since re-arming the trap takes one redirection operator.
+# The pattern is assembled from pieces so that this gate does not match its own
+# source and fail on itself.
+$mergePattern = '2' + '>' + '&' + '1'
+$merges = Get-ChildItem -Recurse -Include *.ps1 -Path $PSScriptRoot |
+    Select-String -SimpleMatch -Pattern $mergePattern
+if ($merges) {
+    $merges
+    throw 'GATE FAILED: a .ps1 under tools\ merges native stderr into the pipeline (TD-47); judge native commands by $LASTEXITCODE instead'
+}
+Write-Host '  PASS  no .ps1 under tools\ merges native stderr into the pipeline'
 
 Step 'Format (DP-C1)'            { cargo fmt --all -- --check }
 Step 'Clippy (DP-C1)'            { cargo clippy --workspace --all-targets -- -D warnings }
