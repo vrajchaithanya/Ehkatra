@@ -943,6 +943,36 @@ workspace.** Verified both ways — removing it returns the closure to exactly
 10/12 and 29/40, so the contamination is the shell and not a routine lockfile
 refresh.
 
+### The separate workspace, and the ceiling set from it
+
+`shell/` is its own workspace with its own lockfile, depending on the kernel
+crates by path. Re-measured with it in place:
+
+| | cap | measured |
+|---|---:|---:|
+| kernel direct deps | 5 | **1** |
+| kernel dep closure | 12 | **10 — unchanged** |
+| non-shell workspace closure | 40 | **29 — unchanged** |
+| **shell workspace closure** | **280** | **230** |
+
+**The kernel and workspace lines are byte-identical to what they were before the
+shell existed**, which is the property the separate workspace was for: the
+shell's dependency choices cannot reach the kernel's resolution graph, so
+DP-S2's kernel line is structural rather than something to keep re-checking.
+
+The 230 is `winit 0.30` + `wgpu 23` plus the **registry** closure of the kernel
+crates the shell depends on (`usk-state`, `usk-calc`, `usk-reduce`,
+`ehkatra-store` — which is where `rusqlite` and `libsqlite3-sys` come in). Path
+dependencies are excluded by source: a registry source is a crate we did not
+write.
+
+**Ceiling 280 = 230 measured + ~50 for named, already-owed work**: accesskit for
+the a11y tree, and the file-dialog and menu adapters docs/33 specifies. Nothing
+else. Deliberately not more generous — DP-S2 exists to make growth visible, so
+the next raise should cost an ADR; but a ceiling that the first planned adapter
+breaches would make the gate a nuisance, and nuisances get raised without
+thought.
+
 ## W-OPEN-1M with an image body (docs/38) — **TD-45 and TD-31 paid** · session 21
 
 Run: `cargo run --release -p open-bench`. Same 1,000,000-cell corpus (1000 x

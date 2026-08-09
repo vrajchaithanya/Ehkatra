@@ -10,6 +10,8 @@
 //
 // Usage: node tools/dep-budget.mjs
 import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 // Every `no_std` crate under `crates/`. The list was missing `usk-sync` and
 // `usk-recover` from the sessions that added them — harmless while both carry
@@ -41,14 +43,23 @@ const WORKSPACE_CLOSURE_MAX = 40; // DP-S2 — the NON-shell workspace.
 // already enforces. Counting it against the kernel's neighbours would say
 // nothing useful about either.
 //
-// Members whose name starts with this prefix are the shell.
-const SHELL_PREFIX = 'ehkatra-shell';
-// `null` means **unmeasured, and therefore unenforced**: ADR-037 requires the
-// real closure to be measured and recorded in MEASUREMENTS.md before a ceiling
-// is written here. D-115 is why — a number priced without measurement is what
-// made the first stamp sidecar 21x too large. The gate reports the figure from
-// the first day a shell crate exists, so the ceiling is set from evidence.
-const SHELL_CLOSURE_MAX = null;
+// The shell is a **separate workspace** with its own lockfile (ADR-037
+// Amendment 1, D-116), so it is measured by resolving that workspace rather
+// than by filtering this one. As a member it pushed the kernel closure from 10
+// to 13 through Cargo's global version unification; from outside, it cannot
+// reach the kernel's graph at all.
+const SHELL_WORKSPACE = 'shell';
+// Set from the measurement, not from a guess (D-115). `winit` + `wgpu` plus the
+// registry closure of the kernel crates the shell depends on measured **230**
+// (MEASUREMENTS.md). The ceiling is **280**: the measured 230 plus ~50 for the
+// platform adapters docs/33 already names and Q2 still owes — accesskit for the
+// a11y tree, and the file-dialog and menu adapters — and nothing else.
+//
+// Deliberately not generous beyond that. DP-S2's purpose is to make growth
+// visible and deliberate, so the next raise should cost an ADR; but a ceiling
+// set so tight that the first planned adapter breaches it would make the gate a
+// nuisance rather than a control, and nuisances get raised without thought.
+const SHELL_CLOSURE_MAX = 280;
 
 const meta = JSON.parse(
   execFileSync('cargo', ['metadata', '--format-version', '1'], {
@@ -112,37 +123,46 @@ for (const name of KERNEL) {
   for (const d of externalClosure(pkg.id)) kernelClosure.add(d);
 }
 
-const isShell = (id) => (byId.get(id)?.name ?? '').startsWith(SHELL_PREFIX);
-
 const workspaceClosure = new Set();
-for (const id of workspaceIds) {
-  if (isShell(id)) continue;
-  for (const d of externalClosure(id)) workspaceClosure.add(d);
+for (const id of workspaceIds) for (const d of externalClosure(id)) workspaceClosure.add(d);
+
+/** External packages the shell's own workspace resolves to. */
+function shellClosureOf(dir) {
+  if (!existsSync(join(dir, 'Cargo.toml'))) return null;
+  const meta = JSON.parse(
+    execFileSync('cargo', ['metadata', '--format-version', '1'], {
+      cwd: dir,
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    }),
+  );
+  const members = new Set(meta.workspace_members);
+  // Path dependencies on the kernel are workspace-*local* to this repo even
+  // though they are not members of the shell's workspace, so they are excluded
+  // by source: a registry source is a crate we did not write.
+  return new Set(
+    meta.packages.filter((p) => !members.has(p.id) && p.source).map((p) => p.name),
+  );
 }
 
-const shellClosure = new Set();
-for (const id of workspaceIds) {
-  if (!isShell(id)) continue;
-  for (const d of externalClosure(id)) shellClosure.add(d);
-}
-// A crate the non-shell workspace already carries is not a cost the shell
-// added, so the shell line measures what the shell *brought*.
-for (const name of workspaceClosure) shellClosure.delete(name);
+const shellClosure = shellClosureOf(SHELL_WORKSPACE);
 
 report('kernel direct deps (DP-S2)', kernelDirect, KERNEL_DIRECT_MAX);
 report('kernel dep closure (D-035)', kernelClosure, KERNEL_CLOSURE_MAX);
 report('workspace dep closure, non-shell (DP-S2)', workspaceClosure, WORKSPACE_CLOSURE_MAX);
 
-if (SHELL_CLOSURE_MAX === null) {
-  // Reported, not enforced. Saying which it is matters: a gate that prints a
-  // number nobody set is not a gate, and pretending otherwise is how a budget
-  // becomes decorative.
-  console.log(
-    `INFO  shell dep closure (ADR-037): ${shellClosure.size}, ceiling UNSET — ` +
-      'measure and record in MEASUREMENTS.md before setting one',
-  );
+if (shellClosure === null) {
+  console.log('INFO  shell workspace absent — nothing to budget');
 } else {
-  report('shell dep closure (ADR-037)', shellClosure, SHELL_CLOSURE_MAX);
+  // Names are not listed: 200 of them is a wall of text nobody reads, and the
+  // number plus the ceiling is what the gate is for. `cargo tree` in `shell/`
+  // answers "which ones" when that is the actual question.
+  const ok = shellClosure.size <= SHELL_CLOSURE_MAX;
+  if (!ok) failed = true;
+  console.log(
+    `${ok ? 'PASS' : 'FAIL'}  shell dep closure (ADR-037): ` +
+      `${shellClosure.size}/${SHELL_CLOSURE_MAX}  [separate workspace, D-116]`,
+  );
 }
 
 if (failed) {

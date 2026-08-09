@@ -1,5 +1,9 @@
 [workspace]
 resolver = "2"
+# The shell is its own workspace, not a member (ADR-037 Amendment 1, D-116).
+# Excluded explicitly so cargo does not adopt it by proximity — as a member it
+# pushed the kernel dependency closure past its cap through version unification.
+exclude = ["shell"]
 members = [
   "crates/usk-types",
   "crates/usk-oplog",

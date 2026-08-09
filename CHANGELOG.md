@@ -1,5 +1,12 @@
 # Changelog — Architecture Repository
 
+## 2026-08-09 (session 21, Q2) — the shell is its own workspace, and the ceiling is set
+- **`shell/` is a separate workspace with its own lockfile** (ADR-037 Amendment 1, D-116), depending on the kernel crates by path. The root workspace `exclude`s it explicitly so cargo cannot adopt it by proximity.
+- **The property this buys, verified**: with the shell present, the kernel line reads **10/12** and the non-shell workspace **29/40** — *byte-identical to before the shell existed*. As a member those were 13/12 (FAIL) and 34/40. The shell's dependency choices can no longer reach the kernel's resolution graph, so DP-S2's kernel line is structural rather than something to keep re-checking.
+- **Ceiling set from the measurement, not a guess**: the shell workspace resolves to **230** external crates — `winit 0.30` + `wgpu 23` plus the registry closure of the kernel crates it depends on. The gate enforces **280** = 230 + ~50 for the platform adapters docs/33 already names and Q2 still owes (accesskit, file-dialog and menu adapters), and nothing else.
+- **Why 280 and not 240**: DP-S2 exists to make growth visible, so the next raise should cost an ADR — but a ceiling the first *planned* adapter would breach makes the gate a nuisance, and nuisances get raised without thought. The allowance is named so the next reader can check whether it was spent on what it was for.
+- `tools/dep-budget.mjs` now resolves the shell's workspace directly (`cargo metadata` with a `cwd`) rather than filtering this one, and excludes path dependencies by source — a registry source is a crate we did not write. It reports the count without the 230 names: the number against the ceiling is what a gate is for, and `cargo tree` in `shell/` answers "which ones" when that is the actual question.
+
 ## 2026-08-09 (session 21, Q2) — shell closure measured; **the shell must be its own workspace** (D-116)
 - **Measured, as ADR-037 required before any GPU dependency landed**: `winit 0.30` + `wgpu 23` is a **196-crate** closure. That is the number the exercise was for, and it is the less important one.
 - **Adding the shell as a workspace member pushed the *kernel* closure from 10 to 13, past its cap of 12.** Cargo resolves one lockfile per workspace and unifies versions globally, so a GPU stack re-resolved crates the kernel already had — `cc` moved and brought `jobserver`, and `getrandom` + `r-efi` entered the shared graph (`wasip2`, `wit-bindgen` in the wider workspace, 29 → 34).

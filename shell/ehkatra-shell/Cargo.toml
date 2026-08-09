@@ -1,0 +1,19 @@
+[package]
+name = "ehkatra-shell"
+version = "0.1.0"
+edition = "2021"
+
+# Everything platform-specific lives here or in the PAL. DP-C2's gate makes
+# `cfg(target_os)` anywhere else a build failure, which is what keeps the kernel
+# portable while this crate deliberately is not.
+[dependencies]
+winit = "0.30"
+wgpu = "23"
+
+# The kernel, by path. It is a *dependency* of the shell and not a co-member:
+# the arrow points one way, and the shell's dependency choices cannot reach
+# back into the kernel's lockfile (D-116).
+usk-state = { path = "../../crates/usk-state" }
+usk-calc = { path = "../../crates/usk-calc" }
+usk-reduce = { path = "../../crates/usk-reduce" }
+ehkatra-store = { path = "../../ehkatra-store" }

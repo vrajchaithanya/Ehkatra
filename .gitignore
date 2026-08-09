@@ -11,3 +11,6 @@
 # "no temp files outside the workspace" rule, but never committed.
 /.tmp
 /demo/out
+
+# The shell is a separate workspace with its own build directory (D-116).
+/shell/target/

@@ -99,18 +99,13 @@ wgpu desktop shell, superseding ADR-033's web-first PWA. docs/33 and docs/40
 already said this; ADR-033 was never propagated into them, which is the
 contradiction Q2 surfaced.
 
-**That measurement is done, and it changed the plan (D-116).** `winit` + `wgpu`
-is a **196-crate** closure — but adding it as a workspace *member* pushed the
-**kernel** closure from 10 to **13, past its cap of 12**, because Cargo unifies
-versions across one lockfile. The kernel cap is what keeps `usk-*` building as
-`no_std` on `wasm32-wasip1`, so a GUI must not be able to move it.
-
-**So the first step is now a layout, not a manifest**: create the shell as its
-**own workspace** with its own lockfile, depending on the kernel crates by path.
-Then re-run `tools/dep-budget.mjs`, confirm the kernel line is still 10/12, and
-set the shell ceiling from the 196 already measured. The scaffold was reverted
-rather than committed — it fails the gate as a member, and the fix is a
-different layout, not a smaller manifest.
+**The shell workspace exists and its budget is set.** `shell/` is a separate
+workspace with its own lockfile (D-116), depending on the kernel by path;
+`winit` + `wgpu` plus the kernel's registry closure measures **230**, and the
+gate enforces **280** — the extra ~50 is earmarked for accesskit and the
+file-dialog/menu adapters docs/33 names. With the shell present the kernel line
+still reads **10/12** and the workspace **29/40**, identical to before it
+existed, which is the whole point of the separation.
 
 Then docs/40's Q2 list, in its order: renderer + virtual scroll, editing
 surface + native IME overlay, menus/dialogs/file-association adapters, accesskit

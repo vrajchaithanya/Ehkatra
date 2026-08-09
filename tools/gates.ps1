@@ -65,6 +65,14 @@ Step 'Tests (DP-C4)'             { cargo test --workspace }
 Step 'no_std kernel (DP-A3)'     { cargo build -p usk-types -p usk-oplog -p usk-state -p usk-formula -p usk-calc -p usk-reduce -p usk-sync -p usk-recover -p usk-json -p usk-csv -p usk-zip -p usk-xml -p usk-xlsx -p usk-mcp --target wasm32-wasip1 }
 Step 'Complexity budget (DP-S2)' { node tools/dep-budget.mjs }
 
+# The shell is a separate workspace (D-116), so `cargo test --workspace` above
+# does not reach it. Checked rather than built: it has no tests yet and a full
+# wgpu build is minutes, where a check is one. It compiles on this host's
+# x86_64-pc-windows-gnu toolchain, which was not a given.
+if (Test-Path 'shell\Cargo.toml') {
+    Step 'Shell workspace (ADR-037)' { cargo check --manifest-path shell/Cargo.toml }
+}
+
 # Supply chain (DP-E8). For eight sessions this ran only on CI - which meant in
 # practice it ran nowhere, and it failed silently on its first two pushes.
 # `cargo-deny` builds here once the in-workspace MinGW `dlltool` is ahead of

@@ -1,0 +1,16 @@
+# The desktop shell's **own workspace** (ADR-037 Amendment 1, D-116).
+#
+# Separate from the kernel's workspace on purpose, and the reason is measured:
+# as a member, `winit` + `wgpu` pushed the *kernel* dependency closure from 10
+# to 13, past its cap of 12, because Cargo resolves one lockfile per workspace
+# and unifies versions across it. That cap is what keeps `usk-*` building as
+# `no_std` against `wasm32-wasip1` — DP-A3's gate, and the evidence base for
+# DP-A2's determinism claim. A GUI must not be able to move it, and from inside
+# the same workspace it can.
+#
+# Its own lockfile means the kernel's resolution graph is not reachable from
+# here at all, which makes DP-S2's kernel line structural rather than something
+# to keep re-checking.
+[workspace]
+resolver = "2"
+members = ["ehkatra-shell"]
