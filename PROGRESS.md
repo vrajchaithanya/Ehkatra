@@ -44,67 +44,29 @@ cross 90%**, and none needs a new subsystem. **TD-36 (`TEXT()`, ~28)** is the
 largest single item after that and needs a number-format grammar — budget a
 session for it rather than starting it late.
 
-**Session 20 paid TD-33, the largest cluster.** Excel's two date systems are now
-an explicit `DateSystem` on the evaluation context (**D-105**): +126 cases, and
-the 1904 corpus went **20.0% → 87.7%** because the engine had had no 1904 mode
-at all — every serial was off by the same 1,462, so nearly every case failed for
-one reason. `DATE`, `DAY`, `MONTH`, `WEEKDAY` and `YEAR` are now **100% in both
-corpora**. Six rules, none of which follows from the others, all measured from
-the Excel COM capture rather than from documentation. Locale date text is
-deliberately excluded and filed as **TD-49** — `"15/03/2024"` means different
-days on differently-configured hosts, so the corpus cannot settle it.
+**Per-item detail is in the registers, not here.** D-104 (TD-47), D-105
+(TD-33), D-106 (TD-14/TD-35), D-107 (TD-34), D-108 (TD-32) and D-109
+(TD-51/TD-54) in `docs/43`; the paid rows and their residues in `docs/44`; every
+number in MEASUREMENTS.md under W-ORACLE. This file keeps only what a returning
+human needs before choosing what to do next.
 
-**Session 20 also paid TD-14 and TD-35** (**D-106**): +31 cases, and `VLOOKUP`,
-`HLOOKUP`, `XLOOKUP`, `MATCH`, `FIND` and `SEARCH` all reach **100%**.
-Approximate match is the **binary search Excel actually runs** — over the
-unsorted keys `30,10,50,10` it answers the row holding **10**, where a linear
-"largest key ≤ needle" scan answers 30. TD-14's refusal was right until vectors
-existed and wrong the moment they did; it is the clearest case in the corpus for
-ADR-024's premise that the binary is the spec. Three `INDEX` cases still diverge
-and all three are **TD-16**, implicit intersection — attributed there, not here.
-
-**Session 20 paid TD-34** (**D-107**), +18 cases. The rule worth carrying
-forward: **criteria coerce and lookups do not.** `COUNTIF(range, 7)` counts a
-cell holding the *text* `"7"`; `VLOOKUP(7, …)` does not find it. The two
-families had shared one equality predicate, which is wrong for one of them, and
-nothing in the documented contract says so. Also: `""` is the blank cell and
-`"<>"` is every non-blank one — neither is a comparison against the empty
-string. Filed rather than bodged: **TD-50**, `SUMIF`'s short sum range must
-extend to the criteria range's shape, which needs the *reference* rather than
-materialised values — the same thing TD-16 waits on, so they repay together.
-
-**Session 20 paid TD-32** (**D-108**), +16 cases, taking the literal parser to
-100%. The rule only measurement gives you: the 15-digit truncation is on the
-**source text**, not the parsed double — `9999999999999999` has no exact `f64`,
-so by the time it is a number the digits Excel drops are gone. It also
-**truncates rather than rounds**. Consequence worth knowing: the profile now
-reaches the *parser* (`parse_with`), because unlike every other compat rule this
-one is destructive, so `Strict` cannot be implemented downstream of it.
-
-**Session 20 closed TD-47 and found it was never true.** `tools/gates.ps1` was
-recorded as requiring PowerShell 7 and aborting on this 5.1-only host. Measured:
-it runs top to bottom in **one invocation, every gate green, exit 0**, under
-Windows PowerShell 5.1.26100.8875 — bare, fully redirected, and dot-sourced.
-Nothing needed fixing; what it needed was *running*. Details in **D-104**.
+**One process rule from this session, because it has now bitten twice.** TD-47
+claimed `tools/gates.ps1` needed PowerShell 7 and aborted on this 5.1-only host.
+Measured: it runs top to bottom, one invocation, every gate green, exit 0 —
+bare, fully redirected, and dot-sourced. Nothing needed fixing; what it needed
+was *running*. TD-48 (filed in session 18 under TD-28's number) was the same
+defect. D-078's lesson was not enough, because both rows named a clearing
+condition and neither was ever run, so **D-104 strengthens it: a debt row
+asserting something about this host is not filed until the command
+demonstrating it has been executed and its output pasted into the row.**
+Register IDs are append-only — a paid row is struck through and keeps its number
+forever, because a vacant-looking ID is what invited TD-28's reuse.
 
 The 5.1 `NativeCommandError` mechanism is real and was reproduced, but it fires
-only when a native command's stderr is **merged into the pipeline**, which
-`gates.ps1` never does. So the trap was latent, one redirection operator away.
-Two new gates now stand where the assumption was, and they run first:
-
-- a runtime probe — a native command that writes to stderr and exits 0 must not
-  derail the run;
-- a static grep — no `.ps1` under `tools\` may merge native stderr into the
-  pipeline.
-
-**The defect underneath is the register, not the shell.** TD-47 is the second
-row to assert an unverified host condition that measurement then refuted; TD-48
-(filed in session 18 under TD-28's number) was the first. D-078's lesson was not
-enough, because both rows named a clearing condition and neither was ever run.
-D-104 strengthens it: **a debt row asserting something about this host is not
-filed until the command demonstrating it has been executed and its output pasted
-into the row.** Register IDs are append-only — a paid row is struck through and
-keeps its number forever.
+only when a native command's stderr is merged into the pipeline, which
+`gates.ps1` never does. Two gates now stand where the assumption was and run
+first: a runtime probe, and a static grep refusing any stderr-into-pipeline
+redirection in `tools\*.ps1`.
 
 ---
 
