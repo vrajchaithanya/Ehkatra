@@ -1,0 +1,20 @@
+[package]
+name = "ehkatra-io"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+usk-csv = { path = "../crates/usk-csv" }
+usk-json = { path = "../crates/usk-json" }
+usk-xlsx = { path = "../crates/usk-xlsx" }
+usk-types = { path = "../crates/usk-types" }
+
+[dev-dependencies]
+usk-xlsx = { path = "../crates/usk-xlsx" }
+usk-types = { path = "../crates/usk-types" }
+
+[[bin]]
+name = "ehkatra-parse"
+path = "src/bin/ehkatra-parse.rs"

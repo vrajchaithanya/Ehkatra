@@ -817,11 +817,14 @@ pub fn plan_promotions<B: Borrow<Op>, I: Iterator<Item = B>>(ops: I) -> Plan {
             Payload::SetFormula { row, col, .. } => {
                 formula_cells.insert((row.0, col.0));
             }
-            // Undeletes touch axis order only.
+            // Undeletes touch axis order only. An opaque op (DP-A5) applies to
+            // nothing, so it interns no identity and contests no cell — a
+            // preserved op must not be able to promote a tile.
             Payload::DeleteRow { .. }
             | Payload::DeleteCol { .. }
             | Payload::UndeleteRow { .. }
-            | Payload::UndeleteCol { .. } => {}
+            | Payload::UndeleteCol { .. }
+            | Payload::Opaque(_) => {}
         }
     }
 
@@ -835,4 +838,344 @@ pub fn plan_promotions<B: Borrow<Op>, I: Iterator<Item = B>>(ops: I) -> Plan {
         contested,
         formula_cells,
     }
+}
+
+// ---------------------------------------------------------------- tile image
+//
+// The serialised form of a tile (docs/16's "tile image"). It lives here rather
+// than in `image.rs` because it needs the private layout, and because a tile's
+// bytes and a tile's meaning should be defined in one place — the invariant
+// `payload.len() == presence.count` is enforced on read, so an image cannot
+// produce a tile whose `rank` would index past its payload.
+
+use crate::image::{ImageError, Reader, Writer, MAX_LOSERS_PER_CELL};
+// --------------------------------------------------- tile store (crate-internal)
+
+impl TileStore {
+    pub(crate) fn write_image(&self, w: &mut Writer) {
+        // Slot maps: the `to_id` vector is the whole truth, `to_slot` is its
+        // inverse and is rebuilt rather than stored.
+        w.len(self.rows.ids().len());
+        for id in self.rows.ids() {
+            w.opid(id);
+        }
+        w.len(self.cols.ids().len());
+        for id in self.cols.ids() {
+            w.opid(id);
+        }
+
+        w.len(self.tiles.len());
+        for (key, tile) in &self.tiles {
+            let start = w.out.len();
+            w.u32(key.row_band);
+            w.u32(key.col_band);
+            tile.write_image(w);
+            // The contested bitmap belongs to the tile's chunk: it is fixed
+            // before the first write lands and is part of what the tile means.
+            match self.contested.get(key) {
+                None => w.u8(0),
+                Some(bits) => {
+                    w.u8(1);
+                    for word in bits {
+                        w.u64(*word);
+                    }
+                }
+            }
+            w.tiles.push((*key, start, w.out.len()));
+        }
+    }
+
+    pub(crate) fn read_image(r: &mut Reader) -> Result<TileStore, ImageError> {
+        let mut store = TileStore::default();
+        let n = r.count(crate::image::MAX_AXIS_ENTRIES, "row slots")?;
+        for _ in 0..n {
+            store.rows.intern(r.opid()?);
+        }
+        let n = r.count(crate::image::MAX_AXIS_ENTRIES, "col slots")?;
+        for _ in 0..n {
+            store.cols.intern(r.opid()?);
+        }
+
+        let n = r.count(crate::image::MAX_TILES, "tiles")?;
+        for _ in 0..n {
+            let key = TileKey {
+                row_band: r.u32()?,
+                col_band: r.u32()?,
+            };
+            let tile = Tile::read_image(r)?;
+            match r.u8()? {
+                0 => {}
+                1 => {
+                    let mut bits = [0u64; PRESENCE_WORDS];
+                    for word in bits.iter_mut() {
+                        *word = r.u64()?;
+                    }
+                    store.contested.insert(key, bits);
+                }
+                _ => return Err(ImageError::Malformed("contested tag")),
+            }
+            store.tiles.insert(key, Box::new(tile));
+        }
+
+        // **Every present cell must name a slot the slot maps actually have.**
+        // Without this a corrupted image produces a tile whose band points past
+        // the slot map, and the first read of it indexes out of bounds — which
+        // is precisely what the image fuzz test found on its first run. The
+        // check is O(present cells), the same order as having read them.
+        // Arithmetic in `u64`: a corrupted band is an arbitrary `u32`, and
+        // `band * TILE_ROWS` overflows in a debug build long before it produces
+        // a wrong answer. The fuzz test found that too, one fix later.
+        let (rows, cols) = (store.rows.ids().len() as u64, store.cols.ids().len() as u64);
+        for (key, tile) in &store.tiles {
+            for idx in tile.presence.indices() {
+                let row_slot =
+                    key.row_band as u64 * TILE_ROWS as u64 + idx as u64 / TILE_COLS as u64;
+                let col_slot =
+                    key.col_band as u64 * TILE_COLS as u64 + idx as u64 % TILE_COLS as u64;
+                if row_slot >= rows || col_slot >= cols {
+                    return Err(ImageError::Malformed(
+                        "a tile holds a cell outside the slot maps",
+                    ));
+                }
+            }
+        }
+        Ok(store)
+    }
+}
+
+impl Presence {
+    /// Rebuilds `count` and `max_set` from the bitmap. They are **derived, not
+    /// stored**, so an image cannot disagree with itself about which cells
+    /// exist — and that agreement is what makes the dense payload's `rank`
+    /// valid.
+    pub(crate) fn from_words(words: [u64; PRESENCE_WORDS]) -> Presence {
+        let mut count = 0u32;
+        let mut max_set = None;
+        for (w, word) in words.iter().enumerate() {
+            if *word != 0 {
+                count += word.count_ones();
+                let highest = 63 - word.leading_zeros();
+                max_set = Some((w * 64 + highest as usize) as u16);
+            }
+        }
+        Presence {
+            words,
+            count,
+            max_set,
+        }
+    }
+
+    pub(crate) fn write_image(&self, w: &mut Writer) {
+        for word in &self.words {
+            w.u64(*word);
+        }
+    }
+
+    pub(crate) fn read_image(r: &mut Reader) -> Result<Presence, ImageError> {
+        let mut words = [0u64; PRESENCE_WORDS];
+        for word in words.iter_mut() {
+            *word = r.u64()?;
+        }
+        Ok(Presence::from_words(words))
+    }
+}
+
+impl SlotMap {
+    /// The identities in slot order — the whole truth of a slot map, since
+    /// `to_slot` is its inverse and is rebuilt by re-interning.
+    pub(crate) fn ids(&self) -> &[OpId] {
+        &self.to_id
+    }
+}
+
+impl Kind {
+    fn tag(self) -> u8 {
+        match self {
+            Kind::Numbers => 0,
+            Kind::Decimals => 1,
+            Kind::Tagged => 2,
+        }
+    }
+
+    fn of_tag(tag: u8) -> Result<Kind, ImageError> {
+        Ok(match tag {
+            0 => Kind::Numbers,
+            1 => Kind::Decimals,
+            2 => Kind::Tagged,
+            _ => return Err(ImageError::Malformed("cell pack kind")),
+        })
+    }
+}
+
+impl CellPack {
+    fn kind(&self) -> Kind {
+        match self {
+            CellPack::Numbers(_) => Kind::Numbers,
+            CellPack::Decimals(_) => Kind::Decimals,
+            CellPack::Tagged(_) => Kind::Tagged,
+        }
+    }
+
+    fn write_image(&self, w: &mut Writer) {
+        w.u8(self.kind().tag());
+        match self {
+            // The numeric fast path stays a run of f64 bits — no tags, no
+            // lengths. This is where the image's size advantage over the op set
+            // comes from: 8 bytes per cell against an op's 24-byte identity
+            // plus its payload.
+            CellPack::Numbers(v) => {
+                w.len(v.len());
+                for n in v {
+                    w.f64(*n);
+                }
+            }
+            CellPack::Decimals(v) => {
+                w.len(v.len());
+                for d in v {
+                    w.i128(d.coefficient());
+                    w.i16(d.exponent());
+                }
+            }
+            CellPack::Tagged(v) => {
+                w.len(v.len());
+                for value in v {
+                    w.value(value);
+                }
+            }
+        }
+    }
+
+    fn read_image(r: &mut Reader) -> Result<CellPack, ImageError> {
+        let kind = Kind::of_tag(r.u8()?)?;
+        let n = r.count(TILE_CELLS, "packed cells")?;
+        Ok(match kind {
+            Kind::Numbers => {
+                let mut v = Vec::with_capacity(n);
+                for _ in 0..n {
+                    v.push(f64::from_bits(r.u64()?));
+                }
+                CellPack::Numbers(v)
+            }
+            Kind::Decimals => {
+                let mut v = Vec::with_capacity(n);
+                for _ in 0..n {
+                    let coefficient = r.i128()?;
+                    let exponent = r.i16()?;
+                    v.push(Decimal::new(coefficient, exponent));
+                }
+                CellPack::Decimals(v)
+            }
+            Kind::Tagged => {
+                let mut v = Vec::with_capacity(n);
+                for _ in 0..n {
+                    v.push(r.value()?);
+                }
+                CellPack::Tagged(v)
+            }
+        })
+    }
+}
+
+impl Tile {
+    pub(crate) fn write_image(&self, w: &mut Writer) {
+        self.presence.write_image(w);
+        self.payload.write_image(w);
+        match &self.meta {
+            Meta::Summary {
+                max_lamport,
+                writer,
+            } => {
+                w.u8(0);
+                w.u64(*max_lamport);
+                w.out.extend_from_slice(&writer.0.to_le_bytes());
+            }
+            Meta::Mixed {
+                max_lamport,
+                writer,
+                stamps,
+            } => {
+                w.u8(1);
+                w.u64(*max_lamport);
+                w.out.extend_from_slice(&writer.0.to_le_bytes());
+                w.len(stamps.len());
+                for (idx, cell) in stamps {
+                    w.u16(*idx);
+                    w.u64(cell.lamport);
+                    w.opid(&cell.id);
+                    // Retained losers are content, not bookkeeping (ADR-006,
+                    // DP-A8): dropping them here would make an image a lossy
+                    // projection of the state it claims to be.
+                    w.len(cell.losers.len());
+                    for (lamport, id, value) in &cell.losers {
+                        w.u64(*lamport);
+                        w.opid(id);
+                        w.value(value);
+                    }
+                }
+            }
+        }
+    }
+
+    pub(crate) fn read_image(r: &mut Reader) -> Result<Tile, ImageError> {
+        let presence = Presence::read_image(r)?;
+        let payload = CellPack::read_image(r)?;
+        let meta = match r.u8()? {
+            0 => Meta::Summary {
+                max_lamport: r.u64()?,
+                writer: read_actor(r)?,
+            },
+            1 => {
+                let max_lamport = r.u64()?;
+                let writer = read_actor(r)?;
+                let n = r.count(TILE_CELLS, "stamps")?;
+                let mut stamps = BTreeMap::new();
+                for _ in 0..n {
+                    let idx = r.u16()?;
+                    let lamport = r.u64()?;
+                    let id = r.opid()?;
+                    let losers_len = r.count(MAX_LOSERS_PER_CELL, "losers")?;
+                    let mut losers = Vec::with_capacity(losers_len.min(64));
+                    for _ in 0..losers_len {
+                        losers.push((r.u64()?, r.opid()?, r.value()?));
+                    }
+                    stamps.insert(
+                        idx,
+                        CellMeta {
+                            lamport,
+                            id,
+                            losers,
+                        },
+                    );
+                }
+                Meta::Mixed {
+                    max_lamport,
+                    writer,
+                    stamps,
+                }
+            }
+            _ => return Err(ImageError::Malformed("tile meta tag")),
+        };
+        let tile = Tile {
+            presence,
+            payload,
+            meta,
+        };
+        // The tile's core structural invariant, checked on the way in rather
+        // than trusted: a payload that is not dense over exactly the present
+        // cells would make every later `rank` index the wrong value, silently.
+        if !tile.invariant_holds() {
+            return Err(ImageError::Malformed(
+                "tile payload is not dense over its presence bitmap",
+            ));
+        }
+        Ok(tile)
+    }
+}
+
+fn read_actor(r: &mut Reader) -> Result<ActorId, ImageError> {
+    let mut a = [0u8; 16];
+    for byte in a.iter_mut() {
+        *byte = r.u8()?;
+    }
+    Ok(ActorId(u128::from_le_bytes(a)))
 }

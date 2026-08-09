@@ -1,0 +1,11 @@
+﻿[package]
+name = "conformance"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+usk-json = { path = "../../crates/usk-json" }
+usk-formula = { path = "../../crates/usk-formula" }
+usk-types = { path = "../../crates/usk-types" }

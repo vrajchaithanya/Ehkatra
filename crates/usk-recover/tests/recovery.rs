@@ -89,7 +89,8 @@ fn tail_ops() -> Vec<Op> {
 fn tail_bytes(ops: &[Op]) -> Vec<u8> {
     let mut out = Vec::new();
     for op in ops {
-        out.extend_from_slice(&op.encode());
+        // Framed, matching the container's tail stream and the wire (TD-25).
+        out.extend_from_slice(&op.encode_framed());
     }
     out
 }

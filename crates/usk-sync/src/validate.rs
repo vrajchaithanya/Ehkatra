@@ -32,6 +32,12 @@ pub const MAX_BINDINGS: usize = 1024;
 /// that has been offline mints one lamport per local op, so 2^32 is beyond any
 /// honest history while still rejecting the saturating value.
 pub const MAX_LAMPORT_JUMP: u64 = 1 << 32;
+/// Bytes a preserved-opaque op (DP-A5) may carry. Sized as the largest thing a
+/// *known* op can be — a cell's text — because a future op type that needs more
+/// than one Excel cell's worth of payload is not the case forward preservation
+/// was designed for, and an unbounded one is a memory-amplification attack that
+/// costs the sender nothing.
+pub const MAX_OPAQUE_BYTES: usize = MAX_TEXT_BYTES;
 
 /// Why an op was refused. Reported to the user (docs/28 domain 2), never
 /// swallowed.
@@ -51,6 +57,8 @@ pub enum RejectReason {
     TextTooLong,
     /// A `SetFormula` binding whose endpoints have zero counters.
     MalformedBinding,
+    /// A preserved-opaque op (DP-A5) larger than [`MAX_OPAQUE_BYTES`].
+    OpaqueTooLong,
 }
 
 /// A refused op, kept with its reason so the report can name both.
@@ -131,6 +139,16 @@ pub fn validate(
         // not seen is a *causal gap*, not an invalid op — the causal buffer
         // holds it. Confusing the two would quarantine honest work.
         Payload::InsertRow { .. } | Payload::InsertCol { .. } => {}
+        // DP-A5 requires us to retransmit an op we cannot read, which means we
+        // must store it — so it gets a bound like every other untrusted input.
+        // The bound is the *only* check available: the payload's meaning is by
+        // definition unknown here, and inventing a stricter rule would refuse
+        // exactly the forward-compatible ops preservation exists to carry.
+        Payload::Opaque(o) => {
+            if o.body().len() > MAX_OPAQUE_BYTES {
+                return Err(RejectReason::OpaqueTooLong);
+            }
+        }
     }
     Ok(())
 }

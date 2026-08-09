@@ -113,6 +113,55 @@ pub fn eval<G: Grid>(ast: &Ast, ctx: &Context<G>) -> Value {
     eval_operand(ast, ctx).scalar()
 }
 
+/// Evaluates a formula **as a formula** — i.e. at the position where Excel's
+/// cancellation adjustment is allowed to fire.
+///
+/// docs/50 finding 2: the `+`/`-` adjustment is *positional*. It applies to a
+/// formula's top-level result and to nothing else, which is why
+/// `=0.1+0.2-0.3` is `0` while `=(0.1+0.2-0.3)` is `5.55e-17` and
+/// `=1/(0.1+0.2-0.3)` is `2^54`. Every caller that is storing a cell's value
+/// should use this; every caller evaluating a sub-expression should use
+/// [`eval`], and the difference between them is exactly the rule.
+///
+/// The operands are evaluated **once**: the add/subtract arm reproduces
+/// `eval_operand`'s `Binary` case rather than calling it and then re-evaluating
+/// the operands to recover their magnitudes. The first version did re-evaluate,
+/// which doubled the work of every top-level `+`/`-` formula and moved
+/// W-CHAIN-100K from 92.6 ms to 145.2 ms — the bench caught it during the v0.1
+/// audit, and it is the reason the duplication below is deliberate.
+pub fn eval_top<G: Grid>(ast: &Ast, ctx: &Context<G>) -> Value {
+    let Ast::Binary(op @ (BinOp::Add | BinOp::Sub), lhs, rhs) = ast else {
+        return eval(ast, ctx);
+    };
+    let a = eval(lhs, ctx);
+    let b = eval(rhs, ctx);
+    let value = binary(ctx, *op, &a, &b);
+    let Value::Number(result) = value else {
+        return value;
+    };
+    let (Some(x), Some(y)) = (as_number(&a), as_number(&b)) else {
+        return value;
+    };
+    Value::Number(usk_types::coerce::compat_final_adjust(
+        &ctx.profile,
+        result,
+        if x.abs() > y.abs() { x } else { y },
+    ))
+}
+
+/// The float view of a value, for the cancellation rule's operand magnitude.
+/// Deliberately does not coerce text: a text operand means the arithmetic
+/// already errored or promoted, and neither is this rule's business.
+fn as_number(value: &Value) -> Option<f64> {
+    match value {
+        Value::Number(n) => Some(*n),
+        Value::Decimal(d) => Some(d.to_f64()),
+        Value::Bool(b) => Some(if *b { 1.0 } else { 0.0 }),
+        Value::Blank => Some(0.0),
+        _ => None,
+    }
+}
+
 /// Evaluates an AST, preserving range-ness so callers like `SUM` see all cells.
 pub fn eval_operand<G: Grid>(ast: &Ast, ctx: &Context<G>) -> Operand {
     match ast {
@@ -127,6 +176,9 @@ pub fn eval_operand<G: Grid>(ast: &Ast, ctx: &Context<G>) -> Operand {
         ))),
         Ast::Reference(r) => Operand::Value(read_cell(ctx, r)),
         Ast::Range(a, b) => read_range(ctx, a, b),
+        // Transparent to evaluation. The node exists only so `eval_top` can
+        // see that a formula's outermost operator is not an add/subtract.
+        Ast::Paren(inner) => eval_operand(inner, ctx),
         Ast::Unary(op, inner) => {
             let v = eval(inner, ctx);
             Operand::Value(match op {
@@ -252,7 +304,7 @@ pub fn powf(x: f64, y: f64) -> f64 {
 }
 
 /// Natural log by argument reduction to [1, 2) plus an atanh series.
-fn ln(mut x: f64) -> f64 {
+pub(crate) fn ln(mut x: f64) -> f64 {
     if x <= 0.0 {
         return f64::NAN;
     }
@@ -280,7 +332,7 @@ fn ln(mut x: f64) -> f64 {
 }
 
 /// `e^x` by range reduction plus a Taylor series.
-fn exp(x: f64) -> f64 {
+pub(crate) fn exp(x: f64) -> f64 {
     if x > 709.0 {
         return f64::INFINITY;
     }

@@ -9,16 +9,19 @@
 //! pure view concern), and volatiles are injected rather than read from a clock.
 //!
 //! Conformance is oracle-captured from real Excel (ADR-024) — the binary is the
-//! spec, not the documentation. That harness does not exist yet (A-007), so the
-//! vectors in `tests/formulas.rs` encode documented behaviour and are marked as
-//! such. Where this engine deliberately diverges, `Profile::Strict` is the
+//! spec, not the documentation. **That harness now exists** (A-007 closed):
+//! 1,366 vectors in `tools/oracle-capture/`, scored by `tools/conformance` as
+//! workload W-ORACLE. The vectors in `tests/formulas.rs` still encode
+//! *documented* behaviour and are still marked as such; where the two
+//! disagree, the oracle wins and the divergence is a debt entry, not an
+//! opinion. Where this engine deliberately diverges, `Profile::Strict` is the
 //! divergence and `Profile::Compat` reproduces Excel.
 
 use crate::eval::{eval, eval_operand, to_text, Context, Grid, Operand};
 use crate::parse::Ast;
 use alloc::string::String;
 use alloc::vec::Vec;
-use usk_types::coerce::{arith, Profile};
+use usk_types::coerce::{arith, compat_final_adjust, Profile};
 use usk_types::{ArithOp, CellError, Decimal, ErrorKind, Origin, Value};
 
 /// Every function this build knows. Used by the catalogue-size test and by
@@ -96,6 +99,14 @@ pub const CATALOGUE: &[&str] = &[
     "MONTH",
     "DAY",
     "WEEKDAY",
+    // Added at the first conformance run (W-ORACLE), each because the oracle
+    // corpus measured it as a `#NAME?` divergence.
+    "EXP",
+    "LN",
+    "UNICHAR",
+    "CHAR",
+    "UNICODE",
+    "CODE",
 ];
 
 fn err(kind: ErrorKind) -> Operand {
@@ -252,6 +263,38 @@ pub fn call<G: Grid>(name: &str, args: &[Ast], ctx: &Context<G>) -> Operand {
         "DAY" => date_part(&ops, ctx, |_, _, d| d as f64),
         "WEEKDAY" => f_weekday(&ops, ctx),
 
+        // Added at the first conformance run: each was a measured `#NAME?`
+        // against the oracle corpus, not a guess about what users might want.
+        // `UNICHAR`/`UNICODE` alone accounted for 41 divergences, mostly
+        // because the capture grids build every non-ASCII input with them
+        // (docs/50 §Grids).
+        "EXP" => unary_num(&ops, ctx, |x| Some(crate::eval::exp(x))),
+        "LN" => unary_num(&ops, ctx, |x| {
+            if x > 0.0 {
+                Some(crate::eval::ln(x))
+            } else {
+                None
+            }
+        }),
+        "UNICHAR" | "CHAR" => match num_arg(&ops, 0, ctx) {
+            // Excel refuses 0 and anything outside the scalar range. A
+            // surrogate is not a scalar, so `char::from_u32` refusing it is
+            // the right answer rather than an accident (docs/50 finding 5).
+            Ok(n) if n >= 1.0 => match char::from_u32(n as u32) {
+                Some(c) => val(Value::Text(String::from(c))),
+                None => err(ErrorKind::Value),
+            },
+            Ok(_) => err(ErrorKind::Value),
+            Err(e) => val(Value::Error(e)),
+        },
+        "UNICODE" | "CODE" => match text_arg(&ops, 0, ctx) {
+            Ok(s) => match s.chars().next() {
+                Some(c) => num(c as u32 as f64),
+                None => err(ErrorKind::Value),
+            },
+            Err(e) => val(Value::Error(e)),
+        },
+
         _ => err(ErrorKind::Name),
     }
 }
@@ -332,6 +375,15 @@ fn sqrt(x: f64) -> f64 {
     g
 }
 
+/// Truncation toward zero. `f64::trunc` is `std`; DP-A3 keeps it out.
+fn trunc(x: f64) -> f64 {
+    if x < 0.0 {
+        ceil(x)
+    } else {
+        floor(x)
+    }
+}
+
 fn floor(x: f64) -> f64 {
     let t = (x as i64) as f64;
     if x < 0.0 && t != x {
@@ -345,19 +397,10 @@ fn ceil(x: f64) -> f64 {
     -floor(-x)
 }
 
-fn pow10f(n: i32) -> f64 {
-    let mut acc = 1.0f64;
-    let mut k = n;
-    while k > 0 {
-        acc *= 10.0;
-        k -= 1;
-    }
-    while k < 0 {
-        acc /= 10.0;
-        k += 1;
-    }
-    acc
-}
+// `pow10f` was `ROUND`'s scaling factor and is gone with it: scaling a float
+// by a power of ten is exactly what made `ROUND(2.675,2)` return 2.67 where
+// Excel says 2.68 (docs/50 §7). Rounding now happens in the decimal domain —
+// see `round_decimal`.
 
 // --------------------------------------------------------- aggregation
 
@@ -396,17 +439,51 @@ fn f_sum<G: Grid>(ops: &[Operand], ctx: &Context<G>) -> Operand {
         None => {
             // The exact path was abandoned partway, so re-sum in the float
             // domain rather than combining two accumulators.
-            let mut total = 0.0;
-            for c in &cells {
-                match ctx.profile.to_number(c) {
-                    Ok(n) => total += n,
-                    Err(e) => return val(Value::Error(e)),
-                }
-            }
             let _ = float;
-            num(total)
+            match float_sum(&cells, ctx) {
+                Ok(total) => num(total),
+                Err(e) => val(e),
+            }
         }
     }
+}
+
+/// Accumulates in the float domain with Excel's **unconditional** cancellation
+/// adjustment applied at every step.
+///
+/// docs/50 finding 2b, and the finding most likely to be missed: the `+`/`-`
+/// operators adjust *positionally* (only at a formula's top level) but the
+/// accumulating aggregates adjust *unconditionally*, so their zero survives
+/// nesting. `=1/SUM(A1,7*2^-52,-A1)` is `#DIV/0!` while
+/// `=1/(A1+7*2^-52-A1)` keeps the full residue. Reproducing only the
+/// positional rule leaves `SUM` wrong in every nested position.
+///
+/// Applying it **per step** rather than once at the end is what reproduces the
+/// order sensitivity Excel shows: `SUM(A1,7*2^-52,-A1)` cancels on the last
+/// addition against an operand of magnitude 1 and is zeroed, while
+/// `SUM(A1,-A1,8*2^-52)` cancels first and its last addition has nothing left
+/// to cancel against, so the residue is kept.
+fn float_sum<G: Grid>(cells: &[Value], ctx: &Context<G>) -> Result<f64, Value> {
+    let mut total = 0.0f64;
+    for c in cells {
+        match ctx.profile.to_number(c) {
+            Ok(n) => {
+                let magnitude = if total.abs() > n.abs() { total } else { n };
+                total = compat_final_adjust(&ctx.profile, total + n, magnitude);
+                // Excel reports overflow as `#NUM!`, not as an infinity —
+                // `=SUM(1E308,1E308)` (docs/50). An infinity leaking into a
+                // cell would then poison every formula reading it.
+                if !total.is_finite() {
+                    return Err(Value::Error(CellError::new(
+                        ErrorKind::Num,
+                        Origin::Arithmetic { op: ArithOp::Add },
+                    )));
+                }
+            }
+            Err(e) => return Err(Value::Error(e)),
+        }
+    }
+    Ok(total)
 }
 
 fn f_product<G: Grid>(ops: &[Operand], ctx: &Context<G>) -> Operand {
@@ -509,7 +586,22 @@ fn f_mod<G: Grid>(ops: &[Operand], ctx: &Context<G>) -> Operand {
 fn f_power<G: Grid>(ops: &[Operand], ctx: &Context<G>) -> Operand {
     match (num_arg(ops, 0, ctx), num_arg(ops, 1, ctx)) {
         (Ok(x), Ok(y)) => {
-            let r = crate::eval::powf(x, y);
+            // Two measured divergences from `powf`'s IEEE conventions
+            // (docs/50 §7), both `Profile::Compat` behaviour:
+            //   * `POWER(0,0)` is `#NUM!` in Excel, where IEEE says 1.
+            //   * `POWER(-8,1/3)` is `-1.9999999999999998` — Excel computes
+            //     odd roots of negative bases, where IEEE says NaN.
+            if x == 0.0 && y == 0.0 {
+                return err(ErrorKind::Num);
+            }
+            let r = if x < 0.0 && y != trunc(y) {
+                match odd_root(y) {
+                    Some(_) => -crate::eval::powf(-x, y),
+                    None => f64::NAN,
+                }
+            } else {
+                crate::eval::powf(x, y)
+            };
             if r.is_finite() {
                 num(r)
             } else {
@@ -517,6 +609,30 @@ fn f_power<G: Grid>(ops: &[Operand], ctx: &Context<G>) -> Operand {
             }
         }
         (Err(e), _) | (_, Err(e)) => val(Value::Error(e)),
+    }
+}
+
+/// `Some(n)` when `y` is (very nearly) `1/n` for an odd integer `n` — the
+/// exponents for which Excel returns a real odd root of a negative base.
+///
+/// The tolerance is unavoidable: `1/3` is not representable, so the exponent
+/// Excel is handed is `0.333...33` and an exact test would never fire. It is
+/// tight enough that no ordinary fractional exponent is captured by accident.
+fn odd_root(y: f64) -> Option<i64> {
+    if y == 0.0 {
+        return None;
+    }
+    let n = 1.0 / y;
+    let rounded = n + if n < 0.0 { -0.5 } else { 0.5 };
+    let rounded = rounded as i64;
+    if rounded % 2 == 0 || rounded == 0 {
+        return None;
+    }
+    let back = 1.0 / rounded as f64;
+    if (back - y).abs() <= 1e-12 * y.abs() {
+        Some(rounded)
+    } else {
+        None
     }
 }
 
@@ -531,34 +647,93 @@ fn f_round<G: Grid>(ops: &[Operand], ctx: &Context<G>, mode: Rounding) -> Operan
         (Ok(x), Ok(d)) => (x, d as i32),
         (Err(e), _) | (_, Err(e)) => return val(Value::Error(e)),
     };
-    let scale = pow10f(digits);
-    let scaled = x * scale;
+    match round_decimal(x, digits, mode) {
+        Some(r) => num(r),
+        None => err(ErrorKind::Num),
+    }
+}
+
+/// Rounds in the **decimal** domain, on the 15-significant-digit rendering.
+///
+/// The obvious implementation — `floor(x * 10^d + 0.5) / 10^d` — is what this
+/// replaced, and the oracle caught it: `2.675 * 100` is `267.49999999999997`,
+/// so `ROUND(2.675,2)` came out `2.67` where Excel says `2.68` (docs/50 §7).
+/// The multiply loses the very digit being asked about.
+///
+/// Excel rounds the number *as displayed to 15 significant digits*, so this
+/// renders through `core`'s float formatter — pure Rust, locale-free, and
+/// identical on every target, the same property `compat_round_15` relies on
+/// (DP-A2) — and then rounds exact base-10 integers. No float arithmetic
+/// touches the decision.
+fn round_decimal(x: f64, digits: i32, mode: Rounding) -> Option<f64> {
+    if !x.is_finite() {
+        return None;
+    }
+    if x == 0.0 {
+        return Some(0.0);
+    }
+    // "d.dddddddddddddde±dd" — one digit before the point, fourteen after,
+    // i.e. exactly the 15 significant digits Excel works from.
+    let rendered = alloc::format!("{x:.14e}");
+    let (mantissa, exponent) = rendered.split_once('e')?;
+    let exponent: i32 = exponent.parse().ok()?;
+    let negative = mantissa.starts_with('-');
+    let mut coefficient: i128 = 0;
+    for c in mantissa.chars().filter(char::is_ascii_digit) {
+        coefficient = coefficient.checked_mul(10)? + (c as u8 - b'0') as i128;
+    }
+    // value = coefficient × 10^scale, exactly.
+    let scale = exponent - 14;
+    let target = -digits;
+    let drop = target.checked_sub(scale)?;
+    if drop <= 0 {
+        // Already coarser than the requested precision: nothing to round.
+        return Some(x);
+    }
+    if drop > 40 {
+        // Everything rounds away; only the direction is in question.
+        return Some(match mode {
+            Rounding::Up if coefficient != 0 => {
+                let unit = decimal_to_f64(1, target)?;
+                if negative {
+                    -unit
+                } else {
+                    unit
+                }
+            }
+            _ => 0.0,
+        });
+    }
+    let divisor = pow10i(drop)?;
+    let quotient = coefficient / divisor;
+    let remainder = coefficient % divisor;
     let rounded = match mode {
-        // Excel rounds half *away from zero*, not half-even. Reproducing that
-        // is compatibility; the exact-decimal path is where half-even lives.
-        Rounding::Half => {
-            if scaled < 0.0 {
-                -floor(-scaled + 0.5)
-            } else {
-                floor(scaled + 0.5)
-            }
-        }
-        Rounding::Up => {
-            if scaled < 0.0 {
-                -ceil(-scaled)
-            } else {
-                ceil(scaled)
-            }
-        }
-        Rounding::Down => {
-            if scaled < 0.0 {
-                -floor(-scaled)
-            } else {
-                floor(scaled)
-            }
-        }
+        // Excel rounds half *away from zero*, not half-even. The magnitude is
+        // rounded and the sign reapplied, which is what "away from zero"
+        // means and what a signed division would get wrong.
+        Rounding::Half if remainder * 2 >= divisor => quotient + 1,
+        Rounding::Half => quotient,
+        Rounding::Up if remainder != 0 => quotient + 1,
+        Rounding::Up | Rounding::Down => quotient,
     };
-    num(rounded / scale)
+    let magnitude = decimal_to_f64(rounded, target)?;
+    Some(if negative { -magnitude } else { magnitude })
+}
+
+/// `coefficient × 10^exponent` as an `f64`, through `core`'s correctly-rounded
+/// parser rather than through a multiply that would round twice.
+fn decimal_to_f64(coefficient: i128, exponent: i32) -> Option<f64> {
+    alloc::format!("{coefficient}e{exponent}")
+        .parse::<f64>()
+        .ok()
+}
+
+fn pow10i(n: i32) -> Option<i128> {
+    let mut out: i128 = 1;
+    for _ in 0..n {
+        out = out.checked_mul(10)?;
+    }
+    Some(out)
 }
 
 fn f_step<G: Grid>(ops: &[Operand], ctx: &Context<G>, up: bool) -> Operand {
@@ -571,7 +746,10 @@ fn f_step<G: Grid>(ops: &[Operand], ctx: &Context<G>, up: bool) -> Operand {
         (Err(e), _) => return val(Value::Error(e)),
     };
     if step == 0.0 {
-        return num(0.0);
+        // docs/50 §7: Excel is asymmetric here. `CEILING(2.5,0)` is 0 and
+        // `FLOOR(2.5,0)` is `#DIV/0!`. Not a rule anyone would derive — it is
+        // measured, and the asymmetry is the point.
+        return if up { num(0.0) } else { err(ErrorKind::Div0) };
     }
     let q = x / step;
     num(step * if up { ceil(q) } else { floor(q) })
@@ -740,9 +918,14 @@ fn f_mid<G: Grid>(ops: &[Operand], ctx: &Context<G>) -> Operand {
 
 fn collapse_spaces(s: &str) -> String {
     // Excel's TRIM removes leading/trailing spaces and collapses internal runs.
+    // Only the ASCII space, deliberately. Rust's `str::trim` strips every
+    // Unicode whitespace scalar including U+00A0, and docs/50 §7 measured
+    // Excel *keeping* a non-breaking space: `LEN(TRIM(NBSP&"abc"&NBSP))` is 5,
+    // not 3. Web-pasted data is full of NBSP, so this is the common case, not
+    // an exotic one.
     let mut out = String::with_capacity(s.len());
     let mut last_space = false;
-    for c in s.trim().chars() {
+    for c in s.trim_matches(' ').chars() {
         if c == ' ' {
             if !last_space {
                 out.push(c);

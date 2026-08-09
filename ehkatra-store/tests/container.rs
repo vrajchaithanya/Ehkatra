@@ -360,6 +360,446 @@ fn compaction_writes_a_new_file_and_flushes_deferred_ops() {
     );
 }
 
+// ------------------------------------- DP-A5 forward preservation (TD-25)
+
+/// An op authored by a build one model version ahead of this one, arriving
+/// through the framed reader the wire and the container now share.
+fn op_from_the_future(counter: u64) -> Op {
+    let mut body = Vec::new();
+    body.extend_from_slice(&99u128.to_be_bytes());
+    body.extend_from_slice(&counter.to_be_bytes());
+    body.extend_from_slice(&(counter + 100).to_be_bytes());
+    body.push(0x5C); // a payload tag model version 1 does not define
+    body.extend_from_slice(b"something this build cannot read");
+    let mut framed = (body.len() as u32).to_be_bytes().to_vec();
+    framed.extend_from_slice(&body);
+    Op::decode_framed(&framed)
+        .expect("an unknown tag is preserved, not refused")
+        .0
+}
+
+/// **DP-A5 end to end.** An op this build cannot interpret is stored, snapshot,
+/// compacted, and read back — byte for byte, in causal order, still hashing to
+/// what its author computed. Before TD-25 the container had no per-op length,
+/// so an unknown tag ended the tail and took every op behind it.
+#[test]
+fn an_unknown_op_type_survives_the_whole_container_round_trip() {
+    let path = scratch("forward-preservation");
+    let mut log = workbook();
+    let future = op_from_the_future(1);
+    log.append(future.clone());
+    log.append(Op {
+        id: id(2, 3),
+        lamport: 200,
+        payload: Payload::SetCell {
+            row: RowId(id(1, 2)),
+            col: ColId(id(1, 3)),
+            value: Value::Number(7.0),
+        },
+    });
+    let expected_state = hash_of(&log);
+    let expected_log = log.canonical_hash();
+
+    let mut c = Container::open_or_create(&path).expect("create");
+    c.append_ops(log.ops(), 0).expect("append");
+    c.put_snapshot(&Snapshot::build(&log)).expect("snapshot");
+    c.maybe_commit(u64::MAX, true).expect("commit");
+    let mut doc = c.open_document().expect("open").doc;
+    c.compact(&mut doc, &log).expect("compact");
+    drop(doc);
+
+    let reopened = Container::open_or_create(&path).expect("reopen");
+    let opened = reopened.open_document().expect("open");
+    assert!(opened.salvaged.report.is_clean());
+
+    let recovered = opened
+        .ops()
+        .into_iter()
+        .find(|op| op.id == future.id)
+        .expect("the unknown op came back");
+    assert_eq!(recovered, future, "preserved verbatim");
+    assert_eq!(
+        recovered.encode(),
+        future.encode(),
+        "and re-encodes to the author's bytes, so it hashes opaque"
+    );
+    assert_eq!(
+        opened.log().canonical_hash(),
+        expected_log,
+        "the op set — including the op we cannot read — is unchanged"
+    );
+    assert_eq!(
+        hash_of(&opened.log()),
+        expected_state,
+        "and the ops behind it still mean what they meant"
+    );
+}
+
+// ------------------------------------------- docs/16 retention (TD-30)
+
+/// A history where **every** op contributes to the final state: each row is
+/// inserted after the previous one and gets its own cell. That matters more
+/// than it looks — a fixture that writes repeatedly to *one* cell makes losing
+/// an early op invisible to the state hash, so the retention tests below would
+/// pass while the container quietly threw history away.
+fn chain(rows: usize) -> OpLog {
+    let mut log = OpLog::new();
+    let c1 = id(7, 2);
+    log.append(Op {
+        id: id(7, 1),
+        lamport: 1,
+        payload: Payload::InsertRow {
+            anchor: Anchor::Start,
+        },
+    });
+    log.append(Op {
+        id: c1,
+        lamport: 2,
+        payload: Payload::InsertCol {
+            anchor: Anchor::Start,
+        },
+    });
+    let mut previous = id(7, 1);
+    let mut counter = 3u64;
+    for i in 0..rows {
+        let row = id(7, counter);
+        log.append(Op {
+            id: row,
+            lamport: counter,
+            payload: Payload::InsertRow {
+                anchor: Anchor::After(previous),
+            },
+        });
+        counter += 1;
+        log.append(Op {
+            id: id(7, counter),
+            lamport: counter,
+            payload: Payload::SetCell {
+                row: RowId(row),
+                col: ColId(c1),
+                value: Value::Number(i as f64 + 0.25),
+            },
+        });
+        counter += 1;
+        previous = row;
+    }
+    log
+}
+
+fn prefix(log: &OpLog, n: usize) -> OpLog {
+    let mut out = OpLog::new();
+    for op in log.ops().iter().take(n) {
+        out.append(op.clone());
+    }
+    out
+}
+
+/// Corrupts the newest `n` snapshot bodies by truncation — the shape a torn
+/// page leaves. Asserts the corruption actually took: a "corrupt" snapshot that
+/// still verifies would make every test below vacuous while looking green.
+fn corrupt_newest_snapshots(c: &Container, n: usize) {
+    let rowids: Vec<i64> = {
+        let mut stmt = c
+            .conn()
+            .prepare("SELECT rowid FROM snapshots ORDER BY created DESC, rowid DESC")
+            .expect("prepare");
+        let v = stmt
+            .query_map([], |r| r.get::<_, i64>(0))
+            .expect("query")
+            .map(|r| r.expect("row"))
+            .collect();
+        v
+    };
+    assert!(rowids.len() >= n, "asked to corrupt more than exist");
+    for &rowid in rowids.iter().take(n) {
+        let body: Vec<u8> = c
+            .conn()
+            .query_row(
+                "SELECT body FROM snapshots WHERE rowid = ?1",
+                rusqlite::params![rowid],
+                |r| r.get(0),
+            )
+            .expect("body");
+        let torn = body[..body.len() * 3 / 5].to_vec();
+        c.conn()
+            .execute(
+                "UPDATE snapshots SET body = ?1 WHERE rowid = ?2",
+                rusqlite::params![torn, rowid],
+            )
+            .expect("corrupt");
+    }
+    let broken = c
+        .snapshots()
+        .expect("snapshots")
+        .iter()
+        .take(n)
+        .filter(|s| s.verify().is_err())
+        .count();
+    assert_eq!(broken, n, "the corruption must actually break verification");
+}
+
+fn snapshot_count(c: &Container) -> i64 {
+    c.conn()
+        .query_row("SELECT count(*) FROM snapshots", [], |r| r.get(0))
+        .expect("count")
+}
+
+fn op_count(c: &Container) -> i64 {
+    c.conn()
+        .query_row("SELECT count(*) FROM ops", [], |r| r.get(0))
+        .expect("count")
+}
+
+/// Builds a container holding the full history and three snapshots at
+/// increasing watermarks — the state every retention test starts from.
+fn container_with_three_snapshots(name: &str, full: &OpLog) -> (PathBuf, Container) {
+    let path = scratch(name);
+    let mut c = Container::open_or_create(&path).expect("create");
+    c.append_ops(full.ops(), 0).expect("append");
+    for cut in [10usize, 20, 30] {
+        c.put_snapshot(&Snapshot::build(&prefix(full, cut)))
+            .expect("snapshot");
+    }
+    c.maybe_commit(u64::MAX, true).expect("commit");
+    (path, c)
+}
+
+/// docs/16 §Retention: the chain is capped at three, and capping it touches
+/// snapshots only — every op is still present afterwards.
+#[test]
+fn the_snapshot_chain_is_trimmed_to_three_and_never_costs_an_op() {
+    let full = chain(20);
+    let path = scratch("retention-trim");
+    let mut c = Container::open_or_create(&path).expect("create");
+    c.append_ops(full.ops(), 0).expect("append");
+    for cut in [5usize, 10, 15, 20, 25] {
+        c.put_snapshot(&Snapshot::build(&prefix(&full, cut)))
+            .expect("snapshot");
+    }
+    assert_eq!(snapshot_count(&c), 3, "docs/16: keep the last 3 snapshots");
+    assert_eq!(
+        op_count(&c) as usize,
+        full.ops().len(),
+        "trimming the chain must not touch ops"
+    );
+
+    // The three kept are the three newest.
+    let kept: Vec<usize> = c
+        .snapshots()
+        .expect("snapshots")
+        .iter()
+        .map(|s| s.verify().expect("verifies").ops().len())
+        .collect();
+    assert_eq!(kept, vec![25, 20, 15], "newest first");
+}
+
+/// docs/16 §Retention consequence 2: the op floor is the **oldest** retained
+/// snapshot, so the compacted file carries every op since it.
+#[test]
+fn compaction_keeps_three_snapshots_and_every_op_since_the_oldest() {
+    let full = chain(20);
+    let (path, mut c) = container_with_three_snapshots("retention-compact", &full);
+
+    let mut doc = c.open_document().expect("open").doc;
+    let report = c.compact(&mut doc, &full).expect("compact");
+
+    assert_eq!(report.snapshots_retained, 3);
+    // Chain after compaction: [full, prefix30, prefix20]. The floor is
+    // prefix20, so exactly its 20 ops may go and the rest must stay.
+    assert_eq!(report.ops_pruned, 20);
+    assert_eq!(report.ops_kept, full.ops().len() - 20);
+
+    let reopened = Container::open_or_create(&path).expect("reopen");
+    assert_eq!(snapshot_count(&reopened), 3);
+    assert_eq!(op_count(&reopened) as usize, full.ops().len() - 20);
+    let opened = reopened.open_document().expect("open");
+    assert_eq!(
+        hash_of(&opened.log()),
+        hash_of(&full),
+        "compaction must not change what the workbook is"
+    );
+    assert!(opened.salvaged.report.is_clean());
+}
+
+/// **The TD-30 regression, stated directly.** Corrupt every snapshot but the
+/// oldest and the workbook must still come back whole — that is what "the last
+/// *valid* snapshot" means, and it is only true because the ops since the
+/// oldest snapshot were retained rather than pruned to the newest.
+#[test]
+fn corrupting_every_snapshot_but_the_oldest_still_recovers_every_op() {
+    let full = chain(20);
+    let expected = hash_of(&full);
+    let (path, mut c) = container_with_three_snapshots("retention-all-but-one", &full);
+
+    let mut doc = c.open_document().expect("open").doc;
+    c.compact(&mut doc, &full).expect("compact");
+    drop(doc);
+
+    let c = Container::open_or_create(&path).expect("reopen");
+    corrupt_newest_snapshots(&c, 2);
+
+    let opened = c.open_document().expect("open");
+    assert_eq!(
+        hash_of(&opened.log()),
+        expected,
+        "falling back to the oldest snapshot must lose nothing"
+    );
+    assert_eq!(opened.ops().len(), full.ops().len());
+    assert_eq!(opened.salvaged.report.snapshots_rejected, 2);
+    assert!(
+        !opened.salvaged.report.lost_data(),
+        "an older-but-valid snapshot loses nothing: {:?}",
+        opened.salvaged.report
+    );
+    assert!(
+        !opened.salvaged.report.is_clean(),
+        "and the user is still told, because two saves were unreadable"
+    );
+}
+
+/// Ops are the truth. With every snapshot destroyed and no compaction having
+/// pruned anything, the workbook rebuilds from the op tail alone — bit for bit.
+#[test]
+fn corrupting_all_snapshots_rebuilds_from_the_full_op_tail() {
+    let full = chain(20);
+    let expected = hash_of(&full);
+    let (path, c) = container_with_three_snapshots("retention-all-corrupt", &full);
+    drop(c);
+
+    let c = Container::open_or_create(&path).expect("reopen");
+    corrupt_newest_snapshots(&c, 3);
+
+    let opened = c.open_document().expect("open");
+    assert_eq!(
+        hash_of(&opened.log()),
+        expected,
+        "the op log alone rebuilds the workbook"
+    );
+    assert_eq!(opened.ops().len(), full.ops().len());
+    assert_eq!(opened.salvaged.report.snapshots_rejected, 3);
+    assert!(opened.salvaged.snapshot.is_none());
+    assert!(
+        opened.salvaged.report.lost_data(),
+        "every save the user thought they had is gone, and they must be told"
+    );
+}
+
+/// docs/16 §Retention consequence 4: the **first** compaction has one snapshot,
+/// so it prunes nothing. This is the exact state W-OPEN-1M found catastrophic —
+/// one snapshot, no tail — and it is now unreachable.
+#[test]
+fn a_first_compaction_prunes_no_ops_and_survives_losing_its_only_snapshot() {
+    let full = chain(12);
+    let expected = hash_of(&full);
+    let path = scratch("retention-first-compaction");
+
+    let mut c = Container::open_or_create(&path).expect("create");
+    c.append_ops(full.ops(), 0).expect("append");
+    c.maybe_commit(u64::MAX, true).expect("commit");
+    let mut doc = c.open_document().expect("open").doc;
+    let report = c.compact(&mut doc, &full).expect("compact");
+    drop(doc);
+
+    assert_eq!(report.snapshots_retained, 1);
+    assert_eq!(
+        report.ops_pruned, 0,
+        "one snapshot is not a fallback, so it authorises no deletion"
+    );
+
+    let c = Container::open_or_create(&path).expect("reopen");
+    corrupt_newest_snapshots(&c, 1);
+    let opened = c.open_document().expect("open");
+    assert_eq!(
+        hash_of(&opened.log()),
+        expected,
+        "the failure TD-30 was filed for: a single corrupt snapshot losing everything"
+    );
+}
+
+/// docs/16 §Retention consequence 3: a snapshot that cannot prove what it
+/// contains may not authorise deleting it. Corrupt the oldest of the three
+/// *before* compacting, and the floor drops to the oldest one that verifies.
+#[test]
+fn a_corrupt_floor_snapshot_authorises_no_deletion() {
+    let full = chain(20);
+    let expected = hash_of(&full);
+    let (path, mut c) = container_with_three_snapshots("retention-corrupt-floor", &full);
+
+    // Break the snapshot that would become the floor. Compaction retains
+    // [full, prefix-30, prefix-20], so the floor is prefix-20 — the
+    // second-oldest of the three already stored, not the oldest, because the
+    // oldest falls out of the chain when the fresh snapshot joins it.
+    let oldest: i64 = c
+        .conn()
+        .query_row(
+            "SELECT rowid FROM snapshots ORDER BY created ASC, rowid ASC LIMIT 1 OFFSET 1",
+            [],
+            |r| r.get(0),
+        )
+        .expect("floor-to-be");
+    let body: Vec<u8> = c
+        .conn()
+        .query_row(
+            "SELECT body FROM snapshots WHERE rowid = ?1",
+            rusqlite::params![oldest],
+            |r| r.get(0),
+        )
+        .expect("body");
+    c.conn()
+        .execute(
+            "UPDATE snapshots SET body = ?1 WHERE rowid = ?2",
+            rusqlite::params![body[..body.len() / 2].to_vec(), oldest],
+        )
+        .expect("corrupt");
+
+    let mut doc = c.open_document().expect("open").doc;
+    let report = c.compact(&mut doc, &full).expect("compact");
+    drop(doc);
+
+    // Chain is [full, prefix30, prefix20-broken]; the floor falls to prefix30.
+    assert_eq!(report.snapshots_retained, 3);
+    assert_eq!(
+        report.ops_pruned, 30,
+        "the broken snapshot's coverage is not deletable; the next one's is"
+    );
+
+    let reopened = Container::open_or_create(&path).expect("reopen");
+    let opened = reopened.open_document().expect("open");
+    assert_eq!(hash_of(&opened.log()), expected);
+}
+
+/// The honest boundary of the policy, recorded rather than smoothed. Once
+/// compaction has pruned, losing **all three** snapshots does lose the ops the
+/// floor had absorbed — and docs/16 forbids letting the user believe otherwise.
+#[test]
+fn total_snapshot_loss_after_pruning_is_reported_rather_than_hidden() {
+    let full = chain(20);
+    let (path, mut c) = container_with_three_snapshots("retention-total-loss", &full);
+    let mut doc = c.open_document().expect("open").doc;
+    c.compact(&mut doc, &full).expect("compact");
+    drop(doc);
+
+    let c = Container::open_or_create(&path).expect("reopen");
+    corrupt_newest_snapshots(&c, 3);
+    let opened = c.open_document().expect("open");
+
+    assert!(opened.salvaged.snapshot.is_none());
+    assert!(
+        opened.salvaged.report.lost_data(),
+        "silent partial restore is forbidden"
+    );
+    assert_eq!(
+        opened.ops().len(),
+        full.ops().len() - 20,
+        "what survives is exactly the retained tail, and it is not the whole workbook"
+    );
+    assert_ne!(
+        hash_of(&opened.log()),
+        hash_of(&full),
+        "and the difference is real, which is why the report must say so"
+    );
+}
+
 // --------------------------------------------------------------- migration
 
 /// docs/26's strongest migration test, and it is free because of DP-A2: a

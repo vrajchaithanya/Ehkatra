@@ -1,0 +1,9 @@
+[package]
+name = "usk-csv"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+usk-types = { path = "../usk-types" }

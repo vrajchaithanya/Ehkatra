@@ -3,7 +3,7 @@
 //! replays it, and prints the canonical state hash. CI runs this binary on
 //! native AND wasm32; the printed hashes MUST be identical.
 
-use usk_oplog::{Anchor, Op, OpLog, Payload, RangeBinding};
+use usk_oplog::{Anchor, Op, OpLog, OpaqueOp, Payload, RangeBinding};
 use usk_state::State;
 use usk_types::{ActorId, ColId, Decimal, OpId, RowId, Value};
 
@@ -71,6 +71,18 @@ fn main() {
                 let c = deleted_cols[(rand() as usize) % deleted_cols.len()];
                 Payload::UndeleteCol { col: ColId(c) }
             }
+            // DP-A5 forward preservation, in the gate (TD-25). An op tag this
+            // build does not know must hash and retransmit identically on every
+            // target, and docs/29 is explicit that a payload variant absent
+            // from this generator is a variant the determinism gate does not
+            // cover — session 9 found four such variants the hard way.
+            10 => match OpaqueOp::new(0x19 + (rand() % 16) as u8, opaque_body(rand())) {
+                Some(o) => Payload::Opaque(o),
+                // Unreachable: 0x19..=0x28 are outside model version 1's
+                // taxonomy by construction. A fallback rather than an unwrap,
+                // because DP-C1 has no exception for "obviously fine".
+                None => Payload::UndeleteRow { row: RowId(id) },
+            },
             7 if !rows.is_empty() && !cols.is_empty() => {
                 let r = rows[(rand() as usize) % rows.len()];
                 let c = cols[(rand() as usize) % cols.len()];
@@ -145,4 +157,13 @@ fn alloc_text(n: u64) -> String {
 
 fn alloc_formula(n: u64) -> String {
     format!("=SUM(A1:B{})+{}", n % 97 + 1, n % 13)
+}
+
+/// A deterministic body for a preserved-opaque op — bytes this build has no
+/// interpretation for, which is exactly the point.
+fn opaque_body(n: u64) -> Vec<u8> {
+    let len = 4 + (n % 12) as usize;
+    (0..len)
+        .map(|k| (n.wrapping_mul(k as u64 + 1) & 0xFF) as u8)
+        .collect()
 }

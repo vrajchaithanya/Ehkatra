@@ -2,24 +2,29 @@
 //! (docs/16, docs/26).
 //!
 //! # What a v0.1 snapshot is
-//! The compacted op set, in canonical total order, concatenated in the same
-//! canonical encoding the wire and the container use — plus the state hash that
-//! op set must produce. Nothing new is invented: docs/26 says "the payload
-//! column stores the *identical bytes* that were hashed — the file IS the wire
-//! format at rest", and this takes that literally for the snapshot body too.
+//! The compacted op set, in canonical total order, framed in the same encoding
+//! the wire and the container use — plus the state hash that op set must
+//! produce.
 //!
-//! A tile image (docs/16's "structurally shared via tile Merkle identity") is
-//! the Row-12+ body format. Swapping it in changes [`Snapshot::body`] and
-//! nothing else, because every caller here goes through `verify`.
+//! docs/16 and docs/26 both specify a **tile image** instead, and
+//! `usk_state::image` now builds one (D-101). It is not wired in here, and the
+//! reason is recorded rather than left as an omission: an image throws away op
+//! ids, and a summary tile is correct *only* because ops arrive in canonical
+//! total order. Applying a tail onto an adopted image is therefore sound only
+//! while the tail is entirely canonically after it, and — the part that blocks
+//! it — a cell first written inside the image and rewritten by the tail loses
+//! the identity of its retained loser, which ADR-006 and DP-A8 promise to keep.
+//! Fixing that needs per-cell stamps for present cells, which is the memory
+//! cost TD-09 removed. See TD-46.
 //!
 //! # Why verification is a replay, not a checksum
 //! docs/26 requires `state_hash` to be checked on load, and docs/16 forbids
-//! silent partial restore. A checksum over the bytes only proves the bytes
-//! survived; replaying them and comparing `State::state_hash()` proves the
-//! bytes still *mean* what they meant. That is the stronger check, and DP-A2
-//! makes it free — the same op set produces the same hash on every platform
-//! forever. It is also what makes docs/26's migration rule executable: a
-//! migration that changes the state hash is by definition wrong.
+//! silent partial restore. A checksum over the bytes proves only that the bytes
+//! survived; rebuilding the state from them and recomputing
+//! `State::state_hash()` proves the bytes still *mean* what they meant. DP-A2
+//! makes that free — the same state produces the same hash on every platform
+//! forever — and it keeps docs/26's migration rule executable: a migration that
+//! changes the state hash is by definition wrong.
 
 use alloc::vec::Vec;
 use usk_oplog::{DecodeError, Op, OpLog};
@@ -28,6 +33,15 @@ use usk_types::{ActorId, Counter};
 
 /// A vector-clock watermark: sorted `(actor, max counter)` pairs, canonical
 /// encoding (docs/26 §Identity encodings).
+///
+/// # What it deliberately does not answer
+/// "Does this snapshot contain op X?" — because `counter <= max` is exact only
+/// while an actor's counters are dense, and a replica mid-sync legitimately
+/// holds `{A:1, A:3}` with `A:2` still in the causal buffer. Callers that need
+/// membership use the snapshot's own op ids. Recording the gaps would make the
+/// watermark exact, and was tried and reverted with the tile-image wiring
+/// (D-101): the stored encoding has no room for them, so a watermark read back
+/// off disk would never match one built in memory.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct Watermark {
     entries: Vec<(ActorId, Counter)>,
@@ -89,7 +103,7 @@ pub struct Snapshot {
     pub watermark: Watermark,
     /// `snapshots.state_hash` — BLAKE3, verified on load.
     pub state_hash: [u8; 32],
-    /// `snapshots.body` — canonical op bytes (zstd is a container concern).
+    /// `snapshots.body` — canonical op bytes (the tile image is TD-46).
     pub body: Vec<u8>,
 }
 
@@ -116,7 +130,10 @@ impl Snapshot {
         ops.sort_by_key(|o| (o.lamport, o.id.actor, o.id.counter));
         let mut body = Vec::new();
         for op in &ops {
-            body.extend_from_slice(&op.encode());
+            // Framed (TD-25): the same `u32` prefix the wire uses, so an op
+            // this build cannot read still has a knowable extent and survives a
+            // snapshot round trip (DP-A5).
+            body.extend_from_slice(&op.encode_framed());
         }
         let owned: Vec<Op> = ops.into_iter().cloned().collect();
         Snapshot {
@@ -139,7 +156,7 @@ impl Snapshot {
         let mut ops = Vec::new();
         let mut at = 0usize;
         while at < self.body.len() {
-            match Op::decode(&self.body[at..]) {
+            match Op::decode_framed(&self.body[at..]) {
                 Ok((op, used)) => {
                     at += used;
                     ops.push(op);
@@ -157,8 +174,7 @@ impl Snapshot {
     /// The returned [`VerifiedSnapshot`] is the *only* way to reach READY in
     /// the lifecycle machine, so docs/27's forbidden "opening READY without
     /// hash-verifying the loaded snapshot" is structurally unreachable rather
-    /// than checked at runtime — the same technique the undo machine's
-    /// forbidden transitions use (D-060).
+    /// than checked at runtime (D-060).
     pub fn verify(&self) -> Result<VerifiedSnapshot, SnapshotFault> {
         let ops = self.decode_body()?;
         let mut log = OpLog::new();

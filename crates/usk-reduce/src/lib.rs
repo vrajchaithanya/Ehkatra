@@ -362,7 +362,7 @@ fn collect_refs(ast: &Ast, out: &mut Vec<(A1, A1)>) {
                 collect_refs(a, out);
             }
         }
-        Ast::Unary(_, inner) | Ast::Percent(inner) => collect_refs(inner, out),
+        Ast::Unary(_, inner) | Ast::Percent(inner) | Ast::Paren(inner) => collect_refs(inner, out),
         Ast::Binary(_, l, r) => {
             collect_refs(l, out);
             collect_refs(r, out);

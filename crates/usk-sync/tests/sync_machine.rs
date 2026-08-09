@@ -590,3 +590,61 @@ fn an_unknown_anchor_is_a_causal_gap_not_a_validation_failure() {
     assert!(rejections(&a).is_empty());
     assert_eq!(applied(&a).len(), 1);
 }
+
+// ------------------------------------- DP-A5 forward preservation (TD-25)
+
+/// An op from a peer running a newer model version: a payload tag we do not
+/// know, arriving through the framed reader.
+fn op_from_the_future(actor: u128, counter: u64, body: &[u8]) -> Op {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&actor.to_be_bytes());
+    bytes.extend_from_slice(&counter.to_be_bytes());
+    bytes.extend_from_slice(&counter.to_be_bytes());
+    bytes.push(0x3D); // outside model version 1's taxonomy
+    bytes.extend_from_slice(body);
+    let mut framed = (bytes.len() as u32).to_be_bytes().to_vec();
+    framed.extend_from_slice(&bytes);
+    usk_oplog::Op::decode_framed(&framed)
+        .expect("preserved, not refused")
+        .0
+}
+
+/// **DP-A5 across the boundary docs/37 calls "a permitted collaborator is still
+/// an untrusted input source".** An op we cannot interpret is *accepted* —
+/// validated, applied (to nothing), and retransmitted — not quarantined.
+/// Quarantining it would make every version skew look like an attack.
+#[test]
+fn an_op_type_we_do_not_know_is_preserved_rather_than_quarantined() {
+    let mut s = connected(1);
+    let future = op_from_the_future(2, 1, b"payload from a newer build");
+    let a = s.step(Event::RemoteOps(vec![future.clone()]));
+    assert!(
+        rejections(&a).is_empty(),
+        "version skew is not hostility: {:?}",
+        rejections(&a)
+    );
+    let applied = applied(&a);
+    assert_eq!(applied, vec![future.clone()]);
+    assert_eq!(
+        applied[0].encode(),
+        future.encode(),
+        "and it crosses the boundary byte-exact, so it can be retransmitted"
+    );
+    assert_eq!(*s.state(), SyncState::Live);
+}
+
+/// Preservation is not a hole in admission control: an opaque body is still
+/// untrusted input and still bounded (docs/37 boundary 2).
+#[test]
+fn an_oversized_opaque_op_is_still_refused() {
+    let mut s = connected(1);
+    let huge = vec![0u8; usk_sync::validate::MAX_OPAQUE_BYTES + 1];
+    let a = s.step(Event::RemoteOps(vec![op_from_the_future(2, 1, &huge)]));
+    assert_eq!(rejections(&a), vec![RejectReason::OpaqueTooLong]);
+    assert!(applied(&a).is_empty());
+    assert_eq!(
+        *s.state(),
+        SyncState::Live,
+        "one refused op must not cost the collaborator their session"
+    );
+}

@@ -76,9 +76,13 @@ pub fn state_hash(conn: &Connection) -> Result<[u8; 32], StoreError> {
     let mut log = OpLog::new();
     for (i, row) in rows.enumerate() {
         let payload = row?;
-        match Op::decode(&payload) {
-            Ok((op, used)) if used == payload.len() => log.append(op),
-            _ => return Err(StoreError::CorruptOp { at: i }),
+        // `decode_exact`: the column supplies the extent, so an op tag this
+        // build does not know is preserved opaquely rather than declared
+        // corrupt (DP-A5, TD-25). A migration must not lose a newer build's
+        // ops, and before this it would have refused to open the file at all.
+        match Op::decode_exact(&payload) {
+            Ok(op) => log.append(op),
+            Err(_) => return Err(StoreError::CorruptOp { at: i }),
         }
     }
     Ok(*State::replay(&log).state_hash().as_bytes())

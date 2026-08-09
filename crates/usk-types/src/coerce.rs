@@ -242,21 +242,72 @@ pub fn compat_round_15(v: f64) -> f64 {
 /// value. This is why it cannot live inside [`compat_round_15`], which sees
 /// only a result.
 ///
-/// **Evidence status:** the threshold below is Excel's *documented* behaviour,
-/// not oracle-captured. docs/32 is explicit that the documentation lies and the
-/// binary does not, and the COM capture harness (ADR-024, assumption A-007) is
-/// not built yet. Treat the exact boundary as unvalidated until the oracle
-/// corpus confirms it; the *shape* of the rule is not in doubt.
+/// **Evidence status: oracle-captured** (docs/50 finding 1; TD-13 closed).
+/// The threshold is **8 ULP of the larger operand**, strict — measured over 28
+/// decade-sweep points and 20 paired binade probes against Excel 16.0 build
+/// 20228. The `1e-15` *relative* threshold this function used to carry was not
+/// merely imprecise, it was unable to reproduce the data: inside a binade a
+/// fixed ULP count has a relative residue that halves from bottom to top, so
+/// the two candidate rules cross over — operand 1.0 at 7 ULP is zeroed with a
+/// relative residue of 1.554e-15 while operand 1.9 at 8 ULP is *kept* with
+/// 9.35e-16. See D-041 as amended.
+///
+/// The rule: with `e = floor(log2(operand_magnitude))`, zero the result iff
+/// `|result| < 8 * 2^(e-52)` = `2^(e-49)`. Equivalently, zero when the top 49
+/// bits of significance cancelled. Strict, so exactly 8 ULP survives.
+///
+/// **There are two activation conditions and this function implements
+/// neither** — it is the shared predicate. `+`/`-` apply it *positionally* to a
+/// formula's top-level result ([`usk_formula::eval::eval_top`]); `SUM`/`AVERAGE`
+/// apply it *unconditionally* at every accumulation step, which is why their
+/// zero survives nesting where the operator's does not. An engine with only the
+/// first is wrong for `SUM` in every nested position (docs/50 finding 2b).
 pub fn compat_final_adjust(profile: &Profile, result: f64, operand_magnitude: f64) -> f64 {
     if !matches!(profile, Profile::Compat) {
         return result;
     }
-    if result == 0.0 || operand_magnitude == 0.0 || !result.is_finite() {
+    if result == 0.0 || !result.is_finite() {
         return result;
     }
-    if (result.abs() / operand_magnitude.abs()) < 1e-15 {
-        0.0
-    } else {
-        result
+    let magnitude = operand_magnitude.abs();
+    if magnitude == 0.0 || !magnitude.is_finite() {
+        return result;
     }
+    match binade_exponent(magnitude) {
+        // 8 ULP = 8 * 2^(e-52) = 2^(e-49), built by halving a power of two so
+        // it stays exact into the subnormal range rather than rounding once.
+        Some(e) if result.abs() < scale_pow2(e, 49) => 0.0,
+        _ => result,
+    }
+}
+
+/// `floor(log2(|v|))` read straight off the IEEE-754 bits.
+///
+/// `f64::log2` is `std` and DP-A3 keeps it out of the kernel — but the better
+/// reason is that a bit read is exact where a logarithm is not, and this
+/// function decides whether a user's number becomes zero.
+fn binade_exponent(v: f64) -> Option<i32> {
+    let bits = v.to_bits();
+    let raw = ((bits >> 52) & 0x7FF) as i32;
+    let mantissa = bits & 0x000F_FFFF_FFFF_FFFF;
+    match raw {
+        0x7FF => None,
+        // Subnormal: the leading 1 sits at the highest set mantissa bit.
+        0 if mantissa == 0 => None,
+        0 => Some(-1022 - (52 - (63 - mantissa.leading_zeros() as i32))),
+        _ => Some(raw - 1023),
+    }
+}
+
+/// `2^e` halved `halvings` times.
+fn scale_pow2(e: i32, halvings: u32) -> f64 {
+    let mut value = if (-1022..=1023).contains(&e) {
+        f64::from_bits(((e + 1023) as u64) << 52)
+    } else {
+        return 0.0;
+    };
+    for _ in 0..halvings {
+        value *= 0.5;
+    }
+    value
 }

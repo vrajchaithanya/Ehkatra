@@ -254,6 +254,10 @@ impl Engine {
                 | Payload::DeleteCol { .. }
                 | Payload::UndeleteRow { .. }
                 | Payload::UndeleteCol { .. } => structural = true,
+                // An opaque op (DP-A5) changed no state, so it dirties nothing.
+                // Treating it as structural would let an op this build cannot
+                // read force a full regroup on every arrival.
+                Payload::Opaque(_) => {}
             }
         }
 
@@ -814,7 +818,7 @@ fn collect_reads(ast: &Ast, out: &mut Vec<Rect>) {
                 collect_reads(a, out);
             }
         }
-        Ast::Unary(_, inner) | Ast::Percent(inner) => collect_reads(inner, out),
+        Ast::Unary(_, inner) | Ast::Percent(inner) | Ast::Paren(inner) => collect_reads(inner, out),
         Ast::Binary(_, l, r) => {
             collect_reads(l, out);
             collect_reads(r, out);
@@ -872,6 +876,15 @@ fn write_r1c1(ast: &Ast, ar: u32, ac: u32, out: &mut String) {
         Ast::Percent(inner) => {
             write_r1c1(inner, ar, ac, out);
             out.push('%');
+        }
+        // Rendered, not elided: the R1C1 string *is* the grouping key, and
+        // `=(A1+B1-C1)` and `=A1+B1-C1` evaluate differently under the compat
+        // cancellation rule (docs/50 finding 2). Grouping them together would
+        // give one of them the other's answer.
+        Ast::Paren(inner) => {
+            out.push('(');
+            write_r1c1(inner, ar, ac, out);
+            out.push(')');
         }
         Ast::Binary(op, l, r) => {
             out.push('(');

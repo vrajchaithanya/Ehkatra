@@ -175,6 +175,43 @@ impl FormulaRegistry {
     }
 }
 
+// ------------------------------------------------------------ registry image
+//
+// The registry is part of the state a tile image restores, so it serialises
+// **every** entry — including the shadowed ones a value write left behind.
+// Those entries are invisible to `iter()` and therefore to the state hash, but
+// they are what makes the register order-independent (TD-22): dropping them
+// would make a restored workbook resolve a late-arriving formula differently
+// from a replica that never restarted.
+
+impl FormulaRegistry {
+    /// Every entry, in key order, for [`crate::image`].
+    pub(crate) fn image_entries(&self) -> Vec<(RowId, ColId, Stamp, Option<&FormulaCell>)> {
+        self.entries
+            .iter()
+            .map(|((row, col), entry)| {
+                (
+                    RowId(*row),
+                    ColId(*col),
+                    entry.stamp,
+                    entry.formula.as_ref(),
+                )
+            })
+            .collect()
+    }
+
+    pub(crate) fn from_image(
+        entries: Vec<(RowId, ColId, Stamp, Option<FormulaCell>)>,
+    ) -> FormulaRegistry {
+        FormulaRegistry {
+            entries: entries
+                .into_iter()
+                .map(|(row, col, stamp, formula)| ((row.0, col.0), Entry { stamp, formula }))
+                .collect(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

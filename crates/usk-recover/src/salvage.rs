@@ -102,7 +102,10 @@ pub fn read_tail(bytes: &[u8]) -> (Vec<Op>, usize, Option<SalvageReason>) {
     let mut ops = Vec::new();
     let mut at = 0usize;
     while at < bytes.len() {
-        match Op::decode(&bytes[at..]) {
+        // Framed (TD-25), matching the snapshot body and the wire. Before the
+        // frame existed, an unknown tag ended the tail — a peer one version
+        // ahead could truncate a recovery.
+        match Op::decode_framed(&bytes[at..]) {
             Ok((op, used)) => {
                 at += used;
                 ops.push(op);

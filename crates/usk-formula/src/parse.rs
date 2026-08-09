@@ -121,6 +121,10 @@ pub enum Ast {
     Literal(Value),
     Reference(A1),
     Range(A1, A1),
+    /// A parenthesised sub-expression. Evaluation is transparent, but the node
+    /// is retained because Excel's cancellation rule is positional and
+    /// parentheses suppress it (docs/50 finding 2, D-041 as amended).
+    Paren(Box<Ast>),
     /// A defined name, or anything name-shaped the binder must resolve.
     Name(String),
     Call {
@@ -357,7 +361,14 @@ impl<'a> Parser<'a> {
                     Some((TokenKind::RParen, close_idx)) => {
                         let close = self.take_through(close_idx, &mut children);
                         children.push(Cst::Token(close));
-                        inner_ast
+                        // The parentheses stay in the AST rather than being
+                        // folded away. Excel's cancellation adjustment is
+                        // *positional* — it fires on a formula whose top-level
+                        // node is `+`/`-`, and `=(0.1+0.2-0.3)` is not such a
+                        // formula: it returns 5.55e-17 where the bare form
+                        // returns 0 (docs/50 finding 2). An AST that discards
+                        // the parens cannot tell those two formulas apart.
+                        Ast::Paren(Box::new(inner_ast))
                     }
                     _ => Ast::Invalid(ErrorKind::Name),
                 };

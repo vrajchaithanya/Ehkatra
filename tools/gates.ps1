@@ -19,7 +19,7 @@ function Step($name, [scriptblock]$body) {
 Step 'Format (DP-C1)'            { cargo fmt --all -- --check }
 Step 'Clippy (DP-C1)'            { cargo clippy --workspace --all-targets -- -D warnings }
 Step 'Tests (DP-C4)'             { cargo test --workspace }
-Step 'no_std kernel (DP-A3)'     { cargo build -p usk-types -p usk-oplog -p usk-state -p usk-formula -p usk-calc -p usk-reduce -p usk-sync -p usk-recover --target wasm32-wasip1 }
+Step 'no_std kernel (DP-A3)'     { cargo build -p usk-types -p usk-oplog -p usk-state -p usk-formula -p usk-calc -p usk-reduce -p usk-sync -p usk-recover -p usk-json -p usk-csv -p usk-zip -p usk-xml -p usk-xlsx -p usk-mcp --target wasm32-wasip1 }
 Step 'Complexity budget (DP-S2)' { node tools/dep-budget.mjs }
 
 # Supply chain (DP-E8). For eight sessions this ran only on CI - which meant in

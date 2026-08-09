@@ -5,7 +5,9 @@
 //! the two halves to the canonical-encoding rule (DP-A4): exactly one byte
 //! string per op, and decoding it returns the op unchanged.
 
-use usk_oplog::{Anchor, DecodeError, Op, Payload, RangeBinding};
+use usk_oplog::{
+    is_known_tag, Anchor, DecodeError, Op, OpLog, OpaqueOp, Payload, RangeBinding, MAX_OP_BYTES,
+};
 use usk_types::{
     ActorId, ArithOp, CellError, ColId, Decimal, ErrorKind, OpId, Origin, RowId, TypeTag, Value,
 };
@@ -256,5 +258,203 @@ fn a_non_canonical_decimal_is_repaired_on_decode() {
         decoded.encode(),
         wrap(bytes),
         "re-encoding emits the one canonical spelling"
+    );
+}
+
+// ------------------------------------- TD-25: framing and forward preservation
+
+/// A framed op from a build one model version ahead of this one: a tag we do
+/// not know, carrying bytes we cannot interpret.
+fn future_op(counter: u64, tag: u8, body: &[u8]) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut body_bytes = Vec::new();
+    body_bytes.extend_from_slice(&1u128.to_be_bytes());
+    body_bytes.extend_from_slice(&counter.to_be_bytes());
+    body_bytes.extend_from_slice(&(counter * 3).to_be_bytes());
+    body_bytes.push(tag);
+    body_bytes.extend_from_slice(body);
+    out.extend_from_slice(&(body_bytes.len() as u32).to_be_bytes());
+    out.extend_from_slice(&body_bytes);
+    out
+}
+
+/// The framed encoding is the unframed one plus a `u32` length — nothing about
+/// an op's canonical bytes moved, which is why no hash did either (docs/26: the
+/// container column holds "the identical bytes that were hashed").
+#[test]
+fn framing_wraps_the_canonical_encoding_without_altering_it() {
+    for original in corpus() {
+        let framed = original.encode_framed();
+        let plain = original.encode();
+        assert_eq!(&framed[..4], &(plain.len() as u32).to_be_bytes());
+        assert_eq!(&framed[4..], &plain[..]);
+
+        let (decoded, used) = Op::decode_framed(&framed).expect("decode framed");
+        assert_eq!(used, framed.len());
+        assert_eq!(decoded, original);
+    }
+}
+
+/// **DP-A5, stated directly.** An op type this build does not know is
+/// preserved, re-encodes to the author's exact bytes, and therefore hashes to
+/// the hash the author computed.
+#[test]
+fn an_unknown_op_type_is_preserved_byte_for_byte() {
+    let bytes = future_op(1, 0x42, b"a payload from the future");
+    let (op, used) = Op::decode_framed(&bytes).expect("an unknown tag is not an error");
+    assert_eq!(used, bytes.len());
+
+    let Payload::Opaque(o) = &op.payload else {
+        panic!("expected an opaque payload, got {:?}", op.payload);
+    };
+    assert_eq!(o.tag(), 0x42);
+    assert_eq!(o.body(), b"a payload from the future");
+    assert_eq!(op.id.counter, 1, "the header is still readable");
+    assert_eq!(op.lamport, 3, "so the op can still be causally ordered");
+
+    assert_eq!(
+        op.encode_framed(),
+        bytes,
+        "re-encoding reproduces the author's bytes exactly"
+    );
+    assert_eq!(
+        op.hash().as_bytes(),
+        blake3::hash(&bytes[4..]).as_bytes(),
+        "and therefore hashes opaque to the same value the author computed"
+    );
+}
+
+/// The reason framing had to come first: without a length, an unknown tag ends
+/// the stream, so **one op from a newer peer truncates everything behind it**.
+#[test]
+fn an_unknown_op_does_not_stop_the_ops_behind_it() {
+    let known = corpus();
+    let mut stream = Vec::new();
+    stream.extend_from_slice(&known[0].encode_framed());
+    stream.extend_from_slice(&future_op(77, 0xA0, b"..."));
+    stream.extend_from_slice(&known[1].encode_framed());
+
+    let mut at = 0usize;
+    let mut out = Vec::new();
+    while at < stream.len() {
+        let (op, used) = Op::decode_framed(&stream[at..]).expect("stream keeps going");
+        at += used;
+        out.push(op);
+    }
+    assert_eq!(out.len(), 3);
+    assert_eq!(out[0], known[0]);
+    assert_eq!(out[2], known[1], "the op behind the unknown one is intact");
+    assert!(matches!(out[1].payload, Payload::Opaque(_)));
+
+    let mut round_tripped = Vec::new();
+    for op in &out {
+        round_tripped.extend_from_slice(&op.encode_framed());
+    }
+    assert_eq!(
+        round_tripped, stream,
+        "the whole stream retransmits verbatim"
+    );
+}
+
+/// `is_known_tag` and the decoder's match are two lists that must agree. This
+/// pins them to each other over all 256 tags rather than trusting whoever edits
+/// one of them next.
+#[test]
+fn every_known_tag_decodes_and_every_other_is_opaque() {
+    for tag in 0u8..=0xFF {
+        let bytes = future_op(1, tag, b"\x00\x00\x00\x00\x00\x00\x00\x00");
+        let opaque = matches!(
+            Op::decode_framed(&bytes).map(|(op, _)| op.payload),
+            Ok(Payload::Opaque(_))
+        );
+        assert_eq!(
+            opaque,
+            !is_known_tag(tag),
+            "tag {tag:#04x}: opaque={opaque}, is_known_tag={}",
+            is_known_tag(tag)
+        );
+    }
+}
+
+/// DP-A4 says one canonical byte string per op. An opaque op carrying a tag we
+/// *do* understand would be a second spelling, so it cannot be built.
+#[test]
+fn an_opaque_op_cannot_carry_a_tag_this_build_knows() {
+    for tag in 0x10u8..=0x18 {
+        assert!(
+            OpaqueOp::new(tag, Vec::new()).is_none(),
+            "tag {tag:#04x} is ours and must be decoded, not preserved"
+        );
+    }
+    assert!(OpaqueOp::new(0x19, Vec::new()).is_some());
+    assert!(OpaqueOp::new(0x00, Vec::new()).is_some());
+}
+
+/// "Hashed opaque" (DP-A5) means the op counts toward the op-set hash even
+/// though it contributes nothing this build can read. Both halves are asserted,
+/// because either alone would be a different — and wrong — design.
+#[test]
+fn an_unknown_op_is_hashed_into_the_log_it_cannot_change() {
+    let (op, _) = Op::decode_framed(&future_op(50, 0xB1, b"future")).expect("decode");
+
+    let mut without = OpLog::new();
+    for known in corpus() {
+        without.append(known);
+    }
+    let mut with = without.clone();
+    with.append(op);
+
+    assert_ne!(
+        without.canonical_hash().as_bytes(),
+        with.canonical_hash().as_bytes(),
+        "a preserved op is part of the op set and must move its hash"
+    );
+}
+
+/// A length prefix is an allocation request from an untrusted source, so it is
+/// bounded (docs/37 boundary 2).
+#[test]
+fn a_frame_claiming_more_than_the_admission_bound_is_refused() {
+    let mut bytes = (MAX_OP_BYTES as u32 + 1).to_be_bytes().to_vec();
+    bytes.extend_from_slice(&[0u8; 8]);
+    assert_eq!(
+        Op::decode_framed(&bytes),
+        Err(DecodeError::FrameTooLarge {
+            len: MAX_OP_BYTES + 1
+        })
+    );
+}
+
+/// Every truncation of every framed op — prefix included — is a named error.
+#[test]
+fn a_truncated_frame_is_an_error_not_a_panic() {
+    let mut framed: Vec<Vec<u8>> = corpus().iter().map(Op::encode_framed).collect();
+    framed.push(future_op(9, 0xC3, b"future bytes"));
+    for bytes in framed {
+        for cut in 0..bytes.len() {
+            assert_eq!(
+                Op::decode_framed(&bytes[..cut]),
+                Err(DecodeError::Truncated),
+                "framed prefix of length {cut} should be Truncated"
+            );
+        }
+    }
+}
+
+/// An op that decodes but leaves bytes unread inside its own frame is a framing
+/// lie, not a valid op — the check that stops a peer smuggling data in the gap.
+#[test]
+fn an_op_that_underfills_its_frame_is_refused() {
+    let op = corpus()[0].clone();
+    let plain = op.encode();
+    let mut bytes = ((plain.len() + 3) as u32).to_be_bytes().to_vec();
+    bytes.extend_from_slice(&plain);
+    bytes.extend_from_slice(b"pad");
+    assert_eq!(
+        Op::decode_framed(&bytes),
+        Err(DecodeError::TrailingBytes {
+            used: plain.len(),
+            len: plain.len() + 3
+        })
     );
 }

@@ -8,6 +8,7 @@
 extern crate alloc;
 
 pub mod formula;
+pub mod image;
 pub mod tile;
 
 use alloc::collections::BTreeMap;
@@ -26,8 +27,12 @@ use usk_types::{ColId, Lamport, OpId, RowId, Value};
 #[derive(Default, Clone)]
 struct AxisSeq {
     /// Insertion tree: anchor op-id -> ordered child op ids.
-    children: BTreeMap<Option<OpId>, Vec<(u64, OpId)>>,
-    tombstones: BTreeMap<OpId, ()>,
+    ///
+    /// Visible to `image` because a tile image serialises the *tree*, not the
+    /// flattened order: a restored workbook keeps being edited, and a later
+    /// insert anchors to an existing id.
+    pub(crate) children: BTreeMap<Option<OpId>, Vec<(u64, OpId)>>,
+    pub(crate) tombstones: BTreeMap<OpId, ()>,
 }
 
 impl AxisSeq {
@@ -108,14 +113,14 @@ impl AxisSeq {
 /// promotion, which is what makes a 10M-cell workbook fit its memory budget.
 #[derive(Default, Clone)]
 pub struct State {
-    rows: AxisSeq,
-    cols: AxisSeq,
-    cells: TileStore,
+    pub(crate) rows: AxisSeq,
+    pub(crate) cols: AxisSeq,
+    pub(crate) cells: TileStore,
     /// Formulas, keyed by cell identity. A **stamped** LWW register per cell
     /// (TD-22): formula-vs-value is decided by `(lamport, op id)`, not by the
     /// order ops happen to be applied in, so an incremental merge cannot
     /// resolve it differently from a full replay. See `formula.rs`.
-    formulas: FormulaRegistry,
+    pub(crate) formulas: FormulaRegistry,
 }
 
 impl State {
@@ -194,6 +199,12 @@ impl State {
             Payload::DeleteCol { col } => self.cols.delete(col.0),
             Payload::UndeleteRow { row } => self.rows.undelete(row.0),
             Payload::UndeleteCol { col } => self.cols.undelete(col.0),
+            // DP-A5: an op this build cannot read is preserved, causally
+            // ordered and hashed — and applied to nothing. Guessing at a
+            // payload we do not understand is the one outcome worse than
+            // ignoring it, and the op is still in the log for a build that
+            // does understand it.
+            Payload::Opaque(_) => {}
             Payload::SetCell { row, col, value } => {
                 self.formulas
                     .note_value_write(*row, *col, (op.lamport, op.id));

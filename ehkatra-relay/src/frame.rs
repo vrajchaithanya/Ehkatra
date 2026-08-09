@@ -63,9 +63,10 @@ fn put_clock(clock: &VectorClock, out: &mut Vec<u8>) {
 fn put_ops(ops: &[Op], out: &mut Vec<u8>) {
     out.extend_from_slice(&(ops.len() as u32).to_be_bytes());
     for op in ops {
-        let bytes = op.encode();
-        out.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
-        out.extend_from_slice(&bytes);
+        // `encode_framed` is this loop's old body, moved into `usk-oplog` so
+        // the container and the snapshot body write the identical prefix
+        // (TD-25). The wire had the framing all along; nothing else did.
+        out.extend_from_slice(&op.encode_framed());
     }
 }
 
@@ -209,14 +210,13 @@ impl Cursor<'_> {
         for _ in 0..n {
             let len = self.u32()? as usize;
             let bytes = self.take(len)?;
-            let (op, used) = Op::decode(bytes)
+            // `decode_exact` owns both rules that used to live here: the op
+            // must fill its frame exactly, and a tag this build does not know
+            // becomes a preserved-opaque op rather than a killed connection
+            // (DP-A5, TD-25). The prefix read just above is now the same one
+            // the container and snapshot streams write.
+            let op = Op::decode_exact(bytes)
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("{e:?}")))?;
-            if used != len {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "trailing bytes inside an op frame",
-                ));
-            }
             out.push(op);
         }
         Ok(out)

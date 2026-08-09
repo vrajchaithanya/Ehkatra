@@ -83,6 +83,62 @@ pub enum Payload {
     UndeleteCol {
         col: ColId,
     },
+    /// An op whose payload tag this build does not know, **kept verbatim**
+    /// (DP-A5: unknown op types are preserved, causally ordered, hashed opaque
+    /// and retransmitted).
+    ///
+    /// This is not a new op *type* — it carries no tag of its own. It is the
+    /// representation of somebody else's tag, and re-encoding it reproduces the
+    /// author's bytes exactly, so its hash is the hash the author computed.
+    /// That byte-identity is the whole mechanism: an op we cannot interpret
+    /// still participates in the op-set hash, still crosses the wire, and
+    /// still comes back out of the container unchanged.
+    ///
+    /// It contributes **nothing to state**. A build that cannot read an op must
+    /// not guess at what it meant, so the state hash of a workbook legitimately
+    /// differs between a build that knows a tag and one that does not. DP-A5
+    /// promises preservation, not cross-version state convergence.
+    Opaque(OpaqueOp),
+}
+
+/// The payload tags model version 1 defines. Kept beside [`Op::decode`]'s match
+/// and pinned to it by `every_known_tag_decodes_and_every_other_is_opaque` —
+/// two lists that must agree are a defect waiting for the third person to edit
+/// one of them.
+pub fn is_known_tag(tag: u8) -> bool {
+    matches!(tag, 0x10..=0x18)
+}
+
+/// An op body this build cannot interpret, held byte-exact.
+///
+/// The fields are private and the constructor refuses a *known* tag, so
+/// "an opaque op secretly carrying a tag we do understand" — a second spelling
+/// of a value the canonical encoding says has exactly one (DP-A4) — is
+/// unrepresentable rather than merely discouraged.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct OpaqueOp {
+    tag: u8,
+    body: Vec<u8>,
+}
+
+impl OpaqueOp {
+    /// `None` if `tag` is one this build knows: that op must be decoded, not
+    /// preserved opaquely.
+    pub fn new(tag: u8, body: Vec<u8>) -> Option<OpaqueOp> {
+        if is_known_tag(tag) {
+            return None;
+        }
+        Some(OpaqueOp { tag, body })
+    }
+
+    pub fn tag(&self) -> u8 {
+        self.tag
+    }
+
+    /// Everything after the tag byte, exactly as it arrived.
+    pub fn body(&self) -> &[u8] {
+        &self.body
+    }
 }
 
 /// One immutable operation.
@@ -175,8 +231,84 @@ impl Op {
                 out.push(0x18);
                 encode_opid(&col.0, &mut out);
             }
+            // Byte-exact re-emission. `OpaqueOp` cannot hold a known tag, so
+            // this arm can never produce a second spelling of an op this build
+            // could have encoded itself (DP-A4).
+            Payload::Opaque(o) => {
+                out.push(o.tag());
+                out.extend_from_slice(o.body());
+            }
         }
         out
+    }
+
+    /// The op as a **framed** stream element: `u32 big-endian length ‖ canonical
+    /// op bytes` (TD-25).
+    ///
+    /// This is the prefix `ehkatra-relay`'s `put_ops` has always written, now
+    /// shared with every place ops are concatenated without a container to
+    /// delimit them — snapshot bodies and the recovery tail. One prefix, one
+    /// meaning, in both directions.
+    ///
+    /// The prefix is deliberately *outside* [`Op::encode`] and therefore outside
+    /// the hash. docs/26 requires the container's `payload` column to hold "the
+    /// identical bytes that were hashed", which settles the question: the
+    /// canonical encoding of an op is unframed, and framing is a property of a
+    /// stream. It also means adding framing moved no hash.
+    pub fn encode_framed(&self) -> Vec<u8> {
+        let body = self.encode();
+        let mut out = Vec::with_capacity(body.len() + 4);
+        out.extend_from_slice(&(body.len() as u32).to_be_bytes());
+        out.extend_from_slice(&body);
+        out
+    }
+
+    /// Decodes one framed op from the front of `bytes`, returning it and the
+    /// bytes consumed *including* the prefix.
+    ///
+    /// Because the frame states the op's extent, an unknown tag is no longer
+    /// the end of the stream: it becomes a [`Payload::Opaque`] and reading
+    /// continues. That is the whole reason TD-25 blocked DP-A5.
+    pub fn decode_framed(bytes: &[u8]) -> Result<(Op, usize), DecodeError> {
+        let header = bytes.get(..4).ok_or(DecodeError::Truncated)?;
+        let len = u32::from_be_bytes([header[0], header[1], header[2], header[3]]) as usize;
+        if len > MAX_OP_BYTES {
+            return Err(DecodeError::FrameTooLarge { len });
+        }
+        let end = 4usize.checked_add(len).ok_or(DecodeError::Truncated)?;
+        let body = bytes.get(4..end).ok_or(DecodeError::Truncated)?;
+        Ok((Op::decode_exact(body)?, end))
+    }
+
+    /// Decodes one op that occupies **exactly** `bytes` — the form used wherever
+    /// the extent comes from outside the encoding: a wire frame, a container
+    /// column, or [`Op::decode_framed`]'s prefix.
+    ///
+    /// An unknown tag is preserved opaquely here and only here; [`Op::decode`],
+    /// which must find the op's end by parsing it, still cannot and still says
+    /// so.
+    pub fn decode_exact(bytes: &[u8]) -> Result<Op, DecodeError> {
+        let mut r = Reader { bytes, at: 0 };
+        let id = r.opid()?;
+        let lamport = r.u64()?;
+        let tag = r.u8()?;
+        if !is_known_tag(tag) {
+            let opaque =
+                OpaqueOp::new(tag, bytes[r.at..].to_vec()).ok_or(DecodeError::UnknownTag(tag))?;
+            return Ok(Op {
+                id,
+                lamport,
+                payload: Payload::Opaque(opaque),
+            });
+        }
+        let (op, used) = Op::decode(bytes)?;
+        if used != bytes.len() {
+            return Err(DecodeError::TrailingBytes {
+                used,
+                len: bytes.len(),
+            });
+        }
+        Ok(op)
     }
 
     /// Content hash of a single op.
@@ -262,13 +394,24 @@ impl Op {
     }
 }
 
+/// The largest single framed op this build will allocate for. An admission
+/// bound, not a format limit (docs/37 boundary 2): a corrupt or hostile length
+/// prefix must not be able to ask for memory.
+pub const MAX_OP_BYTES: usize = 16 << 20;
+
 /// Why a byte string is not an op. Errors are values here too (DP-A10).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum DecodeError {
     /// The input ended inside a field.
     Truncated,
-    /// A payload tag this build does not know (see [`Op::decode`], TD-25).
+    /// A payload tag this build does not know, reached through [`Op::decode`],
+    /// which has no frame to tell it where the op ends. The framed readers
+    /// preserve it instead (TD-25, DP-A5).
     UnknownTag(u8),
+    /// A frame claims a length past [`MAX_OP_BYTES`].
+    FrameTooLarge { len: usize },
+    /// An op decoded successfully but did not fill the extent it was given.
+    TrailingBytes { used: usize, len: usize },
     /// A value tag this build does not know.
     UnknownValueTag(u8),
     /// Text that is not valid UTF-8.

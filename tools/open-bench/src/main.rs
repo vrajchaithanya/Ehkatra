@@ -129,26 +129,39 @@ fn main() {
         t.elapsed()
     );
 
-    // The snapshot covers everything except the tail.
-    let mut snap_log = OpLog::new();
-    for op in log.ops().iter().take(snapshot_upto) {
-        snap_log.append(op.clone());
-    }
+    // docs/16 §Retention (TD-30): the last three snapshots, plus every op since
+    // the **oldest** retained one. The first version of this harness wrote a
+    // single snapshot and only the uncovered tail — the shape whose corruption
+    // lost 1,002,000 ops and produced TD-30 in the first place. That shape is
+    // now unreachable through the container's own API, so measuring it would be
+    // measuring a state the product cannot get into.
+    let floor = snapshot_upto * 8 / 10;
+    let cuts = [floor, snapshot_upto * 9 / 10, snapshot_upto];
     let t = Instant::now();
-    let snapshot = Snapshot::build(&snap_log);
+    let mut snapshots = Vec::new();
+    for cut in cuts {
+        let mut snap_log = OpLog::new();
+        for op in log.ops().iter().take(cut) {
+            snap_log.append(op.clone());
+        }
+        snapshots.push(Snapshot::build(&snap_log));
+    }
     println!(
-        "  snapshot built          {:>8} B body in {:?}",
-        snapshot.body.len(),
+        "  {} snapshots built       {:>8} B of bodies in {:?}",
+        snapshots.len(),
+        snapshots.iter().map(|s| s.body.len()).sum::<usize>(),
         t.elapsed()
     );
 
     let t = Instant::now();
     {
         let mut c = Container::open_or_create(&path).expect("create");
-        c.put_snapshot(&snapshot).expect("put snapshot");
-        // Only the tail needs to be in `ops`; the snapshot carries the rest.
-        c.append_ops(&log.ops()[snapshot_upto..], 0)
-            .expect("append tail");
+        // Oldest first, so `created` order matches age.
+        for snapshot in &snapshots {
+            c.put_snapshot(snapshot).expect("put snapshot");
+        }
+        // Every op since the oldest retained snapshot — the policy's op floor.
+        c.append_ops(&log.ops()[floor..], 0).expect("append tail");
         c.maybe_commit(u64::MAX, true).expect("commit");
     }
     let write = t.elapsed();
@@ -182,8 +195,12 @@ fn main() {
                 // CAST is load-bearing: SQLite's `||` yields TEXT even when
                 // both operands are blobs, and a TEXT body would fail to read
                 // back as a different error than the corruption being tested.
+                // The **newest** snapshot only. docs/16 §Retention exists for
+                // exactly this case; corrupting all three would measure total
+                // loss rather than the fallback the policy provides.
                 "UPDATE snapshots SET body = CAST(substr(body, 1, length(body) - 4096) \
-                 || randomblob(4096) AS BLOB)",
+                 || randomblob(4096) AS BLOB) WHERE rowid = \
+                 (SELECT rowid FROM snapshots ORDER BY created DESC, rowid DESC LIMIT 1)",
                 [],
             )
             .expect("corrupt final page");

@@ -295,6 +295,28 @@ That the extended corpus still hashes identically across targets is the
 stronger result: the Row 5 decimal encoding and the Row 9 variable-length
 binding vector are now proven platform-stable, not merely assumed.
 
+## W-REPLAY-5K — corpus extended again for `Payload::Opaque` (session 12)
+
+TD-25 added the `Opaque` payload variant (DP-A5 forward preservation, D-080).
+docs/29's rule applies to it like any other: a payload variant absent from the
+replay-check generator is a variant the determinism gate has silently stopped
+covering — the trap session 9 walked into over four variants at once.
+
+| | Session 9 (9/9 variants) | Session 12 (10/10 variants) |
+|---|---|---|
+| oplog hash | `ef7933e808a86335cf77e64a69db781f42b702187a69c3249596498c7279cbac` | `c79fa5335520542f1363fe32f8bc7d3df53910e4e736637f22babd9a0143afee` |
+| state hash | `5dbb01c2575c5ff3976dafafe61fb7227df671c34e41572acf79d981e4120bd1` | `b58d550544c971313ad86167c05beaedddad7c13855d29c4997bcec0b2ff6215` |
+| native == wasm32 | yes | **yes** |
+
+**No canonical op encoding moved.** The `u32` length prefix TD-25 introduced sits
+*outside* `Op::encode` — docs/26 requires the container's `payload` column to
+hold "the identical bytes that were hashed", which settles where framing
+belongs. The hashes moved only because the corpus gained an opaque op. Worth
+stating precisely, because "the replay hashes changed" and "the wire format
+changed" are very different sentences and only the first is true.
+
+The new hashes are the reference from session 12 onward.
+
 ## W-SYNC-RELAY (docs/38) — Row 10 acceptance · M1
 
 **Definition (docs/38):** 2 and 50 replicas through one relay, each replica
@@ -499,6 +521,249 @@ costs replay(snapshot) + replay(tail) — the same work as replaying the whole
 log, which is precisely what the 2.10 s is. A snapshot becomes a fold checkpoint
 only when its body is a materialised state image. Corrected in D-076 rather than
 reported as closed.
+
+## W-ORACLE (docs/38) — **the first measured Excel-compatibility percentage** · session 12
+
+**Definition (docs/38):** every case in `tools/oracle-capture/vectors/` and
+`vectors-1904/`, evaluated through `usk-formula` under `Profile::Compat` and
+compared against what Excel actually did. Run with
+`cargo run --release -p conformance`; the full per-case divergence list lands in
+`.tmp/oracle-report.md`.
+
+**Corpus:** 1,366 cases, 80 distinct functions, captured over COM from **Excel 16.0 build
+20228** (Microsoft 365), calc engine 191029, Windows 11 26200, `.` decimal /
+`,` list separator. One build, one locale — a second build would be a second
+data point, not a re-run.
+
+| | Cases | Pass | Rate |
+|---|---:|---:|---:|
+| **Baseline, before this session's fixes** | 1,366 | 896 | **65.6%** |
+| **After the two cancellation mechanisms (D-041 as amended)** | 1,366 | 975 | **71.4%** |
+| **After the cheap docs/50 §7 fixes** | 1,366 | **1,014** | **74.2%** |
+| — 1900 date system | 1,236 | 988 | 79.9% |
+| — 1904 date system | 130 | 26 | 20.0% |
+
+352 fail, of which **12 are numerically near** (relative difference ≤ 1e-12) and
+are counted as fails anyway. 0 unjudged — a case the runner cannot score is
+reported, never dropped.
+
+**What the 8.6-point movement was.** The cancellation work alone moved 79 cases:
+the positional `+`/`-` rule (`eval_top`, and an `Ast::Paren` node so
+`=(0.1+0.2-0.3)` can differ from `=0.1+0.2-0.3` at all) and the unconditional
+`SUM`/`AVERAGE` rule applied at every accumulation step. The remaining 39 came
+from six measured divergences in docs/50 §7 — `ROUND(2.675,2)` (rounding moved
+into the decimal domain, because scaling by `10^d` destroys the digit being
+asked about), `FLOOR(x,0)` → `#DIV/0!` against `CEILING(x,0)` → `0`,
+`POWER(0,0)` → `#NUM!`, `POWER(-8,1/3)` → a real odd root, `TRIM` keeping a
+non-breaking space, `SUM` overflow → `#NUM!` — plus `UNICHAR`/`UNICODE`/`EXP`/
+`LN`, each of which the corpus had measured as a `#NAME?`.
+
+**The 1904 corpus is the honest embarrassment**, and it is reported at full size
+rather than folded into the headline: 20.0%. It is 130 date cases, and the
+engine has one date epoch. That is a known, unimplemented feature showing up as
+exactly what it is.
+
+**What this number does not include**, stated because omissions inflate
+percentages: `general_text` (Excel's value→text coercion, where
+`compat_round_15` lives) is not asserted, so this is *value* conformance, not
+display conformance. Array semantics, number-format grammar, localised formula
+text and XLSX round-trip fidelity are all outside the corpus (docs/50 §Limits).
+
+**Largest remaining divergence clusters** (ranked, and filed as debt):
+date semantics ~98 cases (TD-33) · approximate-match lookup ~24 (TD-14) ·
+criteria sub-language ~20 (TD-34) · literal parser ~14 (TD-32) ·
+`SEARCH`/`FIND` wildcards ~6 (TD-35) · `TEXT()` ~28 (TD-36).
+
+## W-XLSX-CORPUS — XLSX read fidelity, per file · session 14
+
+**Definition:** every file in `crates/usk-xlsx/tests/corpus/` read through
+`usk-xlsx`, reporting part coverage, cells, formulas, losses and quarantined
+parts. Printed by
+`cargo test -p usk-xlsx --test xlsx -- --nocapture the_per_file_fidelity_report`.
+docs/24 makes fidelity "a measured product attribute", and BOOTSTRAP row 12 asks
+for a 20-file starter corpus; this is both.
+
+**Corpus:** 20 files, hand-assembled by `tests/make_corpus.py` from the
+ECMA-376 shapes Excel emits — *not* by a spreadsheet library, because a reader
+tested against files its own writer produced proves only that two bugs agree.
+It deliberately includes the awkward cases: inline strings, cached formula
+results, error cells, a custom number format, sheets crossed over in the
+relationship table, a dangling style index, a shared-string index past the end,
+an unmodelled chart/drawing/theme, a stored (uncompressed) container, a missing
+relationship part, and a macro payload that must be quarantined.
+
+**What `part coverage` means (D-093):** parts read ÷ parts that carry user data
+and are safe to read. Quarantined active content leaves the denominator because
+not reading it is the *correct* outcome; package plumbing
+(`[Content_Types].xml`, `_rels/.rels`) leaves it because it carries no user
+data. Charts and drawings **stay** in the denominator — those are data this
+build drops.
+
+| File | Part coverage | Cells | Formulas | Losses | Quarantined |
+|---|---:|---:|---:|---:|---:|
+| `01-minimal.xlsx` | 100.0% | 1 | 0 | 0 | 0 |
+| `02-numbers.xlsx` | 100.0% | 6 | 0 | 0 | 0 |
+| `03-shared-strings.xlsx` | 100.0% | 3 | 0 | 0 | 0 |
+| `04-formulas.xlsx` | 100.0% | 4 | 2 | 0 | 0 |
+| `05-errors.xlsx` | 100.0% | 5 | 1 | 0 | 0 |
+| `06-booleans.xlsx` | 100.0% | 3 | 1 | 0 | 0 |
+| `07-inline-strings.xlsx` | 100.0% | 2 | 1 | 0 | 0 |
+| `08-number-formats.xlsx` | 100.0% | 4 | 0 | 0 | 0 |
+| `09-multi-sheet.xlsx` | 100.0% | 3 | 0 | 0 | 0 |
+| `10-rels-out-of-order.xlsx` | 100.0% | 2 | 0 | 0 | 0 |
+| `11-sparse.xlsx` | 100.0% | 4 | 0 | 0 | 0 |
+| `12-entities.xlsx` | 100.0% | 3 | 0 | 0 | 0 |
+| `13-macro-enabled.xlsm` | 100.0% | 1 | 0 | 0 | 1 |
+| `14-unmodelled-parts.xlsx` | **50.0%** | 1 | 0 | 0 | 0 |
+| `15-stored.xlsx` | 100.0% | 1 | 0 | 0 | 0 |
+| `16-dangling-style.xlsx` | 100.0% | 1 | 0 | **1** | 0 |
+| `17-bad-shared-index.xlsx` | 100.0% | 1 | 0 | **1** | 0 |
+| `18-odd-cells.xlsx` | 100.0% | 2 | 0 | **3** | 0 |
+| `19-no-optional-parts.xlsx` | 100.0% | 1 | 0 | 0 | 0 |
+| `20-missing-rels.xlsx` | 100.0% | 1 | 0 | 0 | 0 |
+
+**17 of 20 files read with no loss; 49 cells total.** The three that lose
+something are the three built to lose something — a dangling style, an
+out-of-range shared string, and a cell type this build does not model — and each
+loss arrives as a named reason with its cell reference rather than a silent
+substitution. `14-unmodelled-parts.xlsx` reads every cell it has and still
+scores 50%, because it carries a chart, a drawing and a theme that v0.1 drops
+(TD-39). That is the number doing its job.
+
+**What this corpus is not.** It is 20 synthetic files, not the "thousands of
+real-world workbooks" docs/24 asks for at release. It exercises the shapes, not
+the long tail of what twenty years of Excel versions actually emit. A published
+fidelity percentage needs the real corpus; this is the starter BOOTSTRAP asked
+for and the harness the real one will run through.
+
+## v0.1 AUDIT RE-RUN (session 16, 2026-08-09) — every W-* workload, current code
+
+docs/38's regression policy makes a stale number a release blocker rather than a
+footnote, so every workload was re-run against the tree as it stands. Three
+moved. All three are explained below rather than quietly replaced, and the two
+that are regressions are filed.
+
+| Workload | Session 11–14 | **Audit re-run** | Verdict |
+|---|---|---|---|
+| W-REPLAY-5K | `c79fa533…` / `b58d5505…` | **identical**, native == wasm32 | unchanged |
+| W-TILE-10M | 8.43 / 11.09 / 137.56 B/cell · 0% / 1.000% / 50.000% promoted | **bit-identical** | unchanged |
+| W-SYNC-RELAY (50) | p50 800 / p95 3,700 bus-ms · converge 2,140 · 45/45 kill · all equal | **bit-identical** | unchanged |
+| W-ORACLE | 74.2% (1,014 / 1,366) | **74.2%** | unchanged |
+| W-XLSX-CORPUS | 19/20 at 100% coverage, 17/20 lossless | **unchanged** | unchanged |
+| W-CHAIN-100K full recalc | 92.6 ms | **114.0 ms** (+23%) | **regression — TD-44** |
+| W-CHAIN-100K single edit | 0.328 ms | **0.618 ms** (+88%) | **regression — TD-44** |
+| W-OPEN-1M cold open | 2.10 s | **7.86 s** | **workload changed — see below** |
+| W-OPEN-1M salvage | 657 ms, `lost_data=true` | **6.49 s, `lost_data=false`** | **workload changed** |
+| W-OPEN-1M container | 108 MB | **307 MB** | **workload changed** |
+
+### W-CHAIN-100K: the compat cancellation rule costs 23%
+
+Cause, measured rather than guessed: D-041's positional rule means every
+top-level `+`/`-` formula now runs `compat_final_adjust` — a binade read and a
+comparison — and the chain's 100,000 formulas are all `=prev + const`, i.e. all
+top-level adds. It is the worst possible shape for this rule and therefore the
+right one to quote.
+
+**A larger regression was found and fixed during the audit.** The first
+`eval_top` re-evaluated both operands to recover their magnitudes, which doubled
+the work of every such formula: 92.6 → **145.2 ms**. Restructuring it to
+evaluate each operand once took it to 114.0 ms. The remaining 23% is the rule
+itself and is not removable without giving up the conformance it buys (79 oracle
+cases, MEASUREMENTS W-ORACLE).
+
+Both budgets still pass with margin — 114.0 ms against 200 ms, 0.618 ms against
+8 ms — so this is cost, not breach. Filed as **TD-44** per docs/38.
+
+### W-OPEN-1M: the workload changed, because the old one measured an
+### impossible container
+
+The harness wrote **one** snapshot and only the uncovered tail. That is the
+shape whose corruption lost 1,002,000 ops and produced TD-30 — and since
+session 12 it is *unreachable through the container's own API*, because
+compaction refuses to prune below two verified snapshots. Measuring it would
+have been measuring a state the product cannot get into.
+
+The harness now builds what docs/16 §Retention actually produces: three
+snapshots at 80% / 90% / 100% of the compacted history, plus every op since the
+oldest. The numbers are therefore **not comparable** to session 11's, and the
+old ones are superseded rather than regressed.
+
+What the new shape proves, which the old one could not:
+
+> **Corrupting the newest snapshot's final page loses nothing.**
+> `snapshots rejected 1, tail 200,200 ops, quarantined 0 B, lost_data = false`
+
+That is TD-30's guarantee at 1M cells, measured. The old harness reported
+`lost_data = true` for the same operation.
+
+The bill, stated plainly:
+* **Container 108 → 307 MB (2.8×)** — three snapshot bodies of 94 MB each,
+  because a v0.1 snapshot body *is* the compacted op set (D-069). In docs/16's
+  designed Merkle-shared tile image the extra snapshots are O(dirty) and this
+  disappears. **TD-31.**
+* **Cold open 2.10 → 7.86 s** — the retained tail is now 300,400 ops rather than
+  100,000, the file is 2.8× larger, and opening still replays everything
+  (D-076). A `BTreeSet` → `HashSet` change for the snapshot-coverage test during
+  the audit removed ~0.9 s of it; the rest is inherent to the op-set body.
+  Against docs/31's 1.5 s budget — which is for *skeleton + viewport*, not a
+  full replay — this remains **neither a pass nor a breach**, and it is now
+  further away. **TD-45.**
+
+Recoverability was the right side of that trade and it is not a free one. Both
+entries close with the same change: the tile-image snapshot body, which is also
+TD-24's residual.
+
+## W-IMAGE-STAMPS (docs/38) — the stamp-carrying tile image vs A-001 · session 18
+
+**The question.** `usk_state::image` round-trips a `State` to the same hash, but
+it cannot be `snapshots.body` until a summary tile carries per-cell winner
+stamps — without them, adopting an image and applying a tail loses the identity
+of a retained loser, which ADR-006 and DP-A8 promise to keep (D-101, TD-46).
+Per-cell metadata is precisely what ADR-005 exists to avoid and what TD-09
+measured the cost of, so the encoding is a decision that has to be measured
+against **A-001's 400 MB collab-pattern bar**.
+
+**Run:** `cargo run --release -p image-bench -- <rows> <cols>`.
+
+### Measured, 1M cells (1000 x 1000)
+
+| pattern | state B/cell | image B/cell | naive stamp | writer-index stamp | **delta-varint stamp** | promoted |
+|---|---:|---:|---:|---:|---:|---:|
+| import (1 actor) | 8.67 | 8.30 | 32.00 | 17.00 | **3.00** | 0.00% |
+| collab (3 actors, 1%) | 11.33 | 9.59 | 32.00 | 17.00 | **3.10** | 1.00% |
+| adversarial (3 actors, 50%) | 137.80 | 68.43 | 32.00 | 17.00 | **7.95** | 50.00% |
+
+At 2M cells the per-cell figures are **stable**: import 3.00, collab 3.12,
+adversarial 9.00. Only the adversarial pattern drifts, and it drifts because a
+50%-contested history deltas badly — it has no RSS bar (docs/38).
+
+### The answer, projected to 10M cells at the collab pattern
+
+Measured state RSS there is **123.6 MB** (W-TILE-10M).
+
+| stamp encoding | sidecar | total | vs A-001's 400 MB |
+|---|---:|---:|---|
+| naive, as it sits in memory (32 B/cell) | +305.2 MB | **428.8 MB** | **FAIL** |
+| per-tile writer index + `u64` pair (17 B/cell) | +162.1 MB | 285.7 MB | pass |
+| **writer index + delta-varint (3.1 B/cell)** | **+29.6 MB** | **153.2 MB** | **pass, 2.6x headroom** |
+
+**So the answer is encoding-dependent, and only one of the three obvious choices
+fails.** The naive layout — the one TD-46 assumed when it priced this at 24 B and
+called it "the memory TD-09 removed" — is the one that fails, by 7%. It is also
+the one nobody would ship: within a tile, a bulk write assigns lamports and
+counters that ascend almost in lockstep, so the deltas are one varint byte each
+and the writer is a one-byte index into a per-tile table.
+
+Two things make the real cost lower still, and both are stated rather than
+claimed: the figures count **every** cell, but a promoted cell already carries
+its stamp in `Meta::Mixed` and needs no sidecar entry; and the sidecar only costs
+RSS if it is *decoded* at load — kept encoded and decoded per tile as the tail
+reaches it, the load cost is the image's own bytes.
+
+**One number worth noticing on its own:** the image is *smaller than the resident
+state it encodes* — 9.59 against 11.33 B/cell at the collab pattern, and 68.43
+against 137.80 at the adversarial one, where the tagged-union in-memory layout is
+far heavier than the packed serialised form.
 
 ## Not yet measured (targets remain targets — docs/42)
 A-001 memory/10M cells · A-002 promotion rate · A-003 recalc 100k · A-005 wasm32 **in a real browser / Safari** (WASI-under-Node is not a browser and must not be reported as one) · all docs/31 budget rows.

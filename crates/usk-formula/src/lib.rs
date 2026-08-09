@@ -27,8 +27,12 @@ use usk_types::Value;
 ///
 /// Convenience over the staged API, which callers reach for when they need the
 /// CST (refactoring, error carets) or want to evaluate one parse many times.
+///
+/// Uses [`eval::eval_top`], not [`eval::eval`]: this is a whole formula, and
+/// that is the position where Excel's cancellation adjustment fires (docs/50
+/// finding 2, D-041 as amended).
 pub fn evaluate<G: eval::Grid>(source: &str, grid: &G, profile: Profile) -> Value {
     let parsed = parse::parse(source);
     let ctx = eval::Context::new(grid, profile);
-    eval::eval(&parsed.ast, &ctx)
+    eval::eval_top(&parsed.ast, &ctx)
 }

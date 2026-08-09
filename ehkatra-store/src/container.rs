@@ -431,6 +431,13 @@ impl Container {
             if covered(id) {
                 continue;
             }
+            // Framed (TD-25). The *column* stays unframed — docs/26 requires it
+            // to hold "the identical bytes that were hashed" — and the prefix
+            // is added here, where ops are concatenated into a stream with
+            // nothing else to delimit them. That is the same `u32` prefix the
+            // wire writes, which is what makes an op this build cannot read
+            // survive both paths (DP-A5).
+            out.extend_from_slice(&(payload.len() as u32).to_be_bytes());
             out.extend_from_slice(&payload);
         }
         Ok(out)
@@ -445,7 +452,22 @@ impl Container {
     pub fn open_document(&self) -> Result<Opened> {
         let snapshots = self.snapshots()?;
         // Ops the newest *verifiable* snapshot already contains are not tail.
-        let covered_ids: std::collections::BTreeSet<(u128, u64)> = snapshots
+        //
+        // A `HashSet`, not a `BTreeSet`: docs/16's retention policy keeps the
+        // ops since the *oldest* snapshot, so this set is the whole snapshot's
+        // Ops the newest *verifiable* snapshot already contains are not tail.
+        //
+        // A `HashSet`, not a `BTreeSet`: docs/16's retention keeps the ops since
+        // the *oldest* snapshot, so this set is the whole snapshot's op count —
+        // a million entries on W-OPEN-1M — built and probed once per open. The
+        // ordered variant cost about a second of the cold open at that size,
+        // measured during the v0.1 audit.
+        //
+        // The exact id set rather than the snapshot's watermark, deliberately:
+        // `Watermark::covers` is now exact (it records the gaps below each
+        // actor's max), but building the set from the snapshot's own ops needs
+        // no such argument, and the snapshot still carries them.
+        let covered_ids: std::collections::HashSet<(u128, u64)> = snapshots
             .iter()
             .find_map(|s| s.verify().ok())
             .map(|v| {

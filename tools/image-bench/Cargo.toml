@@ -1,0 +1,11 @@
+[package]
+name = "image-bench"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+usk-oplog = { path = "../../crates/usk-oplog" }
+usk-state = { path = "../../crates/usk-state" }
+usk-types = { path = "../../crates/usk-types" }

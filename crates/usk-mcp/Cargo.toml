@@ -1,0 +1,15 @@
+[package]
+name = "usk-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+usk-calc = { path = "../usk-calc" }
+usk-formula = { path = "../usk-formula" }
+usk-json = { path = "../usk-json" }
+usk-oplog = { path = "../usk-oplog" }
+usk-reduce = { path = "../usk-reduce" }
+usk-state = { path = "../usk-state" }
+usk-types = { path = "../usk-types" }
