@@ -910,6 +910,65 @@ Recorded as measured, with three consequences stated plainly:
   benchmark that reports one sample invites exactly this, which is why the
   recalc figures beside it are already medians of five.
 
+## W-SCROLL (docs/38) — the first renderer number · session 21
+
+Run: `shell/target/release/ehkatra-shell --bench 1000000`. 120 consecutive
+frames, scrolled by a different amount each frame so nothing is reused between
+them, over a **1,000,000-row × 40-column** document at 1280×800.
+
+| | measured | budget (docs/31) |
+|---|---:|---:|
+| **CPU frame** — viewport + scene build | p50 **0.192 ms** · p99 **0.316 ms** | 8.3 ms |
+| CPU + GPU incl. readback | p50 6.239 ms · p99 8.010 ms | — |
+| quads per frame | **331**, in **1 draw call** | — |
+| axis build (one-off) | 31.9 ms for 1M rows | — |
+
+**The number against the budget is the CPU frame: 0.192 ms p50, about 2% of
+docs/31's 8.3 ms.** That is the work a scroll actually costs — resolving the
+anchor, walking the visible span, and building the instance buffer — and it is
+flat in document size because virtual scrolling means 39 rows are produced
+whether the sheet has a thousand or a million.
+
+**The 8.010 ms figure is NOT the budget number, and reading it as one would be
+the convenient interpretation D-062 forbids.** It includes a full
+texture-to-buffer readback and a blocking map, which exist so the frame can be
+written to a PNG and committed as evidence; a presenting frame does none of it.
+The real GPU present cost is **unmeasured** until the windowed path exists, and
+is recorded as unmeasured rather than inferred from this.
+
+Zero-jank at p99 is likewise not yet claimed: 120 frames is enough to see a
+median, not enough to characterise a tail, and there is no compositor in the
+loop to jank against.
+
+### Evidence
+
+`demo/grid.png` — a real frame: 200,000 rows scrolled to row 2,041, 39×20
+visible, cells coloured by kind from the live `State`. The blue block is the 12
+value columns, green is the formula column, pink is an error cell, and the
+2-of-3 row banding is the corpus's own `r % 3 == 2` gap, not a decoration.
+
+**Two defects the first frame exposed**, both fixed and both worth recording
+because a screenshot is what found them:
+* Every formula cell was missing. The scene gated on `state.cell()`, and a cell
+  holding only a formula has no value in the tile store — so the entire formula
+  column drew as empty. Reading the image is what caught it; no test asserted
+  "the formula column is visible".
+* Colours were washed out. The theme was written in sRGB and handed to an
+  `Rgba8UnormSrgb` target, which encodes linear→sRGB on write — so everything
+  was encoded twice. Tokens are now converted sRGB→linear on the way to the GPU.
+
+### PNG writer: 4.1 MB → 341 KB
+
+The first encoder emitted DEFLATE **stored** blocks, making each screenshot
+4,097,178 bytes — untenable when `demo/` gains a frame per feature for a
+quarter. Replaced with fixed-Huffman DEFLATE matching at distance 1 (a run) and
+distance `stride` (a repeated scanline), which is what a flat-shaded grid
+actually contains: **341,381 bytes, 12× smaller**, same image. Proven by
+round-tripping the stream through the project's *own* inflater (`usk-zip`)
+rather than by inspection — a hand-written compressor that emits a plausible
+stream no decoder accepts is the obvious failure, and only a round trip catches
+it.
+
 ## Shell dependency closure (ADR-037) — **measured, and it moved the kernel** · session 21
 
 ADR-037 required the shell's dependency ceiling to be measured before the first
@@ -953,7 +1012,7 @@ crates by path. Re-measured with it in place:
 | kernel direct deps | 5 | **1** |
 | kernel dep closure | 12 | **10 — unchanged** |
 | non-shell workspace closure | 40 | **29 — unchanged** |
-| **shell workspace closure** | **280** | **230** |
+| **shell workspace closure** | **280** | **231** (was 230; `pollster` for wgpu's async setup) |
 
 **The kernel and workspace lines are byte-identical to what they were before the
 shell existed**, which is the property the separate workspace was for: the

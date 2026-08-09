@@ -416,6 +416,13 @@ name = "usk-types"
 version = "0.1.0"
 
 [[package]]
+name = "usk-view"
+version = "0.1.0"
+dependencies = [
+ "usk-types",
+]
+
+[[package]]
 name = "usk-xlsx"
 version = "0.1.0"
 dependencies = [

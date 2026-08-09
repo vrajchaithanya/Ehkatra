@@ -32,6 +32,7 @@ const KERNEL = [
   'usk-xml',
   'usk-xlsx',
   'usk-mcp',
+  'usk-view',
 ];
 const KERNEL_DIRECT_MAX = 5; // DP-S2 as written in docs/07 §3
 const KERNEL_CLOSURE_MAX = 12; // D-035; today 10 (blake3's build+SIMD support crates)

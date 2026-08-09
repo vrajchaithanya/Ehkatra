@@ -365,9 +365,14 @@ name = "ehkatra-shell"
 version = "0.1.0"
 dependencies = [
  "ehkatra-store",
+ "pollster",
  "usk-calc",
+ "usk-oplog",
  "usk-reduce",
  "usk-state",
+ "usk-types",
+ "usk-view",
+ "usk-zip",
  "wgpu",
  "winit",
 ]
@@ -1260,6 +1265,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "pollster"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f3a9f18d041e6d0e102a0a46750538147e5e8992d3b4873aaafee2520b00ce3"
+
+[[package]]
 name = "presser"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1821,6 +1832,17 @@ dependencies = [
 
 [[package]]
 name = "usk-types"
+version = "0.1.0"
+
+[[package]]
+name = "usk-view"
+version = "0.1.0"
+dependencies = [
+ "usk-types",
+]
+
+[[package]]
+name = "usk-zip"
 version = "0.1.0"
 
 [[package]]

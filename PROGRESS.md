@@ -79,7 +79,7 @@ redirection in `tools\*.ps1`.
   (also `pwsh -File tools/gates.ps1`). Shell compat · fmt · clippy `-D warnings`
   · tests · no_std wasm32 kernel build · dep budget · supply chain (cargo-deny)
   · differential replay native == wasm32 · purity/host-isolation greps.
-- **Tests:** 353, all passing.
+- **Tests:** 361, all passing.
 - **Replay hashes:** oplog `c79fa533…` · state `b58d5505…` (unchanged by the
   date work — it is additive to the op algebra).
 - **Dependency budget:** kernel direct 1/5 · kernel closure 10/12 · workspace
@@ -94,25 +94,28 @@ redirection in `tools\*.ps1`.
 
 ## NEXT ACTION
 
-**Q2 is open and its platform question is settled: ADR-037** — native winit +
-wgpu desktop shell, superseding ADR-033's web-first PWA. docs/33 and docs/40
-already said this; ADR-033 was never propagated into them, which is the
-contradiction Q2 surfaced.
+**Q2's grid renders.** `usk-view` gives identity-anchored scroll and virtual
+scrolling (8 tests, including the ADR-022 one); the wgpu compositor draws a
+frame in one draw call; **W-SCROLL measures a 0.192 ms p50 CPU frame against
+docs/31's 8.3 ms budget** on a 1M-row document. Evidence: `demo/grid.png`.
 
-**The shell workspace exists and its budget is set.** `shell/` is a separate
-workspace with its own lockfile (D-116), depending on the kernel by path;
-`winit` + `wgpu` plus the kernel's registry closure measures **230**, and the
-gate enforces **280** — the extra ~50 is earmarked for accesskit and the
-file-dialog/menu adapters docs/33 names. With the shell present the kernel line
-still reads **10/12** and the workspace **29/40**, identical to before it
-existed, which is the whole point of the separation.
+**Next, in the order docs/40 lists and with the reason each is next:**
+1. **TD-59 — text.** The grid draws cell *kinds*, not contents, and a
+   spreadsheet you cannot read is not one. docs/31 specifies a glyph atlas over
+   rustybuzz-shaped runs with bundled fonts for metric determinism: a font
+   stack, a shaping decision, an asset-licensing question and an atlas
+   allocator. Budget note — the shell is 231/280 and the ~50 headroom was
+   earmarked for accesskit and dialogs, so a font stack may need that ceiling
+   revisited, which is an ADR by ADR-037.
+2. **TD-60 — the window.** Then the editing surface and native IME overlay
+   (docs/33), which needs a window anyway. Only after a frame has actually been
+   presented can docs/31's scroll budget be claimed end to end.
+3. Then menus/dialogs/file-association adapters, accesskit tree v1, and the
+   rest of docs/40's Q2 list.
 
-Then docs/40's Q2 list, in its order: renderer + virtual scroll, editing
-surface + native IME overlay, menus/dialogs/file-association adapters, accesskit
-tree v1, styles/validation/cond-format/sort/filter/tables, XLSX **write** +
-corpus v1 + a published fidelity number, installers (unsigned; signing certs go
-to BLOCKED.md). Commit UI screenshots under `demo/` as evidence with each
-feature.
+**TD-58** (the axis rebuilds prefix sums in O(n); docs/31 wants an
+order-statistic tree shared with A1 parsing and range enumeration) is filed and
+not urgent at Q2's scale.
 
 **The rest of step 3 is gated and should stay closed** (D-112): TD-17 and TD-44
 have triggers that measurement shows are not live, and TD-37 is blocked on

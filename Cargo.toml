@@ -19,6 +19,7 @@ members = [
   "crates/usk-xml",
   "crates/usk-xlsx",
   "crates/usk-mcp",
+  "crates/usk-view",
   "ehkatra-cli",
   "ehkatra-io",
   "ehkatra-mcp",

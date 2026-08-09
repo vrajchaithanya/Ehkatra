@@ -9,11 +9,21 @@ edition = "2021"
 [dependencies]
 winit = "0.30"
 wgpu = "23"
+# Blocks on wgpu's async setup. One crate, no runtime: the shell is not an
+# async program and adding an executor to await three futures would be the
+# larger dependency by far.
+pollster = "0.4"
 
 # The kernel, by path. It is a *dependency* of the shell and not a co-member:
 # the arrow points one way, and the shell's dependency choices cannot reach
 # back into the kernel's lockfile (D-116).
 usk-state = { path = "../../crates/usk-state" }
+usk-oplog = { path = "../../crates/usk-oplog" }
+usk-types = { path = "../../crates/usk-types" }
+usk-view = { path = "../../crates/usk-view" }
+# For CRC-32 and, in tests, the inflater that proves the PNG writer's DEFLATE
+# stream is one a real decoder accepts. Zero registry crates: usk-zip has none.
+usk-zip = { path = "../../crates/usk-zip" }
 usk-calc = { path = "../../crates/usk-calc" }
 usk-reduce = { path = "../../crates/usk-reduce" }
 ehkatra-store = { path = "../../ehkatra-store" }
