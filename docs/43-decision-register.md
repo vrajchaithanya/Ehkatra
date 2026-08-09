@@ -185,6 +185,21 @@ docs/16 promises salvage from "the **last valid** snapshot", which presupposes m
 That is not a bug in the salvage path, which behaved exactly as specified — it is a retention policy that was never stated. Recorded as **TD-30** with the two candidate fixes (keep N ≥ 2 snapshots, or retain compacted ops until a second snapshot verifies) rather than picked here: the choice trades file size against recoverability, and docs/16's cadence section is where it belongs.
 Worth noting the smaller-scale test disagrees and is right to: `a_corrupted_snapshot_opens_through_salvage_and_reports_it` keeps every op in `ops`, so it recovers the full workbook. The two together are the actual lesson — **recoverability is a property of the retention policy, not of the salvage code.**
 
+### Session 20 (2026-08-09) — TD-34 paid: criteria coerce, lookups do not
+
+**D-107 — The criteria sub-language is a *separate* comparison from the lookup one, and the corpus is what proves it.**
+
+W-ORACLE **85.7% → 87.0%** (+18 cases). `COUNTIF`, `COUNTIFS`, `SUMIF`, `SUMIFS` and `AVERAGEIF` reach 100% but for the three cases TD-50 now owns.
+
+The natural implementation — and the one that was there — reused `values_equal` for both families. That is wrong, and only measurement says so:
+
+* **`COUNTIF(range, 7)` counts a cell holding the text `"7"`.** So does `COUNTIF(range, "7")`. A lookup for `7` does *not* find that cell, and `VLOOKUP("7", …)` finds it only because both sides are text. Criteria coerce across the text boundary; lookups compare within it. One predicate cannot do both, so there are now two.
+* **`""` is the blank cell, and `"<>"` is every non-blank one.** Neither is a comparison against the empty string. Getting this wrong fails in opposite directions at once — `COUNTIF(C1:C5,"")` returned 0 where Excel says 1, and `COUNTIF(C1:C5,"<>")` returned 5 where Excel says 4.
+* **Wildcards apply, and only to text.** `COUNTIF(range,"*")` counts the text cells and nothing else — not the numbers, not the blanks. The matcher itself came free from TD-35, which is why this cluster cost so little.
+* **`COUNTIFS`/`SUMIFS` refuse criteria ranges of differing shape** rather than zipping to the shorter one. The pairing would be silently wrong, not merely short.
+
+**Filed rather than bodged: TD-50.** `SUMIF(A1:A5,">25",H1:H3)` must sum `H1:H5` — Excel reshapes the sum range to the criteria range's dimensions from its top-left, so even `H1` alone means `H1:H5`. It cannot be implemented here, because an `Operand::Range` carries *values* and not the reference they came from: a three-cell operand simply has no `H4` in it. That is the same missing information TD-16's implicit intersection waits on, so the two are filed to be repaid together rather than one of them being faked now.
+
 ### Session 20 (2026-08-09) — TD-14 and TD-35 paid: the lookup algorithm is the one Excel runs, not the one it documents
 
 **D-106 — Approximate match is implemented as Excel's binary search, and the wildcard sub-language is one matcher shared by every function that has it.**

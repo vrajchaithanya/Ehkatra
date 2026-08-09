@@ -669,6 +669,84 @@ fn wildcards_match_and_the_tilde_escapes_them() {
     );
 }
 
+/// TD-34: the criteria sub-language is **not** the lookup one, and the corpus
+/// is what says so. Wildcards work in both; coercion does not.
+#[test]
+fn criteria_take_wildcards_and_coerce_across_the_text_boundary() {
+    let g = Fixture::new(
+        5,
+        2,
+        alloc_cells(&[
+            t("apple"),
+            n(1.0),
+            t("Banana"),
+            n(2.0),
+            t("cherry"),
+            n(3.0),
+            t("7"),
+            n(4.0),
+            t("a*c"),
+            n(5.0),
+        ]),
+    );
+    assert_eq!(evg("=COUNTIF(A1:A5,\"a*\")", &g, Profile::Compat), n(2.0));
+    assert_eq!(evg("=COUNTIF(A1:A5,\"*a*\")", &g, Profile::Compat), n(3.0));
+    assert_eq!(
+        evg("=COUNTIF(A1:A5,\"?anana\")", &g, Profile::Compat),
+        n(1.0)
+    );
+    assert_eq!(evg("=COUNTIF(A1:A5,\"a~*c\")", &g, Profile::Compat), n(1.0));
+    // A bare `*` counts the text cells and nothing else.
+    assert_eq!(evg("=COUNTIF(A1:A5,\"*\")", &g, Profile::Compat), n(5.0));
+    // Here the two families part company: a criterion of 7 counts the cell
+    // holding the *text* "7", where a lookup for 7 would not find it.
+    assert_eq!(evg("=COUNTIF(A1:A5,7)", &g, Profile::Compat), n(1.0));
+    assert_eq!(evg("=COUNTIF(A1:A5,\"7\")", &g, Profile::Compat), n(1.0));
+    assert_eq!(
+        evg("=SUMIF(A1:A5,\"a*\",B1:B5)", &g, Profile::Compat),
+        dec("6")
+    );
+    assert_eq!(
+        evg("=SUMIF(A1:A5,\"a~*c\",B1:B5)", &g, Profile::Compat),
+        dec("5")
+    );
+}
+
+/// `""` is the blank cell and `"<>"` is every non-blank one. Neither is a
+/// comparison against the empty string, and treating them as one gets both
+/// wrong in opposite directions.
+#[test]
+fn an_empty_criterion_means_blank_and_its_negation_means_non_blank() {
+    let g = Fixture::new(
+        5,
+        1,
+        alloc_cells(&[n(30.0), n(10.0), n(50.0), n(10.0), Value::Blank]),
+    );
+    assert_eq!(evg("=COUNTIF(A1:A5,\"\")", &g, Profile::Compat), n(1.0));
+    assert_eq!(evg("=COUNTIF(A1:A5,\"<>\")", &g, Profile::Compat), n(4.0));
+    assert_eq!(evg("=COUNTIFS(A1:A5,\"\")", &g, Profile::Compat), n(1.0));
+}
+
+/// `COUNTIFS`/`SUMIFS` refuse criteria ranges of differing shape rather than
+/// zipping to the shorter one — the pairing would be silently wrong, not
+/// merely short.
+#[test]
+fn ifs_aggregates_refuse_mismatched_criteria_ranges() {
+    let g = Fixture::new(
+        5,
+        1,
+        alloc_cells(&[n(10.0), n(20.0), n(30.0), n(40.0), n(50.0)]),
+    );
+    assert_eq!(
+        kind_of(&evg(
+            "=COUNTIFS(A1:A5,\">15\",A1:A3,\"<45\")",
+            &g,
+            Profile::Compat
+        )),
+        Some(ErrorKind::Value)
+    );
+}
+
 /// A blank needle is not a value that matches other blanks: Excel reads the
 /// empty cell as 0, so a column full of holes still answers #N/A.
 #[test]

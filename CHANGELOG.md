@@ -1,5 +1,14 @@
 # Changelog — Architecture Repository
 
+## 2026-08-09 (session 20, cont.) — TD-34 paid: W-ORACLE 85.7% → 87.0%
+- **TD-34 PAID (D-107).** The `COUNTIF`/`SUMIF`/`COUNTIFS`/`SUMIFS`/`AVERAGEIF` criteria sub-language. **+18 cases**; all five reach 100% but for the three cases TD-50 now owns and one TD-15 float `near`.
+- **The headline rule: criteria coerce, lookups do not.** `COUNTIF(range, 7)` counts a cell holding the *text* `"7"`, and so does `COUNTIF(range, "7")` — but `VLOOKUP(7, …)` does not find it. The two families had been sharing `values_equal`, which is wrong for one of them, and nothing in the documented contract says so. There are now two predicates.
+- **`""` is the blank cell and `"<>"` is every non-blank one** — neither is a comparison against the empty string. The old handling failed in opposite directions at once: `COUNTIF(C1:C5,"")` gave 0 where Excel says 1, and `COUNTIF(C1:C5,"<>")` gave 5 where Excel says 4.
+- **Wildcards apply, and only to text**: `COUNTIF(range,"*")` counts the text cells and nothing else. The matcher came free from TD-35, which is why this cluster cost so little.
+- **`COUNTIFS`/`SUMIFS` refuse criteria ranges of differing shape** rather than zipping to the shorter one.
+- **Filed rather than bodged — TD-50**: `SUMIF(A1:A5,">25",H1:H3)` must sum `H1:H5`, because Excel reshapes the sum range to the criteria range's dimensions from its top-left. It needs the *reference*, not the materialised values — a three-cell operand has no `H4` in it — which is the same information TD-16 waits on, so the two are filed to be repaid together.
+- 3 new tests (338 total, from 335). All gates green; replay hashes unchanged.
+
 ## 2026-08-09 (session 20, cont.) — TD-14 + TD-35 paid: W-ORACLE 83.5% → 85.7%
 - **TD-14 and TD-35 PAID (D-106).** Approximate-match lookup and the wildcard sub-language. **+31 cases**; `VLOOKUP`, `HLOOKUP`, `XLOOKUP`, `MATCH`, `FIND` and `SEARCH` all reach **100%**.
 - **Approximate match is the binary search Excel actually runs**, not a scan for the largest key below the needle. Over the unsorted key column `30,10,50,10`, `VLOOKUP(35,…,TRUE)` returns the row holding **10** — the search probes the middle, finds 50 above the needle and halves downward. A linear scan answers 30: defensible, documented, and not what Excel does. TD-14's refusal (D-044) was right for eleven sessions and wrong the moment vectors existed; this is the clearest case in the corpus for ADR-024's premise that the binary is the spec.

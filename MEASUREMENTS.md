@@ -546,6 +546,7 @@ data point, not a re-run.
 | — 1900 date system | 1,236 | 1,026 | 83.0% |
 | — 1904 date system | 130 | 114 | **87.7%** |
 | **After lookup + wildcards (TD-14, TD-35, session 20)** | 1,366 | **1,171** | **85.7%** |
+| **After the criteria sub-language (TD-34, session 20)** | 1,366 | **1,189** | **87.0%** |
 
 352 fail at 74.2%, of which **12 are numerically near** (relative difference
 ≤ 1e-12) and are counted as fails anyway. 0 unjudged — a case the runner cannot
@@ -596,6 +597,27 @@ with the dependency graph). `INDEX(range,0,n)` now returns the whole column
 correctly — `SUM(INDEX(A1:B5,0,1))` is 150 — but collapsing that array in a
 scalar context still takes the top-left where Excel intersects against the
 caller.
+
+### TD-34: +18 cases, and the rule that criteria are not lookups · session 20
+
+`COUNTIF` 15/15 · `COUNTIFS` 8/8 · `SUMIFS` 10/10 · `SUMIF` 18/20 · `AVERAGEIF`
+7/9 — the four shortfalls are TD-50 (3) and one TD-15 float `near`.
+
+| | Cases | Pass | Rate |
+|---|---:|---:|---:|
+| before | 1,366 | 1,171 | 85.7% |
+| after | 1,366 | **1,189** | **87.0%** |
+
+**The measurement that split the two comparisons.** `COUNTIF(range, 7)` counts a
+cell holding the *text* `"7"`; `VLOOKUP(7, …)` does not find it. Criteria coerce
+across the text boundary and lookups compare within it, so the shared
+`values_equal` both families used was wrong for one of them. Nothing in the
+documented contract distinguishes them.
+
+**Three cases are TD-50 and are not counted here**: `SUMIF`/`AVERAGEIF` must
+extend a short sum range to the criteria range's shape (`H1` means `H1:H5`),
+which needs the *reference* rather than the materialised values — the same
+information TD-16 waits on.
 
 **Locale is deliberately excluded.** `YEAR("2024-03-15")` is implemented;
 `YEAR("15/03/2024")` is not, although the fixture for it exists. The second

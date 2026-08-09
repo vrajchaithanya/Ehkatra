@@ -1636,6 +1636,14 @@ fn descending_index<F: Fn(u32) -> Value>(len: u32, key_at: &F, needle: &Value) -
 struct Criterion {
     op: CritOp,
     value: Value,
+    /// The payload as the user wrote it, after the operator was stripped. The
+    /// wildcard sub-language lives in that *text*, and by the time `value`
+    /// exists `coerce_input` has already turned `"7"` into a number.
+    text: Option<String>,
+    /// The payload was empty: `""` means "blank" and `"<>"` means "not blank".
+    /// A state of its own, because the empty string is not the empty *cell*
+    /// and comparing them by equality gets both cases wrong.
+    empty: bool,
 }
 
 #[derive(PartialEq)]
@@ -1653,6 +1661,8 @@ fn parse_criterion(v: &Value) -> Criterion {
         return Criterion {
             op: CritOp::Eq,
             value: v.clone(),
+            text: None,
+            empty: false,
         };
     };
     let (op, rest) = if let Some(r) = s.strip_prefix("<>") {
@@ -1673,14 +1683,39 @@ fn parse_criterion(v: &Value) -> Criterion {
     // A criterion's payload is text the user wrote, so it goes through the
     // same Excel-shaped text→number rule the compat profile uses.
     let value = Profile::Compat.coerce_input(rest);
-    Criterion { op, value }
+    Criterion {
+        op,
+        value,
+        text: Some(String::from(rest)),
+        empty: rest.is_empty(),
+    }
+}
+
+/// The number a criterion comparison sees. Unlike a *lookup*, the criteria
+/// sub-language coerces: `COUNTIF(range, 7)` counts a cell holding the **text**
+/// `"7"`, and so does `COUNTIF(range, "7")`. Measured — the two families
+/// disagree about this, which is why they cannot share `values_equal`.
+fn criteria_number(v: &Value) -> Option<f64> {
+    match v {
+        Value::Text(s) => Profile::Compat.to_number(&Value::Text(s.clone())).ok(),
+        other => numeric(other),
+    }
 }
 
 fn matches(c: &Criterion, cell: &Value) -> bool {
+    // `""` is the blank cell and `"<>"` is every non-blank one. Neither is a
+    // comparison against the empty string.
+    if c.empty {
+        let blank = *cell == Value::Blank;
+        return match c.op {
+            CritOp::Ne => !blank,
+            _ => blank,
+        };
+    }
     match c.op {
-        CritOp::Eq => values_equal(cell, &c.value),
-        CritOp::Ne => !values_equal(cell, &c.value),
-        _ => match (numeric(cell), numeric(&c.value)) {
+        CritOp::Eq => criterion_equal(c, cell),
+        CritOp::Ne => !criterion_equal(c, cell),
+        _ => match (criteria_number(cell), criteria_number(&c.value)) {
             (Some(x), Some(y)) => match c.op {
                 CritOp::Lt => x < y,
                 CritOp::Le => x <= y,
@@ -1690,6 +1725,31 @@ fn matches(c: &Criterion, cell: &Value) -> bool {
             },
             _ => false,
         },
+    }
+}
+
+/// Equality inside the criteria sub-language: wildcards first, then numeric
+/// coercion across the text boundary, then a case-insensitive text compare.
+fn criterion_equal(c: &Criterion, cell: &Value) -> bool {
+    if let Some(pattern) = &c.text {
+        if has_wildcard(pattern) {
+            // A wildcard can only match text — `COUNTIF(range,"*")` counts the
+            // text cells and no others.
+            return match cell {
+                Value::Text(s) => wildcard_match(pattern, s),
+                _ => false,
+            };
+        }
+        let literal = unescape_wildcards(pattern);
+        if let Value::Text(s) = cell {
+            if literal.eq_ignore_ascii_case(s) {
+                return true;
+            }
+        }
+    }
+    match (criteria_number(cell), criteria_number(&c.value)) {
+        (Some(x), Some(y)) => x == y,
+        _ => values_equal(cell, &c.value),
     }
 }
 
@@ -1752,6 +1812,12 @@ fn f_ifs_agg<G: Grid>(ops: &[Operand], ctx: &Context<G>, summing: bool) -> Opera
     let mut i = first_pair;
     while i + 1 < ops.len() {
         let cells = ops[i].cells();
+        // Every criteria range must be the same shape. Excel refuses a
+        // mismatch outright rather than zipping to the shorter one, and it is
+        // right to: the pairing would be silently wrong, not merely short.
+        if mask.as_ref().is_some_and(|m| m.len() != cells.len()) {
+            return err(ErrorKind::Value);
+        }
         let crit = parse_criterion(&ops[i + 1].scalar());
         let this: Vec<bool> = cells.iter().map(|v| matches(&crit, v)).collect();
         mask = Some(match mask {

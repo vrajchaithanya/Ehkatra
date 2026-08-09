@@ -12,7 +12,7 @@ registers (docs/43 decisions, docs/44 debt, MEASUREMENTS.md numbers) are for.
 
 **Where the tree is:** v0.1 is complete and tagged `v0.1.0`. Q1 is done. The
 work in flight is the compatibility-debt push toward **W-ORACLE ≥ 90%**
-(now **85.7%**, 1,171 / 1,366 cases — up from 74.2% this session), followed by
+(now **87.0%**, 1,189 / 1,366 cases — up from 74.2% this session), followed by
 the structural debt around the tile image, then Q2's shell.
 
 **Session 20 paid TD-33, the largest cluster.** Excel's two date systems are now
@@ -33,6 +33,16 @@ unsorted keys `30,10,50,10` it answers the row holding **10**, where a linear
 existed and wrong the moment they did; it is the clearest case in the corpus for
 ADR-024's premise that the binary is the spec. Three `INDEX` cases still diverge
 and all three are **TD-16**, implicit intersection — attributed there, not here.
+
+**Session 20 paid TD-34** (**D-107**), +18 cases. The rule worth carrying
+forward: **criteria coerce and lookups do not.** `COUNTIF(range, 7)` counts a
+cell holding the *text* `"7"`; `VLOOKUP(7, …)` does not find it. The two
+families had shared one equality predicate, which is wrong for one of them, and
+nothing in the documented contract says so. Also: `""` is the blank cell and
+`"<>"` is every non-blank one — neither is a comparison against the empty
+string. Filed rather than bodged: **TD-50**, `SUMIF`'s short sum range must
+extend to the criteria range's shape, which needs the *reference* rather than
+materialised values — the same thing TD-16 waits on, so they repay together.
 
 **Session 20 closed TD-47 and found it was never true.** `tools/gates.ps1` was
 recorded as requiring PowerShell 7 and aborting on this 5.1-only host. Measured:
@@ -67,12 +77,12 @@ keeps its number forever.
   (also `pwsh -File tools/gates.ps1`). Shell compat · fmt · clippy `-D warnings`
   · tests · no_std wasm32 kernel build · dep budget · supply chain (cargo-deny)
   · differential replay native == wasm32 · purity/host-isolation greps.
-- **Tests:** 335, all passing.
+- **Tests:** 338, all passing.
 - **Replay hashes:** oplog `c79fa533…` · state `b58d5505…` (unchanged by the
   date work — it is additive to the op algebra).
 - **Dependency budget:** kernel direct 1/5 · kernel closure 10/12 · workspace
   closure 29/40.
-- **W-ORACLE:** **85.7%** overall (1,171 / 1,366).
+- **W-ORACLE:** **87.0%** overall (1,189 / 1,366).
 - **Open structural debt:** TD-46 (the tile image is built, tested, fuzz-clean
   and measured — and still not the snapshot body), and with it TD-45, TD-31 and
   TD-24's residual, all of which close together.
@@ -91,10 +101,10 @@ than re-guessing:
    `__compat_1900_leap` / `__compat_serial_boundary` cases that TD-33 left —
    they fail on `TEXT`, `DATEVALUE` and `EOMONTH`, not on date arithmetic.
 3. ~~TD-14 — approximate-match lookup~~ **PAID (session 20)**, with ~~TD-35~~.
-4. **TD-34 — the `COUNTIF`/`SUMIF` criteria sub-language** (~20). Next: it
-   reuses the wildcard matcher TD-35 just landed, so it is the cheapest
-   remaining cluster.
-5. **TD-32 — `compat_parse_15`** (~14), parse-time literal truncation.
+4. ~~TD-34 — the criteria sub-language~~ **PAID (session 20)**, +18 cases.
+5. **TD-32 — `compat_parse_15`** (~14), parse-time literal truncation. **Do
+   this next**: it is the last self-contained cluster before TD-36's format
+   grammar, and it belongs in the lexer, so it cannot be layered on later.
 6. **TD-16 — implicit intersection** — not in the original list, but it is now
    what holds the last three `INDEX` cases down, and it needs the dependency
    graph to supply the calling cell's position.
