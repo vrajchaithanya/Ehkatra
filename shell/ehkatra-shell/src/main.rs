@@ -15,6 +15,7 @@
 mod gpu;
 mod png;
 mod scene;
+mod text;
 
 use usk_oplog::{Anchor, Op, OpLog, Payload};
 use usk_state::State;
@@ -84,8 +85,9 @@ fn bench(rows: usize) -> Result<String, String> {
         WIDTH as f32 - theme.header_width,
         HEIGHT as f32 - theme.header_height,
     );
-    let renderer = gpu::Renderer::headless()
+    let mut renderer = gpu::Renderer::headless()
         .ok_or("no GPU adapter is available on this machine (not a shell defect)")?;
+    let mut text_engine = text::TextEngine::new().ok_or("the bundled font failed to load")?;
 
     const FRAMES: usize = 120;
     let mut cpu = Vec::with_capacity(FRAMES);
@@ -96,9 +98,23 @@ fn bench(rows: usize) -> Result<String, String> {
         // A different scroll offset every frame, so nothing is reused.
         view.scroll_by(&row_axis, &col_axis, 3.0, 17.0 + frame as f32);
         let visible = view.visible(&row_axis, &col_axis);
-        let scene = scene::build(&state, &visible, &theme, scene::Selection::default());
+        let scene = scene::build(
+            &state,
+            &visible,
+            &theme,
+            scene::Selection::default(),
+            &mut text_engine,
+        );
         let c = t.elapsed();
         quads = scene.len();
+        // Only when new glyphs appeared, which after the first few frames is
+        // never. Uploading unconditionally would measure a mebibyte of texture
+        // write as if it were a frame cost.
+        if text_engine.is_dirty() {
+            renderer.upload_atlas(text_engine.atlas_size(), text_engine.atlas_bytes());
+            text_engine.mark_uploaded();
+            text_engine.mark_uploaded();
+        }
         let _ = renderer.render_to_rgba(WIDTH, HEIGHT, &scene);
         total.push(t.elapsed().as_secs_f64() * 1000.0);
         cpu.push(c.as_secs_f64() * 1000.0);
@@ -146,10 +162,16 @@ fn render_to_file(path: &str, rows: usize) -> Result<String, String> {
         row: visible.rows.get(3).map(|s| RowId(s.id)),
         col: visible.cols.get(2).map(|s| ColId(s.id)),
     };
-    let quads = scene::build(&state, &visible, &theme, selection);
+    let mut text_engine = text::TextEngine::new().ok_or("the bundled font failed to load")?;
+    let quads = scene::build(&state, &visible, &theme, selection, &mut text_engine);
+    if text_engine.overflowed {
+        return Err("the glyph atlas filled up".into());
+    }
 
-    let renderer = gpu::Renderer::headless()
+    let mut renderer = gpu::Renderer::headless()
         .ok_or("no GPU adapter is available on this machine (not a shell defect)")?;
+    // After the scene, because building it is what rasterises the glyphs.
+    renderer.upload_atlas(text_engine.atlas_size(), text_engine.atlas_bytes());
     let rgba = renderer.render_to_rgba(WIDTH, HEIGHT, &quads);
     let encoded = png::encode_rgba(WIDTH, HEIGHT, &rgba);
     std::fs::write(path, &encoded).map_err(|e| format!("writing {path}: {e}"))?;

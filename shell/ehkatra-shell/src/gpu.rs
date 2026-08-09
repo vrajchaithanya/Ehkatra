@@ -15,12 +15,18 @@
 use std::borrow::Cow;
 
 /// One rectangle. `rect` is `(x, y, w, h)` in logical pixels with the origin at
-/// the viewport's top-left; `color` is linear RGBA.
+/// the viewport's top-left; `color` is linear RGBA; `uv` is the atlas rect in
+/// texels.
+///
+/// A cell fill and a glyph are **the same instance**, differing only in which
+/// part of the atlas they sample — a fill points at the reserved white texel.
+/// That is why adding text added no pipeline, no pass and no draw call.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct Quad {
     pub rect: [f32; 4],
     pub color: [f32; 4],
+    pub uv: [f32; 4],
 }
 
 /// Casts a slice of quads to bytes. Sound because `Quad` is `#[repr(C)]` with
@@ -35,18 +41,23 @@ pub fn quads_as_bytes(quads: &[Quad]) -> &[u8] {
 }
 
 const SHADER: &str = r#"
-struct Viewport { size: vec2<f32>, _pad: vec2<f32> };
+struct Viewport { size: vec2<f32>, atlas: vec2<f32> };
 @group(0) @binding(0) var<uniform> viewport: Viewport;
 
 struct Instance {
     @location(0) rect: vec4<f32>,
     @location(1) color: vec4<f32>,
+    @location(2) uv: vec4<f32>,
 };
 
 struct VsOut {
     @builtin(position) pos: vec4<f32>,
     @location(0) color: vec4<f32>,
+    @location(1) uv: vec2<f32>,
 };
+
+@group(0) @binding(1) var atlas: texture_2d<f32>;
+@group(0) @binding(2) var atlas_sampler: sampler;
 
 @vertex
 fn vs(@builtin(vertex_index) vi: u32, inst: Instance) -> VsOut {
@@ -67,12 +78,20 @@ fn vs(@builtin(vertex_index) vi: u32, inst: Instance) -> VsOut {
     var out: VsOut;
     out.pos = vec4<f32>(ndc, 0.0, 1.0);
     out.color = inst.color;
+    // Atlas texels to normalised coordinates. Sampling the *centre* of the
+    // reserved white texel matters: at its corner a linear filter would blend
+    // with the empty texel beside it and every solid fill would come out
+    // half-transparent.
+    out.uv = (inst.uv.xy + corner * inst.uv.zw) / viewport.atlas;
     return out;
 }
 
 @fragment
 fn fs(in: VsOut) -> @location(0) vec4<f32> {
-    return in.color;
+    // The atlas is coverage, not colour: it modulates alpha so a glyph takes
+    // the run's colour and antialiases against whatever is behind it.
+    let coverage = textureSample(atlas, atlas_sampler, in.uv).r;
+    return vec4<f32>(in.color.rgb, in.color.a * coverage);
 }
 "#;
 
@@ -81,6 +100,8 @@ pub struct Renderer {
     queue: wgpu::Queue,
     pipeline: wgpu::RenderPipeline,
     bind_group_layout: wgpu::BindGroupLayout,
+    sampler: wgpu::Sampler,
+    atlas: Option<(wgpu::TextureView, u32)>,
 }
 
 impl Renderer {
@@ -116,16 +137,34 @@ impl Renderer {
         });
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("viewport"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
                 },
-                count: None,
-            }],
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("grid"),
@@ -142,7 +181,7 @@ impl Renderer {
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: core::mem::size_of::<Quad>() as u64,
                     step_mode: wgpu::VertexStepMode::Instance,
-                    attributes: &wgpu::vertex_attr_array![0 => Float32x4, 1 => Float32x4],
+                    attributes: &wgpu::vertex_attr_array![0 => Float32x4, 1 => Float32x4, 2 => Float32x4],
                 }],
             },
             fragment: Some(wgpu::FragmentState {
@@ -161,12 +200,59 @@ impl Renderer {
             multiview: None,
             cache: None,
         });
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("atlas"),
+            // Linear, so a glyph edge is smooth; the atlas leaves a texel of
+            // padding between entries so filtering cannot bleed across glyphs.
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
         Renderer {
             device,
             queue,
             pipeline,
             bind_group_layout,
+            sampler,
+            atlas: None,
         }
+    }
+
+    /// Uploads the glyph atlas. Called once; the atlas grows by rasterising
+    /// into the same texture, so re-uploading is a whole-texture write rather
+    /// than a per-frame cost.
+    pub fn upload_atlas(&mut self, size: u32, coverage: &[u8]) {
+        let extent = wgpu::Extent3d {
+            width: size,
+            height: size,
+            depth_or_array_layers: 1,
+        };
+        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("glyph atlas"),
+            size: extent,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::R8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        self.queue.write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            coverage,
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(size),
+                rows_per_image: Some(size),
+            },
+            extent,
+        );
+        self.atlas = Some((texture.create_view(&Default::default()), size));
     }
 
     /// Renders a scene to an RGBA8 buffer of `width * height * 4` bytes.
@@ -188,22 +274,72 @@ impl Renderer {
         });
         let view = texture.create_view(&Default::default());
 
+        // A 1x1 opaque stand-in, so a scene rendered before any atlas exists
+        // draws solid quads correctly instead of failing to bind.
+        let blank = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("blank atlas"),
+            size: wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::R8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        self.queue.write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &blank,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &[255u8],
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(1),
+                rows_per_image: Some(1),
+            },
+            wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+        );
+        let blank_view = blank.create_view(&Default::default());
+
         let uniform = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("viewport"),
             size: 16,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let dims = [width as f32, height as f32, 0.0f32, 0.0f32];
+        let atlas_size = self.atlas.as_ref().map_or(1.0, |(_, n)| *n as f32);
+        let dims = [width as f32, height as f32, atlas_size, atlas_size];
         self.queue
             .write_buffer(&uniform, 0, quads_as_bytes_f32(&dims));
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("viewport"),
             layout: &self.bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(
+                        self.atlas.as_ref().map(|(v, _)| v).unwrap_or(&blank_view),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+            ],
         });
 
         let instances = self.device.create_buffer(&wgpu::BufferDescriptor {

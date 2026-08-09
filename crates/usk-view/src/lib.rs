@@ -274,6 +274,14 @@ pub struct Slot {
     /// it is partly scrolled off, which is what makes smooth scrolling smooth.
     pub at: f32,
     pub size: f32,
+    /// Position on the axis, 0-based.
+    ///
+    /// A *display* concern and nothing more: A1 notation is a view over
+    /// identities (DP-A6), so the header needs an ordinal to print and the
+    /// renderer would otherwise have to search the axis per row to find one.
+    /// It is carried here rather than derived because the walk already knows
+    /// it.
+    pub index: usize,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -306,6 +314,7 @@ fn span(axis: &Axis, anchor: &Anchor, extent: f32) -> Vec<Slot> {
             id: axis.ids[i],
             at,
             size,
+            index: i,
         });
         at += size;
         i += 1;
@@ -368,4 +377,39 @@ fn reanchored(axis: &Axis, previous: &Axis, anchor: &Anchor) -> Anchor {
             offset: 0.0,
         },
     }
+}
+
+/// A column's A1 label: bijective base-26, so column 26 is `AA` and not `AZ`
+/// or `BA` (DP-A6 — A1 is a *view*, and this is the whole of that view for a
+/// header).
+pub fn column_label(index: usize) -> alloc::string::String {
+    let mut out = alloc::vec::Vec::new();
+    let mut n = index + 1;
+    while n > 0 {
+        let rem = (n - 1) % 26;
+        out.push(b'A' + rem as u8);
+        n = (n - 1) / 26;
+    }
+    out.reverse();
+    alloc::string::String::from_utf8(out).unwrap_or_default()
+}
+
+/// A row's A1 label: 1-based, which is the only thing spreadsheet users have
+/// ever agreed on.
+pub fn row_label(index: usize) -> alloc::string::String {
+    let mut buf = alloc::string::String::new();
+    let mut n = index + 1;
+    let mut digits = alloc::vec::Vec::new();
+    if n == 0 {
+        digits.push(b'0');
+    }
+    while n > 0 {
+        digits.push(b'0' + (n % 10) as u8);
+        n /= 10;
+    }
+    digits.reverse();
+    for d in digits {
+        buf.push(d as char);
+    }
+    buf
 }

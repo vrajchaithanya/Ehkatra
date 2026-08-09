@@ -90,6 +90,28 @@ Verified in both directions: with the shell added, 13/12 FAIL; with it removed, 
 
 *This is what "measure before you set the number" bought this time.* The ceiling was the stated reason to measure; the workspace boundary is what the measurement actually found, and it would have been discovered instead by a broken `no_std` build some sessions later.
 
+**ADR-038 — The text stack: rustybuzz shaping, ab_glyph rasterisation, and the bundled font as a *dependency* rather than a repo asset.**
+Date: 2026-08-10 · Status: Accepted · Implements docs/31's text requirement; closes TD-59.
+
+*Context.* docs/31 fixes the shape of this decision and its reason: *"glyph-atlas text… Shaping: rustybuzz + **bundled fonts only for layout metrics** (26.6 fixed-point) — layout determinism is metric-determinism; pixels may differ per rasterizer."* So the shaping library and the bundling requirement are given. What was open: which rasteriser, which font, and how the font gets into the build. ADR-037 additionally warned that a font stack might need the shell's dependency ceiling revisited.
+
+*Decision.*
+* **Shaping: `rustybuzz`**, as docs/31 specifies. Advances come from the font's own tables including kerning, which is what makes a layout reproducible on a machine that has never seen the text.
+* **Rasterisation: `ab_glyph`** — chosen partly because it was **already in the shell's dependency closure** (via `winit`'s Linux decorations), so it costs nothing new. Its `GlyphId` is the same `u16` `rustybuzz` produces from the same font file, so the two compose without a mapping layer.
+* **Font: `DejaVu Sans`, taken as the `dejavu` crate** rather than a `.ttf` committed to the repo. This is the part worth arguing: a crate is **versioned, lockfile-pinned, and covered by the supply-chain gate** — `cargo-deny` checked its licence automatically and it passed the existing allow list. A binary asset in the repo would be none of those things, and its licence would be checked by whoever remembered to look.
+
+*Measured, and the reason ADR-037 said to.* The whole stack cost **8 crates**: the shell closure went **231 → 239 against a ceiling of 280**. The ~50 earmarked for accesskit and the platform dialogs survives with 41 left, so **no ceiling change and no ADR-037 amendment are needed** — which is only knowable because the ceiling was set from a measurement rather than a guess (D-115, D-116).
+
+*Alternatives considered.* **A system font** (DirectWrite/CoreText) — rejected by docs/31's own argument: layout determinism *is* metric determinism, and a system font makes two machines lay text out differently. **A hand-authored bitmap font** — zero dependencies and genuinely tempting for digits, but it fixes one size, no kerning, no non-Latin, and it would have to be thrown away the moment styles arrive. **`cosmic-text`** — a larger, more complete stack that also does line breaking and fallback; the right answer later, and too much surface for a first grid whose text is one size and one font.
+
+*Consequences.* A glyph quad and a cell fill are **the same instance type**, differing only in which part of the atlas they sample — a fill points at a reserved white texel — so text added **no pipeline, no pass, and no draw call**. Measured cost: the CPU frame went **0.192 → 1.373 ms p50** against docs/31's 8.3 ms, which is 17% of budget and the price of shaping every visible cell every frame. docs/31's *"numeric fast path (pre-shaped digit runs per style)"* is the named remedy and is not built (TD-62).
+
+What gets harder: a bundled font is a licensing surface. The `dejavu` crate declares `MIT/Apache-2.0`, which satisfies the gate, but DejaVu upstream derives from Bitstream Vera's licence — permissive, and *not literally* either of those. That mismatch is the crate's metadata rather than a problem with the font, and it is filed as **TD-63** to be confirmed before anything is distributed, because an installer is where a licence question stops being theoretical.
+
+*Reversal.* Cheap. Shaping, rasterisation and the font are three independent choices behind one `TextEngine`; swapping any of them changes no caller. The atlas format and the instance layout are the parts that would persist, and they are not specific to any of the three.
+
+*Verification.* `demo/grid.png` — a frame with real values from a real `State`, right-aligned numerals, `#DIV/0!` rendered by name, and A1 headers. **W-SCROLL** re-measured with text on. The atlas round-trip is proven by the frame itself: a wrong `uv` or a wrong bit order produces garbage that is instantly visible, which is why a screenshot is the test here.
+
 ## Notable non-ADR decisions
 D-021 Managed-E2EE approved-unscheduled · D-030 product name TBD (blocks marketing, not engineering) · D-033 reference hardware fixed (mid-2023 laptops; revisit yearly) · D-034 Rust toolchain pinned per release train.
 

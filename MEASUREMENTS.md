@@ -916,12 +916,28 @@ Run: `shell/target/release/ehkatra-shell --bench 1000000`. 120 consecutive
 frames, scrolled by a different amount each frame so nothing is reused between
 them, over a **1,000,000-row × 40-column** document at 1280×800.
 
-| | measured | budget (docs/31) |
-|---|---:|---:|
-| **CPU frame** — viewport + scene build | p50 **0.192 ms** · p99 **0.316 ms** | 8.3 ms |
-| CPU + GPU incl. readback | p50 6.239 ms · p99 8.010 ms | — |
-| quads per frame | **331**, in **1 draw call** | — |
-| axis build (one-off) | 31.9 ms for 1M rows | — |
+| | geometry only | **with text** | budget (docs/31) |
+|---|---:|---:|---:|
+| **CPU frame** — viewport + scene + shaping | p50 **0.192** · p99 **0.316** ms | p50 **1.373** · p99 **2.591** ms | 8.3 ms |
+| CPU + GPU incl. readback | p50 6.239 · p99 8.010 ms | p50 6.855 · p99 8.767 ms | — |
+| quads per frame | 331 | **1,203** | — |
+| draw calls | 1 | **1** | — |
+| axis build (one-off) | 31.9 ms | 13.0 ms | — |
+
+**Text costs 7× the CPU frame and still leaves 83% of the budget** — 1.373 ms
+against 8.3 ms. It is now the largest item in the frame, and the cause is that
+every visible cell is shaped every frame: docs/31's *"numeric fast path
+(pre-shaped digit runs per style)"* is not built, and is filed as **TD-62** with
+that measurement as its trigger.
+
+Quads went 331 → 1,203 and **draw calls stayed at one**, which is the point of
+the atlas design: a glyph quad and a cell fill are the same instance, differing
+only in which part of the atlas they sample.
+
+The atlas is uploaded only when a glyph is rasterised that was not there before
+— after a few frames of scrolling, never. An earlier version of this bench
+re-uploaded a mebibyte every frame and reported **7.470 / 10.129 ms**, which
+would have been measuring the harness rather than the renderer.
 
 **The number against the budget is the CPU frame: 0.192 ms p50, about 2% of
 docs/31's 8.3 ms.** That is the work a scroll actually costs — resolving the

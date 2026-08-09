@@ -13,6 +13,12 @@ wgpu = "23"
 # async program and adding an executor to await three futures would be the
 # larger dependency by far.
 pollster = "0.4"
+# Text (TD-59, docs/31): shaping by rustybuzz, rasterisation by ab_glyph,
+# metrics from a bundled font. `dejavu` ships the font as a versioned,
+# licence-checked dependency rather than an unversioned blob in the repo.
+rustybuzz = "0.20"
+ab_glyph = "0.2"
+dejavu = "2.37"
 
 # The kernel, by path. It is a *dependency* of the shell and not a co-member:
 # the arrow points one way, and the shell's dependency choices cannot reach

@@ -221,3 +221,38 @@ fn a_resized_row_keeps_its_height_across_a_structural_edit() {
     assert_eq!(metrics.col_width(ColId(id(3))), 200.0);
     assert_eq!(metrics.col_width(ColId(id(4))), metrics.default_col_width);
 }
+
+/// A1 labels: bijective base-26, which is the one place spreadsheet column
+/// naming surprises people — column 26 is `AA`, not `BA` or `AZ`.
+#[test]
+fn column_labels_are_bijective_base_26() {
+    use usk_view::{column_label, row_label};
+    for (index, expected) in [
+        (0, "A"),
+        (25, "Z"),
+        (26, "AA"),
+        (27, "AB"),
+        (51, "AZ"),
+        (52, "BA"),
+        (701, "ZZ"),
+        (702, "AAA"),
+        (16_383, "XFD"), // Excel's last column
+    ] {
+        assert_eq!(column_label(index), expected, "column {index}");
+    }
+    assert_eq!(row_label(0), "1");
+    assert_eq!(row_label(1_048_575), "1048576"); // Excel's last row
+}
+
+/// The ordinal a slot carries must be the one the axis would report, or the
+/// header prints a label for a different row than the one beside it.
+#[test]
+fn a_visible_slot_knows_its_own_ordinal() {
+    let rows = uniform(1_000, 20.0);
+    let cols = Axis::default();
+    let mut view = Viewport::new(300.0, 200.0);
+    view.scroll_by(&rows, &cols, 0.0, 4_000.0);
+    for slot in &view.visible(&rows, &cols).rows {
+        assert_eq!(rows.index_of(slot.id), Some(slot.index));
+    }
+}
