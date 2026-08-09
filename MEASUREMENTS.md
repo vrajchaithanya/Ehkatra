@@ -910,6 +910,39 @@ Recorded as measured, with three consequences stated plainly:
   benchmark that reports one sample invites exactly this, which is why the
   recalc figures beside it are already medians of five.
 
+## Shell dependency closure (ADR-037) — **measured, and it moved the kernel** · session 21
+
+ADR-037 required the shell's dependency ceiling to be measured before the first
+GPU dependency was committed. It was. The ceiling is the *less* important of the
+two numbers that came back.
+
+Measured by adding `winit = "0.30"` and `wgpu = "23"` to a new `ehkatra-shell`
+member and running `node tools/dep-budget.mjs` (resolution only — `cargo
+metadata` does not compile):
+
+| | before | with the shell as a workspace member |
+|---|---:|---:|
+| **kernel dep closure** (cap **12**, D-035) | 10 | **13 — FAIL** |
+| non-shell workspace closure (cap 40) | 29 | 34 |
+| shell closure | — | **196** |
+
+**The headline is not 196.** It is that putting the shell in the same workspace
+pushed the **kernel** closure over its cap. Cargo resolves one lockfile per
+workspace and unifies versions globally, so pulling in a GPU stack re-resolved
+crates the kernel already depended on: `cc` moved and brought `jobserver`, and
+`getrandom` + `r-efi` arrived in the shared graph (with `wasip2` and
+`wit-bindgen` in the wider workspace).
+
+That cap is not decoration. The kernel closure is what keeps `usk-*` buildable
+as `no_std` against `wasm32-wasip1`, which is the gate the entire determinism
+argument rests on (DP-A3, and the differential-replay evidence for DP-A2). A
+GUI arriving must not be able to move it, and as a workspace member it does.
+
+**Conclusion, recorded as D-116: the shell cannot be a member of the kernel's
+workspace.** Verified both ways — removing it returns the closure to exactly
+10/12 and 29/40, so the contamination is the shell and not a routine lockfile
+refresh.
+
 ## W-OPEN-1M with an image body (docs/38) — **TD-45 and TD-31 paid** · session 21
 
 Run: `cargo run --release -p open-bench`. Same 1,000,000-cell corpus (1000 x

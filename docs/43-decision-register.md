@@ -76,6 +76,20 @@ ADR-033 named the docs it changed (*"Changed: docs/33 platform priority…"*) an
 
 *Verification.* The dependency gate reporting a shell line; docs/33 and docs/40 free of contradiction with the register (checked by reading them, which is what caught this); and Q2's own exit criteria in docs/40 — dogfood-daily internal alpha, canvas-a11y spike resolved with Narrator + VoiceOver evidence.
 
+**ADR-037 Amendment 1 (D-116, measured 2026-08-09) — the shell is a *separate workspace*, not a member of this one.**
+
+ADR-037 said the shell's ceiling had to be measured before the first GPU dependency was committed. It was, and the measurement answered a question nobody had asked: adding `winit` + `wgpu` as a workspace **member** pushed the **kernel** dependency closure from **10 to 13, past its cap of 12**.
+
+Cargo resolves one lockfile per workspace and unifies versions across it, so a GPU stack re-resolves crates the kernel already had: `cc` moved and brought `jobserver`; `getrandom` and `r-efi` appeared in the shared graph. The shell's own closure is **196**, and the non-shell workspace went 29 → 34.
+
+**196 is not the finding.** The finding is that the kernel cap is what keeps `usk-*` building as `no_std` against `wasm32-wasip1` — DP-A3's gate, and the evidence base for DP-A2's determinism claim — and a workspace member can move it from outside the kernel entirely. A budget that a GUI can breach by existing is not protecting what it was written to protect.
+
+So the shell gets **its own workspace and its own lockfile**, depending on the kernel crates by path. The kernel's resolution graph then cannot be reached from the shell at all, which makes DP-S2's kernel line structural rather than something to keep re-checking. `tools/dep-budget.mjs` keeps its shell line for when that workspace exists.
+
+Verified in both directions: with the shell added, 13/12 FAIL; with it removed, back to exactly 10/12 and 29/40. The contamination is the shell and not a routine lockfile refresh, which is the alternative explanation that had to be ruled out before blaming it.
+
+*This is what "measure before you set the number" bought this time.* The ceiling was the stated reason to measure; the workspace boundary is what the measurement actually found, and it would have been discovered instead by a broken `no_std` build some sessions later.
+
 ## Notable non-ADR decisions
 D-021 Managed-E2EE approved-unscheduled · D-030 product name TBD (blocks marketing, not engineering) · D-033 reference hardware fixed (mid-2023 laptops; revisit yearly) · D-034 Rust toolchain pinned per release train.
 

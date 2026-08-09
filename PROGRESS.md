@@ -99,12 +99,18 @@ wgpu desktop shell, superseding ADR-033's web-first PWA. docs/33 and docs/40
 already said this; ADR-033 was never propagated into them, which is the
 contradiction Q2 surfaced.
 
-**First step, and it is a measurement, not a feature.** ADR-037 requires the
-shell's dependency ceiling to be **measured before the first GPU dependency is
-committed**. `tools/dep-budget.mjs` now reports a shell line and says plainly
-that the ceiling is UNSET. So: create `ehkatra-shell`, add `winit` and `wgpu`,
-run the gate, record the real closure in MEASUREMENTS.md, and set the ceiling
-from it. D-115 is why this order and not the other one.
+**That measurement is done, and it changed the plan (D-116).** `winit` + `wgpu`
+is a **196-crate** closure — but adding it as a workspace *member* pushed the
+**kernel** closure from 10 to **13, past its cap of 12**, because Cargo unifies
+versions across one lockfile. The kernel cap is what keeps `usk-*` building as
+`no_std` on `wasm32-wasip1`, so a GUI must not be able to move it.
+
+**So the first step is now a layout, not a manifest**: create the shell as its
+**own workspace** with its own lockfile, depending on the kernel crates by path.
+Then re-run `tools/dep-budget.mjs`, confirm the kernel line is still 10/12, and
+set the shell ceiling from the 196 already measured. The scaffold was reverted
+rather than committed — it fails the gate as a member, and the fix is a
+different layout, not a smaller manifest.
 
 Then docs/40's Q2 list, in its order: renderer + virtual scroll, editing
 surface + native IME overlay, menus/dialogs/file-association adapters, accesskit

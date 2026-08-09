@@ -1,5 +1,15 @@
 # Changelog — Architecture Repository
 
+## 2026-08-09 (session 21, Q2) — shell closure measured; **the shell must be its own workspace** (D-116)
+- **Measured, as ADR-037 required before any GPU dependency landed**: `winit 0.30` + `wgpu 23` is a **196-crate** closure. That is the number the exercise was for, and it is the less important one.
+- **Adding the shell as a workspace member pushed the *kernel* closure from 10 to 13, past its cap of 12.** Cargo resolves one lockfile per workspace and unifies versions globally, so a GPU stack re-resolved crates the kernel already had — `cc` moved and brought `jobserver`, and `getrandom` + `r-efi` entered the shared graph (`wasip2`, `wit-bindgen` in the wider workspace, 29 → 34).
+- **That cap is not decoration**: the kernel closure is what keeps `usk-*` building as `no_std` against `wasm32-wasip1` — DP-A3's gate, and the evidence base for DP-A2's determinism claim. A budget a GUI can breach by merely existing is not protecting what it was written to protect.
+- **D-116, recorded as ADR-037 Amendment 1: the shell gets its own workspace and its own lockfile**, depending on the kernel crates by path. The kernel's resolution graph then cannot be reached from the shell at all, making DP-S2's kernel line structural rather than something to re-check.
+- **Verified both directions**: with the shell, 13/12 FAIL; without it, back to exactly 10/12 and 29/40 — so the contamination is the shell, not a routine lockfile refresh, which was the alternative that had to be ruled out before blaming it.
+- The scaffold was **reverted**, not committed: it fails the gate as a member, and the fix is a different layout rather than a smaller manifest.
+- `tools/dep-budget.mjs` keeps its shell line, reporting `0, ceiling UNSET`, for when that separate workspace exists.
+- 353 tests, all gates green.
+
 ## 2026-08-09 (session 21, Q2 opens) — ADR-037: the native shell is the product, and the budget it needs
 - **Q2 could not start until three sources stopped disagreeing.** docs/33 (Normative) says "Windows and macOS are the product… **winit + wgpu**… *Not* a webview"; docs/40 says Q2 is "winit+wgpu shell on Win+macOS"; ADR-033 said the primary shell is a PWA and "native winit shell demoted to future option". ADR-033 **named the docs it changed and the change was never made**, so for two days the register and both normative docs said opposite things — a live DP-F3 defect, visible only because Q2 forced someone to read all three.
 - **ADR-037 accepted**: the native winit + wgpu desktop shell is the product, superseding ADR-033 and restoring ADR-027/028's substance. The owner's directive opening Q2 agrees with both normative docs against a single un-propagated ADR.
