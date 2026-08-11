@@ -27,6 +27,7 @@ use usk_state::State;
 use usk_types::{ColId, RowId, Value};
 use usk_view::{column_label, row_label, Visible};
 
+use crate::app::Composition;
 use crate::gpu::Quad;
 use crate::text::{self, TextEngine};
 
@@ -51,6 +52,11 @@ pub struct Theme {
     pub selection: [f32; 4],
     pub selection_border: [f32; 4],
     pub editor_fill: [f32; 4],
+    /// The clause a converting input method has the focus on (TD-84). A wash
+    /// behind the glyphs rather than a solid fill over them, for the reason
+    /// `selection` is a wash: the text a user is choosing between candidates for
+    /// is the text they most need to be able to read.
+    pub ime_focus: [f32; 4],
     pub caret: [f32; 4],
     pub text: [f32; 4],
     pub header_text: [f32; 4],
@@ -82,6 +88,10 @@ impl Default for Theme {
             selection: srgb(0.13, 0.38, 0.80, 0.12),
             selection_border: srgb(0.10, 0.32, 0.72, 1.0),
             editor_fill: srgb(1.0, 1.0, 1.0, 1.0),
+            // Deeper than `selection`'s 0.12 because it sits inside the
+            // editor's white box and has to read as a distinct clause at cell
+            // size, and still a wash because the glyphs stay on top of it.
+            ime_focus: srgb(0.13, 0.38, 0.80, 0.26),
             caret: srgb(0.08, 0.09, 0.11, 1.0),
             text: srgb(0.10, 0.11, 0.13, 1.0),
             header_text: srgb(0.32, 0.35, 0.39, 1.0),
@@ -168,10 +178,12 @@ pub struct EditView<'a> {
     pub text: &'a str,
     /// Caret position as a **byte offset** into `text`.
     pub caret: usize,
-    /// The byte span of `text` an input method is composing, when one is
-    /// (docs/33 §IME). Drawn underlined, which is the convention on both
-    /// platforms for "this is a proposal and not yet your text".
-    pub preedit: Option<(usize, usize)>,
+    /// What an input method is composing inside `text`, when one is (docs/33
+    /// §IME). The whole span is drawn underlined, which is the convention on
+    /// both platforms for "this is a proposal and not yet your text"; the
+    /// focused clause is additionally shaded, which is what a converting IME
+    /// draws and what TD-84 was filed for the absence of.
+    pub preedit: Option<Composition>,
 }
 
 /// The formula bar's two fields.
@@ -570,6 +582,27 @@ pub fn build(frame: &Frame, theme: &Theme, text_engine: &mut TextEngine) -> Scen
                 uv: TextEngine::white_uv(),
             });
             push_border(&mut quads, rect, 2.0, theme.selection_border);
+            // Both of a composition's emphases are measured against the
+            // *spliced* text, so they track the same shaping the glyphs did
+            // rather than a second guess at where the composition starts, and
+            // both are clipped to the editor box for the same reason the run is:
+            // a long composition must not draw over the cells to the right.
+            let span_x = |(start, end): (usize, usize)| {
+                let left = (ox + c.at + pad + run.caret_x(start)).min(ox + c.at + box_w);
+                let right = (ox + c.at + pad + run.caret_x(end)).min(ox + c.at + box_w);
+                (right > left).then_some((left, right))
+            };
+            // The focused clause (TD-84), **before** the run: a wash behind the
+            // glyphs is a highlight, and the same quad after them is a censor
+            // bar. Ordering is the whole difference and it is not visible in
+            // either quad on its own, which is why it is written down.
+            if let Some((left, right)) = ed.preedit.and_then(|c| c.focus).and_then(span_x) {
+                quads.push(Quad {
+                    rect: [left, oy + r.at + 2.0, right - left, r.size - 4.0],
+                    color: theme.ime_focus,
+                    uv: TextEngine::white_uv(),
+                });
+            }
             let baseline = oy + r.at + (r.size - line) * 0.5 + ascent;
             push_run(
                 &mut quads,
@@ -580,21 +613,15 @@ pub fn build(frame: &Frame, theme: &Theme, text_engine: &mut TextEngine) -> Scen
                 ox + c.at,
                 ox + c.at + box_w,
             );
-            // The composition's underline (docs/33 §IME). Under the *spliced*
-            // text, so it tracks the same shaping the glyphs did rather than a
-            // second guess at where the composition starts. Clipped to the
-            // editor box for the same reason the run is: a long composition
-            // must not draw over the cells to the right.
-            if let Some((start, end)) = ed.preedit {
-                let left = (ox + c.at + pad + run.caret_x(start)).min(ox + c.at + box_w);
-                let right = (ox + c.at + pad + run.caret_x(end)).min(ox + c.at + box_w);
-                if right > left {
-                    quads.push(Quad {
-                        rect: [left, oy + r.at + r.size - 4.0, right - left, 1.0],
-                        color: theme.text,
-                        uv: TextEngine::white_uv(),
-                    });
-                }
+            // The composition's underline (docs/33 §IME) — the whole span, which
+            // stays exactly as it was: it says "this is a proposal", and that is
+            // true of the unfocused clauses too.
+            if let Some((left, right)) = ed.preedit.map(|c| c.span).and_then(span_x) {
+                quads.push(Quad {
+                    rect: [left, oy + r.at + r.size - 4.0, right - left, 1.0],
+                    color: theme.text,
+                    uv: TextEngine::white_uv(),
+                });
             }
             // The caret. Solid rather than blinking: a blink needs a timer in
             // the frame loop, and a grid that redraws only on change should not
@@ -879,6 +906,81 @@ mod tests {
                 .iter()
                 .any(|q| !is_glyph(q) && q.rect[3] == 1.0 && q.rect[2] > 2.0 && within(q, rect)),
             "the underline must not outlive the composition it marks"
+        );
+    }
+
+    /// Two conversion states that differ only in which clause has the focus must
+    /// differ in the frame (**TD-84 paid**).
+    ///
+    /// **ASCII on purpose, and it is not a shortcut.** The real case is
+    /// `今日は晴れ` and it is asserted in `ime.rs` and photographed by `--ime`;
+    /// what *this* test needs is a shaped advance it can compare, and a machine
+    /// with no CJK face installed lays kanji out through whatever the fallback
+    /// found. The mechanism under test — a focused sub-span becomes its own quad,
+    /// positioned by the same shaping the glyphs used — is script-independent, so
+    /// it is tested with the one script every host can shape.
+    #[test]
+    fn moving_the_focus_between_clauses_moves_a_quad_and_leaves_the_underline() {
+        let mut app = harness::app(30, 6);
+        let rect = cell_rect(app.theme(), 0, 0);
+        let wash = app.theme().ime_focus;
+        let underline_of = |quads: &[Quad]| {
+            quads
+                .iter()
+                .find(|q| !is_glyph(q) && q.rect[3] == 1.0 && q.rect[2] > 2.0 && within(q, rect))
+                .map(|q| q.rect)
+        };
+
+        // A bare caret is not a focused clause, so nothing is shaded yet.
+        app.ime_preedit("abcdef", Some((3, 3)));
+        assert!(
+            !app.frame().iter().any(|q| q.color == wash),
+            "a caret must not shade anything — only a reported range does"
+        );
+
+        app.ime_preedit("abcdef", Some((0, 3)));
+        let quads = app.frame();
+        let first = quads
+            .iter()
+            .position(|q| q.color == wash)
+            .expect("the focused clause must be drawn");
+        let left = quads[first].rect;
+        let underline = underline_of(&quads).expect("the composition is still underlined");
+        // Behind the glyphs and not over them: the same quad drawn after the run
+        // would hide the very text the user is choosing a candidate for.
+        let glyph = quads
+            .iter()
+            .position(|q| is_glyph(q) && within(q, rect))
+            .expect("the composition draws glyphs");
+        assert!(
+            first < glyph,
+            "the wash is at {first} and the first glyph at {glyph}; a highlight \
+             drawn after the run is a censor bar"
+        );
+
+        app.ime_preedit("abcdef", Some((3, 6)));
+        let quads = app.frame();
+        let right = quads
+            .iter()
+            .find(|q| q.color == wash)
+            .expect("the focus moved, it did not vanish")
+            .rect;
+        assert!(
+            right[0] > left[0],
+            "the focus moved to the second clause, so its quad must move right: \
+             {left:?} then {right:?}"
+        );
+        assert_eq!(
+            underline_of(&quads),
+            Some(underline),
+            "the underline covers the whole composition and must not have moved"
+        );
+
+        // And the wash goes when the composition does, like the underline.
+        app.ime_preedit("", None);
+        assert!(
+            !app.frame().iter().any(|q| q.color == wash),
+            "the highlight must not outlive the composition it marks"
         );
     }
 

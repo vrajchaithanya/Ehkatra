@@ -40,7 +40,7 @@
 
 use usk_types::{ColId, RowId, Value};
 
-use crate::app::{App, Composition};
+use crate::app::App;
 use crate::gpu::{self, Quad};
 use crate::input::{self, Key, Mods};
 use crate::png;
@@ -81,15 +81,6 @@ pub struct Step {
     /// The byte span the composition underline covers, or `None` when nothing
     /// is composing.
     pub underline: Option<(usize, usize)>,
-    /// The byte span of the *focused clause* inside `underline`, which a
-    /// converting IME shades and the arrow keys move between (TD-84). `None`
-    /// whenever the input method reported a bare caret instead of a range —
-    /// which is every pre-conversion keystroke, and all of Korean.
-    ///
-    /// Its own column rather than something derived from `event`, because the
-    /// point of this table is that what the user *sees* is asserted
-    /// independently of what the platform *sent*.
-    pub focus: Option<(usize, usize)>,
 }
 
 /// One script's whole session: what the user typed, what the platform sent, and
@@ -117,27 +108,26 @@ pub struct Script {
 /// The conversion is the half session 31 never had: steps 1–5 are kana arriving
 /// per keystroke, and step 6 onwards is MS-IME replacing the entire composition
 /// with kanji while reporting *which clause has the focus* as a byte range.
-/// Steps 6, 7 and 9 share one underline and, for 7 and 9, one string as well —
-/// so the **focus** column is the only thing telling them apart, which is what
-/// TD-84 was filed for the absence of and what paying it made visible.
+/// Steps 6, 7 and 9 differ only in that range — same underline, and for 7 and 9
+/// the same text as well — which is TD-84 visible as data rather than as prose.
 #[rustfmt::skip]
 const JP: &[Step] = &[
-    Step { event: Event::Preedit("き", Some((3, 3))), shown: "き", caret: 3, underline: Some((0, 3)), focus: None },
-    Step { event: Event::Preedit("きょ", Some((6, 6))), shown: "きょ", caret: 6, underline: Some((0, 6)), focus: None },
-    Step { event: Event::Preedit("きょう", Some((9, 9))), shown: "きょう", caret: 9, underline: Some((0, 9)), focus: None },
-    Step { event: Event::Preedit("きょうは", Some((12, 12))), shown: "きょうは", caret: 12, underline: Some((0, 12)), focus: None },
-    Step { event: Event::Preedit("きょうははれ", Some((18, 18))), shown: "きょうははれ", caret: 18, underline: Some((0, 18)), focus: None },
+    Step { event: Event::Preedit("き", Some((3, 3))), shown: "き", caret: 3, underline: Some((0, 3)) },
+    Step { event: Event::Preedit("きょ", Some((6, 6))), shown: "きょ", caret: 6, underline: Some((0, 6)) },
+    Step { event: Event::Preedit("きょう", Some((9, 9))), shown: "きょう", caret: 9, underline: Some((0, 9)) },
+    Step { event: Event::Preedit("きょうは", Some((12, 12))), shown: "きょうは", caret: 12, underline: Some((0, 12)) },
+    Step { event: Event::Preedit("きょうははれ", Some((18, 18))), shown: "きょうははれ", caret: 18, underline: Some((0, 18)) },
     // Space: convert. The whole composition is replaced and the first clause
     // takes the focus — a *range*, not a caret.
-    Step { event: Event::Preedit("今日は晴れ", Some((0, 9))), shown: "今日は晴れ", caret: 0, underline: Some((0, 15)), focus: Some((0, 9)) },
-    // Right: the focus moves to the second clause. The underline does not move,
-    // and before TD-84 was paid nothing else did either.
-    Step { event: Event::Preedit("今日は晴れ", Some((9, 15))), shown: "今日は晴れ", caret: 9, underline: Some((0, 15)), focus: Some((9, 15)) },
+    Step { event: Event::Preedit("今日は晴れ", Some((0, 9))), shown: "今日は晴れ", caret: 0, underline: Some((0, 15)) },
+    // Right: the focus moves to the second clause. Nothing else changes, which
+    // is precisely the problem TD-84 records.
+    Step { event: Event::Preedit("今日は晴れ", Some((9, 15))), shown: "今日は晴れ", caret: 9, underline: Some((0, 15)) },
     // Space: the next candidate for the focused clause only.
-    Step { event: Event::Preedit("今日はハレ", Some((9, 15))), shown: "今日はハレ", caret: 9, underline: Some((0, 15)), focus: Some((9, 15)) },
-    Step { event: Event::Preedit("今日は晴れ", Some((9, 15))), shown: "今日は晴れ", caret: 9, underline: Some((0, 15)), focus: Some((9, 15)) },
+    Step { event: Event::Preedit("今日はハレ", Some((9, 15))), shown: "今日はハレ", caret: 9, underline: Some((0, 15)) },
+    Step { event: Event::Preedit("今日は晴れ", Some((9, 15))), shown: "今日は晴れ", caret: 9, underline: Some((0, 15)) },
     // Enter: finalise the composition. The cell is still untouched.
-    Step { event: Event::Commit("今日は晴れ"), shown: "今日は晴れ", caret: 15, underline: None, focus: None },
+    Step { event: Event::Commit("今日は晴れ"), shown: "今日は晴れ", caret: 15, underline: None },
 ];
 
 /// **CN** — Microsoft Pinyin, `zhongwen` → `中文`.
@@ -147,24 +137,20 @@ const JP: &[Step] = &[
 /// the *bundled* face, and step 7 opens a face seam in the middle of a live
 /// composition with the caret sitting on it (TD-79's cluster arithmetic, now
 /// exercised through the IME path rather than by a synthetic two-face string).
-/// Every cursor here is a caret and not a range, so the focus column is `None`
-/// throughout: Microsoft Pinyin's clause focus arrives only in the full
-/// candidate-selection phase this sequence stops short of, and inventing a range
-/// for it would be authoring content rather than shape (D-127 decision 2).
 #[rustfmt::skip]
 const CN: &[Step] = &[
-    Step { event: Event::Preedit("z", Some((1, 1))), shown: "z", caret: 1, underline: Some((0, 1)), focus: None },
-    Step { event: Event::Preedit("zh", Some((2, 2))), shown: "zh", caret: 2, underline: Some((0, 2)), focus: None },
-    Step { event: Event::Preedit("zho", Some((3, 3))), shown: "zho", caret: 3, underline: Some((0, 3)), focus: None },
-    Step { event: Event::Preedit("zhon", Some((4, 4))), shown: "zhon", caret: 4, underline: Some((0, 4)), focus: None },
-    Step { event: Event::Preedit("zhong", Some((5, 5))), shown: "zhong", caret: 5, underline: Some((0, 5)), focus: None },
+    Step { event: Event::Preedit("z", Some((1, 1))), shown: "z", caret: 1, underline: Some((0, 1)) },
+    Step { event: Event::Preedit("zh", Some((2, 2))), shown: "zh", caret: 2, underline: Some((0, 2)) },
+    Step { event: Event::Preedit("zho", Some((3, 3))), shown: "zho", caret: 3, underline: Some((0, 3)) },
+    Step { event: Event::Preedit("zhon", Some((4, 4))), shown: "zhon", caret: 4, underline: Some((0, 4)) },
+    Step { event: Event::Preedit("zhong", Some((5, 5))), shown: "zhong", caret: 5, underline: Some((0, 5)) },
     // The IME has recognised two syllables and shows its own separator.
-    Step { event: Event::Preedit("zhong'we", Some((8, 8))), shown: "zhong'we", caret: 8, underline: Some((0, 8)), focus: None },
-    Step { event: Event::Preedit("zhong'wen", Some((9, 9))), shown: "zhong'wen", caret: 9, underline: Some((0, 9)), focus: None },
+    Step { event: Event::Preedit("zhong'we", Some((8, 8))), shown: "zhong'we", caret: 8, underline: Some((0, 8)) },
+    Step { event: Event::Preedit("zhong'wen", Some((9, 9))), shown: "zhong'wen", caret: 9, underline: Some((0, 9)) },
     // Partial conversion: the first syllable becomes Han and the rest stays
     // pinyin. One composition, two scripts, caret on the boundary.
-    Step { event: Event::Preedit("中wen", Some((3, 3))), shown: "中wen", caret: 3, underline: Some((0, 6)), focus: None },
-    Step { event: Event::Commit("中文"), shown: "中文", caret: 6, underline: None, focus: None },
+    Step { event: Event::Preedit("中wen", Some((3, 3))), shown: "中wen", caret: 3, underline: Some((0, 6)) },
+    Step { event: Event::Commit("中文"), shown: "中文", caret: 6, underline: None },
 ];
 
 /// **KR** — the Microsoft Korean IME, `hangeul` → `한글`.
@@ -173,24 +159,21 @@ const CN: &[Step] = &[
 /// one *commits* the previous — so step 4 is a `Commit` in the middle of a
 /// word, and step 5's composition splices in after text the editor now holds.
 /// Step 8 is a Backspace, which decomposes rather than deletes: the composition
-/// **shrinks**, which every other script here only ever grows. There is no focus
-/// column value anywhere in this script and that is the point — Korean has no
-/// conversion phase, so it is the control that proves the TD-84 highlight appears
-/// *only* where an IME asked for it.
+/// **shrinks**, which every other script here only ever grows.
 #[rustfmt::skip]
 const KR: &[Step] = &[
-    Step { event: Event::Preedit("ㅎ", Some((3, 3))), shown: "ㅎ", caret: 3, underline: Some((0, 3)), focus: None },
-    Step { event: Event::Preedit("하", Some((3, 3))), shown: "하", caret: 3, underline: Some((0, 3)), focus: None },
-    Step { event: Event::Preedit("한", Some((3, 3))), shown: "한", caret: 3, underline: Some((0, 3)), focus: None },
+    Step { event: Event::Preedit("ㅎ", Some((3, 3))), shown: "ㅎ", caret: 3, underline: Some((0, 3)) },
+    Step { event: Event::Preedit("하", Some((3, 3))), shown: "하", caret: 3, underline: Some((0, 3)) },
+    Step { event: Event::Preedit("한", Some((3, 3))), shown: "한", caret: 3, underline: Some((0, 3)) },
     // `g` finishes 한 and begins 글: a commit no key press asked for.
-    Step { event: Event::Commit("한"), shown: "한", caret: 3, underline: None, focus: None },
-    Step { event: Event::Preedit("ㄱ", Some((3, 3))), shown: "한ㄱ", caret: 6, underline: Some((3, 6)), focus: None },
-    Step { event: Event::Preedit("그", Some((3, 3))), shown: "한그", caret: 6, underline: Some((3, 6)), focus: None },
-    Step { event: Event::Preedit("글", Some((3, 3))), shown: "한글", caret: 6, underline: Some((3, 6)), focus: None },
+    Step { event: Event::Commit("한"), shown: "한", caret: 3, underline: None },
+    Step { event: Event::Preedit("ㄱ", Some((3, 3))), shown: "한ㄱ", caret: 6, underline: Some((3, 6)) },
+    Step { event: Event::Preedit("그", Some((3, 3))), shown: "한그", caret: 6, underline: Some((3, 6)) },
+    Step { event: Event::Preedit("글", Some((3, 3))), shown: "한글", caret: 6, underline: Some((3, 6)) },
     // Backspace: the syllable loses its final jamo instead of vanishing.
-    Step { event: Event::Preedit("그", Some((3, 3))), shown: "한그", caret: 6, underline: Some((3, 6)), focus: None },
-    Step { event: Event::Preedit("글", Some((3, 3))), shown: "한글", caret: 6, underline: Some((3, 6)), focus: None },
-    Step { event: Event::Commit("글"), shown: "한글", caret: 6, underline: None, focus: None },
+    Step { event: Event::Preedit("그", Some((3, 3))), shown: "한그", caret: 6, underline: Some((3, 6)) },
+    Step { event: Event::Preedit("글", Some((3, 3))), shown: "한글", caret: 6, underline: Some((3, 6)) },
+    Step { event: Event::Commit("글"), shown: "한글", caret: 6, underline: None },
 ];
 
 /// The three scripts docs/48 names, in its order.
@@ -243,9 +226,8 @@ fn deliver(app: &mut App, event: Event) {
     };
 }
 
-/// What the user sees: the display string, the caret, and the composition's
-/// two spans.
-fn seen(app: &App) -> (String, usize, Option<Composition>) {
+/// What the user sees: the display string, caret and underline span.
+fn seen(app: &App) -> (String, usize, Option<(usize, usize)>) {
     match app.editor() {
         Some(editor) => editor.display(),
         None => (String::new(), 0, None),
@@ -316,34 +298,27 @@ pub fn replay(
     let mut log = Vec::with_capacity(script.steps.len() + 1);
     for (n, step) in script.steps.iter().enumerate() {
         deliver(app, step.event);
-        let (shown, caret, composition) = seen(app);
-        // Built from the two columns rather than compared field by field, so a
-        // table that claimed a focused clause with nothing composing could not be
-        // expressed here at all (the tables test checks the tables themselves).
-        let expected = step.underline.map(|span| Composition {
-            span,
-            focus: step.focus,
-        });
-        if shown != step.shown || caret != step.caret || composition != expected {
+        let (shown, caret, underline) = seen(app);
+        if shown != step.shown || caret != step.caret || underline != step.underline {
             return Err(format!(
-                "{} step {}: expected {:?} caret {} {:?}, saw {:?} caret {} {:?}",
+                "{} step {}: expected {:?} caret {} underline {:?}, saw {:?} caret {} underline {:?}",
                 script.id,
                 n + 1,
                 step.shown,
                 step.caret,
-                expected,
+                step.underline,
                 shown,
                 caret,
-                composition
+                underline
             ));
         }
-        if app.composing() != composition.is_some() {
+        if app.composing() != underline.is_some() {
             return Err(format!(
-                "{} step {}: composing() says {} but the composition says {:?}",
+                "{} step {}: composing() says {} but the underline says {:?}",
                 script.id,
                 n + 1,
                 app.composing(),
-                composition
+                underline
             ));
         }
         // The invariant no picture shows and the one that matters most: nothing
@@ -361,14 +336,9 @@ pub fn replay(
             Event::Preedit(text, cursor) => format!("preedit {text:?} cursor {cursor:?}"),
             Event::Commit(text) => format!("COMMIT  {text:?}"),
         };
-        // The focus column is printed even when it is `None`, because a typist
-        // reading this report needs to see that the two conversion steps differ
-        // and an omitted field would read as "the same".
         log.push(format!(
-            "      {:>2}  {kind:<38} shown {shown:?} caret {caret} underline {:?} focus {:?}",
-            n + 1,
-            composition.map(|c| c.span),
-            composition.and_then(|c| c.focus),
+            "      {:>2}  {kind:<38} shown {shown:?} caret {caret} underline {underline:?}",
+            n + 1
         ));
         // Photographed here rather than after the replay, so the picture is of
         // a live composition and not of a document that has already settled.
@@ -557,17 +527,14 @@ mod tests {
     }
 
     /// A conversion reports its focused clause as a *range*, and two steps that
-    /// differ only in that range are two different states (D-127, **TD-84
-    /// paid**).
+    /// differ only in that range are two different states (D-127, TD-84).
     ///
-    /// Session 34 wrote this test inverted on purpose — it asserted that the
-    /// underline was `(0, 15)` in both states and that therefore the focus was
-    /// invisible — so that paying TD-84 would have to *break* it. It did. What
-    /// it asserts now is the fix, and what it still asserts unchanged is the
-    /// thing the fix must not have disturbed: the underline is the whole
-    /// composition in both states, because every clause is still a proposal.
+    /// This test is written to pass on today's behaviour and to *record* what
+    /// today's behaviour is: the caret moves, the underline does not. When TD-84
+    /// is paid the second assertion changes, and it should — a test that passes
+    /// before and after a fix proves nothing about the fix.
     #[test]
-    fn a_multi_clause_conversion_shows_which_clause_the_arrow_keys_are_on() {
+    fn a_multi_clause_conversion_moves_the_caret_but_cannot_show_the_focus() {
         let mut app = app();
         select(&mut app, 0, SCRATCH).expect("the scratch column is on screen");
         app.ime_preedit("今日は晴れ", Some((0, 9)));
@@ -580,50 +547,11 @@ mod tests {
             "the caret must follow the focused clause, or arrow keys look dead"
         );
         assert_eq!(
-            (first.2.map(|c| c.span), second.2.map(|c| c.span)),
+            (first.2, second.2),
             (Some((0, 15)), Some((0, 15))),
-            "the underline still covers the whole composition in both states — \
-             the unfocused clauses are proposals too"
+            "TD-84: the underline spans the whole composition in both states, \
+             so the focused clause is invisible. Change this when TD-84 is paid."
         );
-        assert_eq!(
-            (
-                first.2.and_then(|c| c.focus),
-                second.2.and_then(|c| c.focus)
-            ),
-            (Some((0, 9)), Some((9, 15))),
-            "and the focused clause is what tells the two states apart (TD-84)"
-        );
-    }
-
-    /// The tables themselves are well-formed: a focused clause is always a
-    /// sub-span of something that is actually composing.
-    ///
-    /// `replay` builds its expectation from the two columns, so a table claiming
-    /// a focus with no underline would be *unrepresentable* there and would
-    /// silently assert nothing. This checks the data instead of the behaviour,
-    /// which is the only place that particular authoring mistake can be caught.
-    #[test]
-    fn no_script_claims_a_focused_clause_outside_the_composition_it_focuses() {
-        for script in SCRIPTS {
-            for (n, step) in script.steps.iter().enumerate() {
-                let Some((lo, hi)) = step.focus else { continue };
-                let Some((start, end)) = step.underline else {
-                    panic!(
-                        "{} step {}: a focused clause with nothing composing",
-                        script.id,
-                        n + 1
-                    );
-                };
-                assert!(
-                    lo < hi && start <= lo && hi <= end,
-                    "{} step {}: focus {:?} is not a sub-span of underline {:?}",
-                    script.id,
-                    n + 1,
-                    step.focus,
-                    step.underline
-                );
-            }
-        }
     }
 
     /// A composition that a script leaves in flight must never reach the cell,

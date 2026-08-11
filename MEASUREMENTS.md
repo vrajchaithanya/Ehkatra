@@ -1995,7 +1995,7 @@ named: `pick` parses a candidate face to test coverage and `resolve` then reads
 and parses the same face again, and rustybuzz's parse of a multi-megabyte CJK
 face may simply cost this. Profile the split before choosing.
 
-## W-IME-SCRIPTS (D-127, docs/48) — the three scripts, replayed and checked · session 34 · M1
+## W-IME-SCRIPTS (D-127, docs/48) — the three scripts, replayed and checked · session 34, re-run session 35 · M1
 
 `ehkatra-shell --ime demo`, release. Not a latency number. This is the half of
 docs/48's *"IME validated by native JP/CN/KR typists"* that can be closed
@@ -2006,11 +2006,12 @@ to mistake for closed.
 
 Three input-method **event sequences** through the real `App`, delivered exactly
 as `window.rs` forwards winit's `Ime::Preedit` / `Ime::Commit`. A step passes
-only if all four of the things a user can see are right: the display string, the
-caret's byte offset inside it, the underline span, and **that the cell is still
-blank**. The last one is the one no screenshot shows and the one that matters
-most — a document that acquired text from an unconfirmed composition is wrong in
-a way nobody notices until it ships.
+only if all of the things a user can see are right: the display string, the
+caret's byte offset inside it, the underline span, **the focused clause's span**
+(added in session 35 when TD-84 was paid), and **that the cell is still blank**.
+The last one is the one no screenshot shows and the one that matters most — a
+document that acquired text from an unconfirmed composition is wrong in a way
+nobody notices until it ships.
 
 | Script | Sequence | Steps | Result | Cell after Enter | Face resolved | Unresolved |
 |---|---|---:|---|---|---|---:|
@@ -2018,10 +2019,17 @@ a way nobody notices until it ships.
 | **CN** | Microsoft Pinyin, ASCII → partial conversion → commit | 9 | **pass** | `中文` | **`Yu Gothic`** | 0 |
 | **KR** | per-syllable, mid-word commit, decomposing Backspace | 10 | **pass** | `한글` | `Malgun Gothic` | 0 |
 
-**29/29 steps, 3/3 cells.** Frames: `demo/ime-jp.png` (conversion in flight,
-focus on the second clause), `demo/ime-cn.png` (`中wen` — one composition across
-a face seam, caret on the seam), `demo/ime-kr.png` (`한글` with only the second
-syllable underlined, after the mid-word commit put the first in the buffer).
+**29/29 steps, 3/3 cells** — unchanged in session 35, which added the focus
+column to every step without disturbing any of them. Frames:
+`demo/ime-jp.png` (conversion in flight, focus on the second clause — **since
+session 35 this is the picture of the fix**: `晴れ` washed, `今日は` clear, one
+underline across all five characters), `demo/ime-cn.png` (`中wen` — one
+composition across a face seam, caret on the seam, **and no wash**, because
+Microsoft Pinyin reported a caret and not a range), `demo/ime-kr.png` (`한글`
+with only the second syllable underlined, after the mid-word commit put the
+first in the buffer, **and no wash** — Korean has no conversion phase at all).
+The two frames without a wash are the negative half of the evidence: a
+highlight that appeared where no IME asked for one would be a new defect.
 
 The three scripts are here because their event *shapes* differ, not because
 three is a nicer number than one. JP replaces the whole composition at
@@ -2060,12 +2068,36 @@ makes this reading safe: the list *is* walked that far when it has to be, so
 nothing is truncating the search — Korean is simply right by accident, because
 no Japanese face covers Hangul.
 
-**TD-84 — the focused clause is invisible.** Steps 6–9 of the JP script are a
-two-clause conversion. Steps 7 and 9 carry the *same text* and produce the *same
-underline span* `(0, 15)`; they differ only in the caret, because
-`Editor::display` keeps the start of the preedit cursor **range** and discards
-its end. A typist arrow-keying between clauses therefore sees the caret hop and
-no clause highlight. `demo/ime-jp.png` is the picture of it.
+**TD-84 — the focused clause was invisible; PAID in session 35 (D-128).** Steps
+6–9 of the JP script are a two-clause conversion. Steps 7 and 9 carry the *same
+text* and produced the *same underline span* `(0, 15)`, differing only in the
+caret, because `Editor::display` kept the start of the preedit cursor **range**
+and discarded its end. A typist arrow-keying between clauses saw the caret hop
+and no clause highlight.
+
+The driver's log now carries a **focus** column beside the underline, which is
+what turns the fix into data. The whole of the JP conversion, from the run in
+session 35:
+
+| Step | Cursor from the IME | Underline | Focus |
+|---:|---|---|---|
+| 5 | `(18, 18)` — a caret | `(0, 18)` | *none* |
+| 6 | `(0, 9)` — first clause | `(0, 15)` | **`(0, 9)`** |
+| 7 | `(9, 15)` — second clause | `(0, 15)` | **`(9, 15)`** |
+| 8 | `(9, 15)` — next candidate | `(0, 15)` | **`(9, 15)`** |
+| 9 | `(9, 15)` | `(0, 15)` | **`(9, 15)`** |
+
+The underline is `(0, 15)` in every converting step and that is deliberate
+(D-128 decision 1): it means *"this is a proposal"*, which is true of the
+unfocused clauses too. All 19 steps of CN and KR report `focus: none`, as they
+must — neither IME sent a range.
+
+**Not a latency claim, and deliberately not measured as one.** The fix adds at
+most **one quad** to a composing frame, inside a frame that already carries
+~1,500. W-KEYSTROKE's composing figure (1.68–2.10 ms p50 against 16 ms) is not
+re-published here, because a single quad is far below this host's ±30% run-to-run
+spread and a re-run would have produced a number indistinguishable from the old
+one — which session 33 already learned the hard way is not evidence of anything.
 
 ### What this does NOT establish — the residue, published rather than absorbed
 
@@ -2090,13 +2122,18 @@ item stays open on precisely these, and each is a specific question rather than
 | 1 | Are the **glyph forms** the ones your language uses? | This is TD-83, and the script can only report *which face*; whether `直` looks Chinese or Japanese to you is the whole question |
 | 2 | Does the **candidate window** land under the composing text, and stay there as the composition grows? | `App::ime_area` returns a rectangle and `window.rs` hands it to the platform; whether the OS then puts the list somewhere sensible is observable only on screen |
 | 3 | Does **conversion feel responsive** — is the first character of a session noticeably slower? | This is TD-82's 1.05–1.33× of a frame, on one keystroke. A stopwatch says "yes, measurably"; only a person says "yes, annoyingly" |
-| 4 | Does the **underline read as "unconfirmed"** in your writing system's conventions? | Ours is one weight for the whole composition. JP and CN IMEs distinguish the focused clause (TD-84); whether the rest of the convention matters is a cultural question |
+| 4 | Do the **underline and the clause wash read as "unconfirmed" and "this is the clause you are converting"** in your writing system's conventions? | **Narrowed but not closed by session 35.** TD-84 is paid, so the focused clause now has its own emphasis — but *ours is a blue wash and the platform's is not necessarily*. Whether the weight, the colour and the choice of wash-over-thick-underline read correctly to you is still a cultural question a screenshot cannot settle |
 | 5 | Are these the **sequences your IME actually sends**? | Limit 1 above, stated as a question. A typist with a debug build settles it in a minute |
 | 6 | Does **Backspace mid-composition** do what you expect at every point? | The KR script models one decomposition; the real matrix is per-IME and per-position |
 | 7 | Do **half-width/full-width and IME-mode toggles** behave? | Never exercised at all. Not modelled here, and named so it is not mistaken for covered |
 
 Item 3's answer is what decides whether TD-82 is worth paying, which is why the
-handoff put the typist pass *before* it.
+handoff put the typist pass *before* it. **Session 35 changed the shape of this
+list without shortening it**: item 4 went from "we draw no clause emphasis at
+all" to "we draw one, and whether it is the *right* one needs a reader". Six of
+the seven are untouched, and the item in docs/48 stays **◑ half closed** — paying
+a debt row the mechanical half found does not make the perceptual half any more
+closed than it was (D-127).
 
 ## Not yet measured (targets remain targets — docs/42)
 A-001 memory/10M cells · A-002 promotion rate · A-003 recalc 100k · A-005 wasm32 **in a real browser / Safari** (WASI-under-Node is not a browser and must not be reported as one) · all docs/31 budget rows.
