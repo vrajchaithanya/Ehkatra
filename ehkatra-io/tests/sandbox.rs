@@ -257,7 +257,10 @@ fn every_workbook_round_trips_through_the_ir() {
         .filter(|n| n.ends_with(".xlsx") || n.ends_with(".xlsm"))
         .collect();
     names.sort();
-    assert_eq!(names.len(), 20);
+    // 21 since session 30: the styles file (ADR-041) is what makes this test
+    // prove the IR carries the *facets* across the process boundary and not
+    // only values and formats.
+    assert_eq!(names.len(), 21);
 
     for name in names {
         let bytes = xlsx(&name);

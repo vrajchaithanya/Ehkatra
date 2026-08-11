@@ -3,7 +3,10 @@
 //! replays it, and prints the canonical state hash. CI runs this binary on
 //! native AND wasm32; the printed hashes MUST be identical.
 
-use usk_oplog::{Anchor, Op, OpLog, OpaqueOp, Payload, RangeBinding};
+use usk_oplog::{
+    Alignment, Anchor, AxisSpan, FontFacet, Op, OpLog, OpaqueOp, Payload, RangeBinding, StyleFacet,
+    StyleTarget, UnknownFacet,
+};
 use usk_state::State;
 use usk_types::{ActorId, ColId, Decimal, OpId, RowId, Value};
 
@@ -76,12 +79,35 @@ fn main() {
             // target, and docs/29 is explicit that a payload variant absent
             // from this generator is a variant the determinism gate does not
             // cover — session 9 found four such variants the hard way.
-            10 => match OpaqueOp::new(0x19 + (rand() % 16) as u8, opaque_body(rand())) {
+            10 => match OpaqueOp::new(0x2B + (rand() % 16) as u8, opaque_body(rand())) {
                 Some(o) => Payload::Opaque(o),
-                // Unreachable: 0x19..=0x28 are outside model version 1's
+                // Unreachable: 0x2B..=0x3A are outside model version 1's
                 // taxonomy by construction. A fallback rather than an unwrap,
                 // because DP-C1 has no exception for "obviously fine".
+                //
+                // The base moved from 0x19 in session 30: `SetStyle` and
+                // `ClearStyle` took 0x19/0x1A, so the old range would have
+                // handed `OpaqueOp::new` a tag this build now knows and fallen
+                // through to the fallback for two values in sixteen. The
+                // generator must produce tags that are genuinely unknown, or it
+                // stops testing preservation and starts testing the fallback.
                 None => Payload::UndeleteRow { row: RowId(id) },
+            },
+            // Styles (ADR-041). docs/29: *"New op type → extend the canonical
+            // encoding … and add to replay-check's generator so the corpus
+            // exercises it."* Both new tags and an **unknown facet** are
+            // generated, because the facet vocabulary is extensible in exactly
+            // the way the op taxonomy is and needs the same evidence.
+            11 if !rows.is_empty() && !cols.is_empty() => Payload::SetStyle {
+                target: style_target(&rows, &cols, &mut rand),
+                facet: style_facet(&mut rand),
+            },
+            12 if !rows.is_empty() && !cols.is_empty() => Payload::ClearStyle {
+                target: style_target(&rows, &cols, &mut rand),
+                // Slot 0x05 is outside the modelled set: clearing a facet this
+                // build does not know is a legal op and must hash identically
+                // on every target.
+                facet_slot: 1 + (rand() % 5) as u8,
             },
             7 if !rows.is_empty() && !cols.is_empty() => {
                 let r = rows[(rand() as usize) % rows.len()];
@@ -149,6 +175,57 @@ fn main() {
     let state = State::replay(&log);
     println!("oplog:{}", log.canonical_hash());
     println!("state:{}", state.state_hash());
+}
+
+/// A style rectangle: mostly bounded by identities, sometimes a whole
+/// row/column. `AxisSpan::All` has to be in the corpus because it is the
+/// variant with no identity in it at all, and therefore the one whose encoding
+/// nothing else would cover.
+fn style_target(rows: &[OpId], cols: &[OpId], rand: &mut impl FnMut() -> u64) -> StyleTarget {
+    let span = |ids: &[OpId], rand: &mut dyn FnMut() -> u64| -> AxisSpan {
+        if rand().is_multiple_of(4) {
+            AxisSpan::All
+        } else {
+            AxisSpan::Between(
+                ids[(rand() as usize) % ids.len()],
+                ids[(rand() as usize) % ids.len()],
+            )
+        }
+    };
+    StyleTarget {
+        rows: span(rows, rand),
+        cols: span(cols, rand),
+    }
+}
+
+/// Every facet variant, including an **unknown** one — the facet-level
+/// equivalent of the opaque op, whose bytes must survive and hash identically
+/// on a build that cannot interpret them (ADR-041 decision 3).
+fn style_facet(rand: &mut impl FnMut() -> u64) -> StyleFacet {
+    match rand() % 5 {
+        0 => StyleFacet::NumberFormat(alloc_format(rand())),
+        1 => StyleFacet::Font(FontFacet {
+            flags: (rand() % 16) as u8,
+            half_points: (rand() % 400) as u16,
+            argb: rand() as u32,
+            name: alloc_text(rand()),
+        }),
+        2 => StyleFacet::Fill(rand() as u32),
+        3 => StyleFacet::Align(Alignment {
+            horizontal: (rand() % 4) as u8,
+            vertical: (rand() % 3) as u8,
+            wrap: rand().is_multiple_of(2),
+        }),
+        _ => match UnknownFacet::new(0x40 + (rand() % 8) as u8, opaque_body(rand())) {
+            Some(u) => StyleFacet::Unknown(u),
+            // Unreachable: 0x40..=0x47 are outside the modelled facet tags.
+            None => StyleFacet::Fill(0),
+        },
+    }
+}
+
+fn alloc_format(n: u64) -> String {
+    format!("0.{}%", "0".repeat((n % 5) as usize + 1))
 }
 
 fn alloc_text(n: u64) -> String {

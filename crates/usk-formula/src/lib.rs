@@ -19,6 +19,7 @@ pub mod eval;
 pub mod functions;
 pub mod lexer;
 pub mod parse;
+pub mod translate;
 
 use usk_types::coerce::Profile;
 use usk_types::Value;

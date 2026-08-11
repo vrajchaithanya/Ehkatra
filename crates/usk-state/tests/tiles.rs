@@ -529,3 +529,107 @@ fn out_of_order_writes_keep_the_payload_dense() {
         );
     }
 }
+
+/// TD-71: the rect read is the per-cell read, cell for cell.
+///
+/// `State::read_rect` exists so a range read can resolve its slots once per
+/// run instead of three tree lookups per cell; it must therefore be
+/// *undetectable* from the outside. Checked over a contested multi-actor
+/// corpus (summary and promoted cells), over row/column runs that cross tile
+/// band boundaries with absent cells in between, and over column runs given
+/// in reversed and duplicated order — the orders that exercise the
+/// incremental-rank path and its fallback.
+#[test]
+fn a_rect_read_agrees_with_get() {
+    // 1. Every cell of a contested corpus, plus interior sub-rectangles.
+    let (log, rows, cols) = corpus(9, 9, 3, 0x7D71_7D71_7D71_7D71);
+    let state = State::replay(&log);
+    let row_ids: Vec<RowId> = rows.iter().map(|id| RowId(*id)).collect();
+    let col_ids: Vec<ColId> = cols.iter().map(|id| ColId(*id)).collect();
+
+    let check = |rows: &[RowId], cols: &[ColId]| {
+        let mut got: Vec<Option<Value>> = vec![None; rows.len() * cols.len()];
+        state.read_rect(rows, cols, |i, j, v| got[i * cols.len() + j] = Some(v));
+        for (i, r) in rows.iter().enumerate() {
+            for (j, c) in cols.iter().enumerate() {
+                assert_eq!(
+                    got[i * cols.len() + j],
+                    state.cell(*r, *c),
+                    "rect read differs from get at ({i},{j})"
+                );
+            }
+        }
+    };
+    check(&row_ids, &col_ids);
+    check(&row_ids[2..7], &col_ids[1..8]);
+    check(&row_ids[4..5], &col_ids[4..5]);
+
+    // Column order is the caller's to choose: reversed and duplicated runs
+    // must answer identically (they defeat the ascending-index fast path).
+    let reversed: Vec<ColId> = col_ids.iter().rev().copied().collect();
+    check(&row_ids, &reversed);
+    let doubled: Vec<ColId> = col_ids.iter().chain(col_ids.iter()).copied().collect();
+    check(&row_ids[0..3], &doubled);
+
+    // 2. Runs crossing both band boundaries (rows > 256, cols > 64), sparse,
+    // so absent cells, absent tiles and unknown identities are all exercised.
+    let mut log = OpLog::new();
+    let mut lamport = 1u64;
+    let mut sparse_rows: Vec<OpId> = Vec::new();
+    for i in 0..300u64 {
+        let anchor = sparse_rows
+            .last()
+            .map_or(Anchor::Start, |id: &OpId| Anchor::After(*id));
+        let op = insert_row(1, 1_000 + i, lamport, anchor);
+        lamport += 1;
+        sparse_rows.push(op.id);
+        log.append(op);
+    }
+    let mut sparse_cols: Vec<OpId> = Vec::new();
+    for i in 0..70u64 {
+        let anchor = sparse_cols
+            .last()
+            .map_or(Anchor::Start, |id: &OpId| Anchor::After(*id));
+        let op = insert_col(1, 9_000 + i, lamport, anchor);
+        lamport += 1;
+        sparse_cols.push(op.id);
+        log.append(op);
+    }
+    let mut counter = 0u64;
+    for (r, row) in sparse_rows.iter().enumerate() {
+        for (c, col) in sparse_cols.iter().enumerate() {
+            if (r * 7 + c) % 5 != 0 {
+                continue; // deliberate gaps: absent cells inside present tiles
+            }
+            counter += 1;
+            log.append(set_cell(
+                1,
+                20_000 + counter,
+                lamport,
+                *row,
+                *col,
+                Value::Number((r * 100 + c) as f64),
+            ));
+            lamport += 1;
+        }
+    }
+    let state = State::replay(&log);
+    let row_ids: Vec<RowId> = sparse_rows.iter().map(|id| RowId(*id)).collect();
+    let mut col_ids: Vec<ColId> = sparse_cols.iter().map(|id| ColId(*id)).collect();
+    // An identity the store has never seen must simply not be emitted.
+    col_ids.push(ColId(opid(9, 999_999)));
+
+    let mut got: Vec<Option<Value>> = vec![None; row_ids.len() * col_ids.len()];
+    state.read_rect(&row_ids, &col_ids, |i, j, v| {
+        got[i * col_ids.len() + j] = Some(v)
+    });
+    for (i, r) in row_ids.iter().enumerate() {
+        for (j, c) in col_ids.iter().enumerate() {
+            assert_eq!(
+                got[i * col_ids.len() + j],
+                state.cell(*r, *c),
+                "sparse rect read differs from get at ({i},{j})"
+            );
+        }
+    }
+}

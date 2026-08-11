@@ -14,3 +14,6 @@
 
 # The shell is a separate workspace with its own build directory (D-116).
 /shell/target/
+
+# autonomous build loop output
+.logs/

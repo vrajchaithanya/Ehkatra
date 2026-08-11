@@ -40,6 +40,217 @@ pub struct RangeBinding {
     pub anchors: u8,
 }
 
+/// How far a style rule reaches along one axis (ADR-041).
+///
+/// `Between` holds **identities, never positions** (DP-A6), and resolves to
+/// whatever currently lies between them — so a row inserted inside a formatted
+/// block joins it and a row inserted above leaves it alone, without anything
+/// rewriting the op.
+///
+/// `All` is not a convenience spelling of "a very large interval". A
+/// whole-column format applies to rows that **do not exist yet**, which no pair
+/// of endpoint identities can name; it is also what makes formatting an empty
+/// column cost one rule instead of one per cell.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub enum AxisSpan {
+    All,
+    Between(OpId, OpId),
+}
+
+/// The identity rectangle a style op addresses. A single cell is the 1×1 case,
+/// a whole column is `rows: All`, and a whole row is `cols: All` — one
+/// mechanism rather than three op types (ADR-041, DP-A4).
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct StyleTarget {
+    pub rows: AxisSpan,
+    pub cols: AxisSpan,
+}
+
+impl StyleTarget {
+    /// The rectangle covering exactly one cell identity.
+    pub fn cell(row: RowId, col: ColId) -> StyleTarget {
+        StyleTarget {
+            rows: AxisSpan::Between(row.0, row.0),
+            cols: AxisSpan::Between(col.0, col.0),
+        }
+    }
+
+    /// The target's canonical bytes, standalone — the same bytes the op
+    /// encoding writes, shared with the state hash and the tile image so
+    /// there is exactly one spelling of a rectangle (DP-A4).
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::with_capacity(50);
+        encode_target(self, &mut out);
+        out
+    }
+
+    /// Decodes what [`StyleTarget::encode`] produced, and only that.
+    pub fn decode(bytes: &[u8]) -> Result<StyleTarget, DecodeError> {
+        let mut r = Reader { bytes, at: 0 };
+        let target = r.target()?;
+        if r.at != bytes.len() {
+            return Err(DecodeError::TrailingBytes {
+                used: r.at,
+                len: bytes.len(),
+            });
+        }
+        Ok(target)
+    }
+}
+
+/// Font facet bits. Kept as a bitfield rather than four bools because the
+/// encoding is permanent and a byte with defined bits can grow a bit; four
+/// bools cannot grow a fifth without changing the layout (DP-A5).
+pub const FONT_BOLD: u8 = 1 << 0;
+pub const FONT_ITALIC: u8 = 1 << 1;
+pub const FONT_UNDERLINE: u8 = 1 << 2;
+pub const FONT_STRIKE: u8 = 1 << 3;
+
+/// The font facet. `half_points` is the size in half-points (Excel's `sz` is
+/// points, and half-points is the finest granularity Excel's UI offers), and
+/// `argb` is a packed colour.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct FontFacet {
+    pub flags: u8,
+    pub half_points: u16,
+    pub argb: u32,
+    pub name: String,
+}
+
+/// The alignment facet. Discriminants are validated on decode, so an
+/// out-of-range byte is a named error rather than a silently different
+/// alignment (DP-A10).
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct Alignment {
+    /// 0 general · 1 left · 2 center · 3 right
+    pub horizontal: u8,
+    /// 0 bottom · 1 top · 2 center
+    pub vertical: u8,
+    pub wrap: bool,
+}
+
+/// The facet vocabulary — the dimension of a cell's formatting that a single
+/// op addresses (ADR-041 decision 2).
+///
+/// One op carries exactly one facet, which is what makes two actors changing
+/// **bold** and **fill** on the same cell both win: resolution takes the
+/// greatest-stamped covering rule *per facet*, independently.
+///
+/// The vocabulary is extensible without a new op type. A facet encodes as
+/// `tag ‖ u32 length ‖ body`, and a tag this build does not know becomes
+/// [`StyleFacet::Unknown`] — the [`Payload::Opaque`] pattern one level down,
+/// with the same contract: byte-exact re-emission, hashed as the author hashed
+/// it, applied to nothing.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub enum StyleFacet {
+    NumberFormat(String),
+    Font(FontFacet),
+    Fill(u32),
+    Align(Alignment),
+    Unknown(UnknownFacet),
+}
+
+/// The facet tags model version 1 defines. Pinned to [`StyleFacet::decode`]'s
+/// match by `every_known_facet_decodes_and_every_other_is_unknown`, for the
+/// same reason [`is_known_tag`] is pinned to [`Op::decode`]'s.
+pub fn is_known_facet(tag: u8) -> bool {
+    matches!(tag, 0x01..=0x04)
+}
+
+/// A facet body this build cannot interpret, held byte-exact.
+///
+/// Private fields and a constructor that refuses a *known* tag, so "an unknown
+/// facet secretly carrying a facet we do understand" — a second spelling of a
+/// value that has exactly one (DP-A4) — is unrepresentable.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct UnknownFacet {
+    tag: u8,
+    body: Vec<u8>,
+}
+
+impl UnknownFacet {
+    /// `None` if `tag` is one this build knows: that facet must be decoded.
+    pub fn new(tag: u8, body: Vec<u8>) -> Option<UnknownFacet> {
+        if is_known_facet(tag) {
+            return None;
+        }
+        Some(UnknownFacet { tag, body })
+    }
+
+    pub fn tag(&self) -> u8 {
+        self.tag
+    }
+
+    pub fn body(&self) -> &[u8] {
+        &self.body
+    }
+}
+
+impl StyleFacet {
+    /// The facet's tag — its slot in the register. Two rules contend only when
+    /// their slots are equal, which is the whole of ADR-041's decision 2.
+    pub fn slot(&self) -> u8 {
+        match self {
+            StyleFacet::NumberFormat(_) => 0x01,
+            StyleFacet::Font(_) => 0x02,
+            StyleFacet::Fill(_) => 0x03,
+            StyleFacet::Align(_) => 0x04,
+            StyleFacet::Unknown(u) => u.tag(),
+        }
+    }
+
+    /// The facet's canonical bytes, standalone.
+    ///
+    /// Public because two things outside the op log need *exactly* these bytes
+    /// and must not invent a second spelling of them (DP-A4): the state hash,
+    /// which folds style rules rather than resolved cells (ADR-041 decision 6),
+    /// and the tile image, which serialises the interner.
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        self.encode_into(&mut out);
+        out
+    }
+
+    /// Decodes what [`StyleFacet::encode`] produced, and only that.
+    pub fn decode(bytes: &[u8]) -> Result<StyleFacet, DecodeError> {
+        let mut r = Reader { bytes, at: 0 };
+        let facet = r.facet()?;
+        if r.at != bytes.len() {
+            return Err(DecodeError::TrailingBytes {
+                used: r.at,
+                len: bytes.len(),
+            });
+        }
+        Ok(facet)
+    }
+
+    /// `tag ‖ u32 body length ‖ body`. The length is what lets [`Op::decode`],
+    /// which must find the op's end by parsing it, skip a facet it cannot read.
+    fn encode_into(&self, out: &mut Vec<u8>) {
+        out.push(self.slot());
+        let at = out.len();
+        out.extend_from_slice(&0u32.to_be_bytes());
+        match self {
+            StyleFacet::NumberFormat(code) => out.extend_from_slice(code.as_bytes()),
+            StyleFacet::Font(f) => {
+                out.push(f.flags);
+                out.extend_from_slice(&f.half_points.to_be_bytes());
+                out.extend_from_slice(&f.argb.to_be_bytes());
+                out.extend_from_slice(f.name.as_bytes());
+            }
+            StyleFacet::Fill(argb) => out.extend_from_slice(&argb.to_be_bytes()),
+            StyleFacet::Align(a) => {
+                out.push(a.horizontal);
+                out.push(a.vertical);
+                out.push(a.wrap as u8);
+            }
+            StyleFacet::Unknown(u) => out.extend_from_slice(u.body()),
+        }
+        let len = (out.len() - at - 4) as u32;
+        out[at..at + 4].copy_from_slice(&len.to_be_bytes());
+    }
+}
+
 /// The closed op payload taxonomy for model version 1 (docs/10).
 /// Adding behavior later = adding a variant, never changing one.
 #[derive(Clone, PartialEq, Debug)]
@@ -83,6 +294,25 @@ pub enum Payload {
     UndeleteCol {
         col: ColId,
     },
+    /// Sets one **facet** of the formatting over one identity **rectangle**
+    /// (ADR-041). The first new op type since the taxonomy was sealed.
+    ///
+    /// One facet per op is the decision that makes concurrent bold-and-fill
+    /// both survive; a rectangle addressed by identity is the decision that
+    /// makes a whole-column format one op and makes it survive a row insert.
+    SetStyle {
+        target: StyleTarget,
+        facet: StyleFacet,
+    },
+    /// Returns one facet over a rectangle to the workbook default — the style
+    /// register's `ClearCell`, and the first half of what undo emits.
+    ///
+    /// Carries the facet's **tag** rather than a value, so it can retract a
+    /// facet this build does not otherwise understand.
+    ClearStyle {
+        target: StyleTarget,
+        facet_slot: u8,
+    },
     /// An op whose payload tag this build does not know, **kept verbatim**
     /// (DP-A5: unknown op types are preserved, causally ordered, hashed opaque
     /// and retransmitted).
@@ -106,7 +336,7 @@ pub enum Payload {
 /// two lists that must agree are a defect waiting for the third person to edit
 /// one of them.
 pub fn is_known_tag(tag: u8) -> bool {
-    matches!(tag, 0x10..=0x18)
+    matches!(tag, 0x10..=0x1A)
 }
 
 /// An op body this build cannot interpret, held byte-exact.
@@ -152,6 +382,22 @@ pub struct Op {
 fn encode_opid(id: &OpId, out: &mut Vec<u8>) {
     out.extend_from_slice(&id.actor.0.to_be_bytes());
     out.extend_from_slice(&id.counter.to_be_bytes());
+}
+
+fn encode_span(s: &AxisSpan, out: &mut Vec<u8>) {
+    match s {
+        AxisSpan::All => out.push(0x00),
+        AxisSpan::Between(start, end) => {
+            out.push(0x01);
+            encode_opid(start, out);
+            encode_opid(end, out);
+        }
+    }
+}
+
+fn encode_target(t: &StyleTarget, out: &mut Vec<u8>) {
+    encode_span(&t.rows, out);
+    encode_span(&t.cols, out);
 }
 
 fn encode_anchor(a: &Anchor, out: &mut Vec<u8>) {
@@ -230,6 +476,18 @@ impl Op {
             Payload::UndeleteCol { col } => {
                 out.push(0x18);
                 encode_opid(&col.0, &mut out);
+            }
+            // Tags 0x19-0x1A are new in session 30 (ADR-041); 0x10-0x18 keep
+            // their bytes, which every unchanged pre-styles hash proves.
+            Payload::SetStyle { target, facet } => {
+                out.push(0x19);
+                encode_target(target, &mut out);
+                facet.encode_into(&mut out);
+            }
+            Payload::ClearStyle { target, facet_slot } => {
+                out.push(0x1A);
+                encode_target(target, &mut out);
+                out.push(*facet_slot);
             }
             // Byte-exact re-emission. `OpaqueOp` cannot hold a known tag, so
             // this arm can never produce a second spelling of an op this build
@@ -381,6 +639,20 @@ impl Op {
             0x18 => Payload::UndeleteCol {
                 col: ColId(r.opid()?),
             },
+            0x19 => {
+                let target = r.target()?;
+                Payload::SetStyle {
+                    target,
+                    facet: r.facet()?,
+                }
+            }
+            0x1A => {
+                let target = r.target()?;
+                Payload::ClearStyle {
+                    target,
+                    facet_slot: r.u8()?,
+                }
+            }
             tag => return Err(DecodeError::UnknownTag(tag)),
         };
         Ok((
@@ -477,6 +749,78 @@ impl Reader<'_> {
         core::str::from_utf8(b)
             .map(alloc::borrow::ToOwned::to_owned)
             .map_err(|_| DecodeError::BadUtf8)
+    }
+
+    fn span(&mut self) -> Result<AxisSpan, DecodeError> {
+        match self.u8()? {
+            0x00 => Ok(AxisSpan::All),
+            0x01 => Ok(AxisSpan::Between(self.opid()?, self.opid()?)),
+            _ => Err(DecodeError::BadDiscriminant),
+        }
+    }
+
+    fn target(&mut self) -> Result<StyleTarget, DecodeError> {
+        Ok(StyleTarget {
+            rows: self.span()?,
+            cols: self.span()?,
+        })
+    }
+
+    /// `tag ‖ u32 length ‖ body`, with the body parsed against the tag and
+    /// required to fill the length exactly.
+    ///
+    /// The length is not decoration. It is what lets an **unknown** facet be
+    /// preserved byte-exact (ADR-041 decision 3) and what lets [`Op::decode`],
+    /// which has no frame to tell it where the op ends, get past a facet it
+    /// cannot read. For a *known* facet the length is determined by the body,
+    /// so it is checked rather than trusted — one valid encoding (DP-A4).
+    fn facet(&mut self) -> Result<StyleFacet, DecodeError> {
+        let tag = self.u8()?;
+        let len = self.u32()? as usize;
+        let body = self.take(len)?;
+        if !is_known_facet(tag) {
+            // Cannot be `None`: `is_known_facet` just said so.
+            return UnknownFacet::new(tag, body.to_vec())
+                .map(StyleFacet::Unknown)
+                .ok_or(DecodeError::BadDiscriminant);
+        }
+        let mut r = Reader { bytes: body, at: 0 };
+        let facet = match tag {
+            0x01 => StyleFacet::NumberFormat(r.utf8(len)?),
+            0x02 => {
+                let flags = r.u8()?;
+                let half_points = r.u16()?;
+                let argb = r.u32()?;
+                let name = r.utf8(len.checked_sub(7).ok_or(DecodeError::Truncated)?)?;
+                StyleFacet::Font(FontFacet {
+                    flags,
+                    half_points,
+                    argb,
+                    name,
+                })
+            }
+            0x03 => StyleFacet::Fill(r.u32()?),
+            // Discriminants are validated rather than stored raw: an
+            // out-of-range byte would otherwise be a second spelling of an
+            // alignment, and a silently different one.
+            _ => {
+                let horizontal = r.u8()?;
+                let vertical = r.u8()?;
+                let wrap = r.u8()?;
+                if horizontal > 3 || vertical > 2 || wrap > 1 {
+                    return Err(DecodeError::BadDiscriminant);
+                }
+                StyleFacet::Align(Alignment {
+                    horizontal,
+                    vertical,
+                    wrap: wrap == 1,
+                })
+            }
+        };
+        if r.at != len {
+            return Err(DecodeError::TrailingBytes { used: r.at, len });
+        }
+        Ok(facet)
     }
 
     fn anchor(&mut self) -> Result<Anchor, DecodeError> {

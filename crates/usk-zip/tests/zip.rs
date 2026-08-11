@@ -346,3 +346,54 @@ fn forge_archive(name: &str, compressed: usize, uncompressed: usize) -> Vec<u8> 
     out.extend_from_slice(&0u16.to_le_bytes()); // comment length
     out
 }
+
+// --------------------------------------------------------------- the writer
+
+/// The writer's output goes back through this crate's own reader — every
+/// header field the reader checks, every CRC, byte-for-byte content. Stored
+/// entries only (D-121): the round trip is exact.
+#[test]
+fn a_stored_container_round_trips_through_the_reader() {
+    let entries: [(&str, &[u8]); 3] = [
+        ("a.txt", b"hello"),
+        ("dir/b.bin", &[0u8, 1, 2, 255]),
+        ("empty.txt", b""),
+    ];
+    let bytes = usk_zip::write::build_stored(&entries).expect("writes");
+    let archive = Archive::open(&bytes).expect("our own output must open");
+    assert_eq!(archive.entries().len(), 3);
+    for (name, data) in entries {
+        let back = archive
+            .read_named(name)
+            .expect("present")
+            .expect("reads with a verified CRC");
+        assert_eq!(back, data, "{name}");
+    }
+}
+
+/// DP-A2: the same entries are the same bytes — no clock reaches the
+/// container, which is why the timestamp is fixed at the DOS epoch.
+#[test]
+fn the_stored_writer_is_deterministic() {
+    let entries: [(&str, &[u8]); 2] = [("x", b"one"), ("y", b"two")];
+    assert_eq!(
+        usk_zip::write::build_stored(&entries).expect("writes"),
+        usk_zip::write::build_stored(&entries).expect("writes")
+    );
+}
+
+/// The writer enforces the same name rules the reader does: a container this
+/// crate would refuse to read must not be produced by it either.
+#[test]
+fn the_writer_refuses_names_its_own_reader_would() {
+    for name in ["../escape", "/absolute", "C:\\drive"] {
+        let entries: [(&str, &[u8]); 1] = [(name, b"x")];
+        assert!(
+            matches!(
+                usk_zip::write::build_stored(&entries),
+                Err(ZipError::UnsafeName { .. })
+            ),
+            "{name} was accepted"
+        );
+    }
+}

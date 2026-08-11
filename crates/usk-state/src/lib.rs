@@ -10,6 +10,7 @@ extern crate alloc;
 pub mod formula;
 pub mod image;
 pub mod stamps;
+pub mod style;
 pub mod tile;
 
 use alloc::collections::BTreeMap;
@@ -17,6 +18,7 @@ use alloc::vec::Vec;
 pub use formula::FormulaCell;
 use formula::FormulaRegistry;
 pub use stamps::{image_represents, Stamp, WinnerStamps};
+pub use style::{ResolvedStyle, Rule, RuleValue, StyleRegistry, StyleResolver};
 use tile::{PromotionStats, TileStore};
 use usk_oplog::{Anchor, Op, OpLog, Payload};
 use usk_types::{ColId, Lamport, OpId, RowId, Value};
@@ -144,6 +146,49 @@ pub struct State {
     /// order ops happen to be applied in, so an incremental merge cannot
     /// resolve it differently from a full replay. See `formula.rs`.
     pub(crate) formulas: FormulaRegistry,
+    /// Formatting, as **rules over identity rectangles** rather than styled
+    /// cells (ADR-041). A whole-column format is one rule, so a formatted
+    /// empty column costs nothing per cell — see `style.rs`.
+    pub(crate) styles: StyleRegistry,
+    /// The greatest canonical key `(lamport, op id)` this state has applied.
+    /// The bound [`State::apply_tip`] checks against.
+    tip: Option<(Lamport, OpId)>,
+    /// Whether the tip fast path is available at all.
+    ///
+    /// True only for a state folded from a whole log by [`State::replay`] or
+    /// [`State::replay_sorted`], because those are the constructors that ran
+    /// `plan_promotions` over the complete op set — which is the precondition
+    /// the tile store's summary path rests on. A state adopted from an image
+    /// has a *tail* path instead ([`State::apply_tail`]), which carries the
+    /// stamps this one cannot reconstruct.
+    tip_ok: bool,
+    /// The only actor that has written a cell value, while there is only one.
+    value_writer: Option<usk_types::ActorId>,
+    /// Set once a second actor writes a cell value anywhere in the document.
+    multi_value_writer: bool,
+}
+
+/// Why a tip append could not be taken, and the caller must re-fold instead.
+///
+/// Every variant is a *fallback*, not a failure: `State::replay` produces the
+/// same state in every case, more slowly. Reported rather than absorbed so a
+/// caller can measure how often the fast path is missed.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TipError {
+    /// This state was not folded from a whole log, so no promotion plan covers
+    /// it — an image-adopted state, which wants `apply_tail`.
+    NotFolded,
+    /// The op is canonically at or before something already applied. Applying
+    /// it in arrival order would not be applying it in canonical order, and the
+    /// summary tiles, the slot interning and the state hash all depend on the
+    /// difference.
+    NotAtTip { op: OpId },
+    /// The op writes a cell that already holds a value in an **unpromoted**
+    /// tile, in a document more than one actor has written to. The write may be
+    /// the first contention at that cell; a summary tile keeps no per-cell
+    /// stamp, so the loser it would displace cannot be identified, and losing a
+    /// concurrent edit silently is the one outcome ADR-006 forbids.
+    MayContend { op: OpId },
 }
 
 /// Why a tail could not be applied to an adopted image.
@@ -153,6 +198,18 @@ pub enum TailError {
     /// image may already contain it or a newer write to the same cell.
     /// Refused rather than misplaced (ADR-036).
     NotAfterImage { op: OpId, image_greatest: OpId },
+}
+
+/// The cell a payload writes a **value** into, if it writes one.
+///
+/// A `SetFormula` is deliberately excluded: the formula registry is a stamped
+/// LWW register that compares `(lamport, op id)` and so is order-independent
+/// already (TD-22). Only the tile store trusts arrival order.
+fn value_write_of(payload: &Payload) -> Option<(RowId, ColId)> {
+    match payload {
+        Payload::SetCell { row, col, .. } | Payload::ClearCell { row, col } => Some((*row, *col)),
+        _ => None,
+    }
 }
 
 /// The cell a payload writes, if it writes one.
@@ -182,6 +239,9 @@ impl State {
         for op in ops {
             s.apply(op);
         }
+        // Folded from a whole log, so a promotion plan covers every cell in it:
+        // the precondition `apply_tip` needs.
+        s.tip_ok = true;
         s
     }
 
@@ -219,7 +279,86 @@ impl State {
         for op in source() {
             s.apply(&op);
         }
+        s.tip_ok = true;
         s
+    }
+
+    /// Applies ops that **extend this state's own history at its tip**, without
+    /// re-folding the log (TD-24's residual).
+    ///
+    /// # Why this can exist at all
+    /// `State::apply` says the tile store requires canonical order, "the
+    /// remaining barrier to a genuinely incremental apply". That barrier is
+    /// about *order*, and a locally authored edit is minted at a lamport
+    /// greater than everything in the log — so for that edit, arrival order
+    /// **is** canonical order. This method makes that condition explicit and
+    /// checks it, rather than leaving it as something a caller might happen to
+    /// satisfy.
+    ///
+    /// Three things depend on canonical order and all three are covered by the
+    /// same bound: summary tiles overwrite without comparing stamps; row and
+    /// column identities intern to slots in first-observation order (ADR-034),
+    /// and the state hash folds in slot order; and the promotion pre-pass ran
+    /// over the ops already applied.
+    ///
+    /// # Why a cell write needs a second check
+    /// Order is not the only precondition. A summary tile carries no per-cell
+    /// stamp (ADR-005's memory argument), so if this write is the *first*
+    /// contention at a cell, the value it displaces cannot be identified and
+    /// therefore cannot be retained (ADR-006). Three cases, exactly:
+    ///
+    /// * the cell is already **promoted** — the stamped path compares
+    ///   `(lamport, id)` and keeps the loser, so any writer is fine;
+    /// * the cell holds **nothing yet** — there is no loser to lose;
+    /// * the cell holds a value in an unpromoted tile — safe only when the
+    ///   whole document has had a single value writer, because then that writer
+    ///   is necessarily this one.
+    ///
+    /// Anything else is [`TipError::MayContend`] and the caller re-folds.
+    ///
+    /// # Errors
+    /// Every error means "re-fold instead", never "the edit is lost". The whole
+    /// batch is validated before any of it is applied, so a refusal leaves the
+    /// state exactly as it was.
+    pub fn apply_tip(&mut self, ops: &[Op]) -> Result<(), TipError> {
+        if !self.tip_ok {
+            return Err(TipError::NotFolded);
+        }
+        let mut tip = self.tip;
+        let mut writer = self.value_writer;
+        let mut multi = self.multi_value_writer;
+        for op in ops {
+            let key = (op.lamport, op.id);
+            if tip.is_some_and(|g| key <= g) {
+                return Err(TipError::NotAtTip { op: op.id });
+            }
+            tip = Some(key);
+            if let Some((row, col)) = value_write_of(&op.payload) {
+                let safe = self.cells.is_cell_promoted(&row.0, &col.0)
+                    || self.cells.get(&row.0, &col.0).is_none()
+                    || (!multi && writer == Some(op.id.actor));
+                if !safe {
+                    return Err(TipError::MayContend { op: op.id });
+                }
+                match writer {
+                    None => writer = Some(op.id.actor),
+                    Some(a) if a != op.id.actor => multi = true,
+                    _ => {}
+                }
+            }
+        }
+        for op in ops {
+            // The formula registry is normally seeded by the replay pre-pass,
+            // which by definition never saw these ops. Seeding here keeps the
+            // invariant true by construction rather than by the fallback branch
+            // in `set_formula`, whose `debug_assert` names a real fault on the
+            // replay path and would fire spuriously on this one.
+            if let Payload::SetFormula { row, col, .. } = &op.payload {
+                self.formulas.seed(*row, *col);
+            }
+            self.apply(op);
+        }
+        Ok(())
     }
 
     /// Applies a **tail** onto a state adopted from an image (ADR-036).
@@ -282,10 +421,23 @@ impl State {
     /// argument. Both constructors sort, so the precondition holds here; it is
     /// the remaining barrier to a genuinely incremental apply (TD-11, TD-24).
     fn apply(&mut self, op: &Op) {
+        self.note(op);
         match &op.payload {
-            Payload::InsertRow { anchor } => self.rows.insert(anchor, op.id, op.lamport),
+            // The tile-slot intern is not redundant with the axis insert: the
+            // axis is the *order*, the slot map is the *tile address*, and the
+            // promotion pre-pass claims a slot here as well (ADR-034). On the
+            // replay path the plan already did it and this is a no-op; on the
+            // incremental path it is the difference between a matching state
+            // hash and a divergent one.
+            Payload::InsertRow { anchor } => {
+                self.cells.intern_row(op.id);
+                self.rows.insert(anchor, op.id, op.lamport)
+            }
             Payload::DeleteRow { row } => self.rows.delete(row.0),
-            Payload::InsertCol { anchor } => self.cols.insert(anchor, op.id, op.lamport),
+            Payload::InsertCol { anchor } => {
+                self.cells.intern_col(op.id);
+                self.cols.insert(anchor, op.id, op.lamport)
+            }
             Payload::DeleteCol { col } => self.cols.delete(col.0),
             Payload::UndeleteRow { row } => self.rows.undelete(row.0),
             Payload::UndeleteCol { col } => self.cols.undelete(col.0),
@@ -309,6 +461,18 @@ impl State {
                 self.cells
                     .write(row.0, col.0, op.lamport, op.id, Value::Blank)
             }
+            // Style rules are stamped registers over rectangles and are
+            // therefore order-independent already (`style.rs`): the registry
+            // holds its rules sorted by `(lamport, op id)` and resolution takes
+            // the greatest covering one, so arrival order cannot change the
+            // answer. Nothing here needs the canonical-order precondition the
+            // tile store has.
+            Payload::SetStyle { target, facet } => {
+                self.styles.set((op.lamport, op.id), *target, facet.clone());
+            }
+            Payload::ClearStyle { target, facet_slot } => {
+                self.styles.clear((op.lamport, op.id), *target, *facet_slot);
+            }
             Payload::SetFormula {
                 row,
                 col,
@@ -324,6 +488,25 @@ impl State {
                         bindings: bindings.clone(),
                     },
                 );
+            }
+        }
+    }
+
+    /// Records what an applied op means for the tip fast path.
+    ///
+    /// Kept inside `apply` so it cannot go stale: every constructor and every
+    /// incremental path funnels through there, so there is no route by which a
+    /// state acquires an op without its bound moving.
+    fn note(&mut self, op: &Op) {
+        let key = (op.lamport, op.id);
+        if self.tip.is_none_or(|g| key > g) {
+            self.tip = Some(key);
+        }
+        if value_write_of(&op.payload).is_some() {
+            match self.value_writer {
+                None => self.value_writer = Some(op.id.actor),
+                Some(a) if a != op.id.actor => self.multi_value_writer = true,
+                _ => {}
             }
         }
     }
@@ -365,6 +548,26 @@ impl State {
         self.cells.get(&row.0, &col.0)
     }
 
+    /// Reads a rectangle of cells with slot resolution amortised over the run
+    /// rather than paid per cell (TD-71).
+    ///
+    /// `emit` receives `(row index, col index, value)` — indices into the
+    /// argument slices — for every cell that has a value; cells that would
+    /// answer `None` from [`State::cell`] are simply not emitted. The result
+    /// is cell-for-cell identical to calling [`State::cell`] per cell; this
+    /// exists because a range read through that path performs three tree
+    /// lookups per cell, of which two resolve identities the range already
+    /// resolved for the previous cell. Pure read-path plumbing: no semantics
+    /// move, and the per-cell path stays for single-cell callers.
+    pub fn read_rect<F: FnMut(usize, usize, Value)>(
+        &self,
+        rows: &[RowId],
+        cols: &[ColId],
+        emit: F,
+    ) {
+        self.cells.read_rect(rows, cols, emit)
+    }
+
     /// The winning formula at a cell, if a formula is the winning content.
     pub fn formula(&self, row: RowId, col: ColId) -> Option<&FormulaCell> {
         self.formulas.get(row, col)
@@ -379,6 +582,52 @@ impl State {
     /// Retained concurrent losers for conflict surfacing (ADR-006).
     pub fn conflicts(&self, row: RowId, col: ColId) -> &[(Lamport, OpId, Value)] {
         self.cells.losers(&row.0, &col.0)
+    }
+
+    /// The style rules, as a fold of the op set (ADR-041).
+    pub fn styles(&self) -> &StyleRegistry {
+        &self.styles
+    }
+
+    /// Builds a resolver for the current axis order.
+    ///
+    /// Separate from `State` on purpose: it is a *view* of the rules against
+    /// one order, and it goes stale the moment a row is inserted. A renderer
+    /// or an exporter builds one per pass; `State` holding one would be a
+    /// cache with no watermark (DP-A9).
+    pub fn style_resolver(&self) -> StyleResolver {
+        StyleResolver::build(
+            &self.styles,
+            &self.rows.full_order(),
+            &self.cols.full_order(),
+        )
+    }
+
+    /// The resolved formatting at one cell.
+    ///
+    /// Convenience for single-cell callers and tests; it builds a resolver per
+    /// call, so a caller reading a rectangle should build one
+    /// ([`State::style_resolver`]) and reuse it — the same shape as
+    /// `read_rect` versus `cell`.
+    pub fn style_at(&self, row: RowId, col: ColId) -> ResolvedStyle {
+        if self.styles.is_empty() {
+            return ResolvedStyle::default();
+        }
+        self.style_resolver().style(&self.styles, row, col)
+    }
+
+    /// Style rules a cell's facet slot lost to — retain-losers (ADR-006) at
+    /// facet granularity, newest first.
+    pub fn style_conflicts(&self, row: RowId, col: ColId, slot: u8) -> Vec<Rule> {
+        if self.styles.is_empty() {
+            return Vec::new();
+        }
+        let resolver = self.style_resolver();
+        self.styles
+            .losers(&resolver, (row, col), slot)
+            .into_iter()
+            .cloned()
+            .collect()
     }
 
     /// Deterministic state hash: the determinism-gate primitive (docs/10).
@@ -439,6 +688,42 @@ impl State {
                 }
             }
         }
+        // Styles fold as the **rule set**, not as resolved cells (ADR-041
+        // decision 6). A rule may name `AxisSpan::All`, whose resolution is
+        // unbounded — so folding resolved cells is not merely expensive, it is
+        // not a finite computation. The rules are finite, canonically ordered
+        // by stamp, and a pure fold of the op set, which is everything the
+        // determinism gate asks of a hash input.
+        //
+        // A rule naming a deleted row still hashes, deliberately: a delete
+        // tombstones an identity and does not erase history (DP-A1), and an
+        // undeleted row must find its formatting again.
+        //
+        // As with formulas, the section exists only when a rule does, so every
+        // workbook authored before styles hashes exactly as it did.
+        if !self.styles.is_empty() {
+            h.update(b"|styles|");
+            for rule in self.styles.rules() {
+                h.update(&rule.stamp.0.to_be_bytes());
+                h.update(&rule.stamp.1.actor.0.to_be_bytes());
+                h.update(&rule.stamp.1.counter.to_be_bytes());
+                h.update(&rule.target.encode());
+                h.update(&[rule.slot]);
+                match rule.value {
+                    RuleValue::Clear => h.update(&[0x00]),
+                    RuleValue::Set(id) => {
+                        h.update(&[0x01]);
+                        // The interned *value*, never its id: an id is a slot
+                        // in a table, and hashing it would make the hash
+                        // depend on interning order rather than on content.
+                        match self.styles.table().get(id) {
+                            Some(facet) => h.update(&facet.encode()),
+                            None => h.update(&[0xFF]),
+                        }
+                    }
+                };
+            }
+        }
         h.finalize()
     }
 
@@ -468,5 +753,14 @@ impl State {
     /// Number of live tiles backing the cell store.
     pub fn tile_count(&self) -> usize {
         self.cells.tile_count()
+    }
+
+    /// Structural heap bytes held by the style registry, for W-STYLE-COLUMN.
+    ///
+    /// The number this exists to make checkable is that formatting an empty
+    /// column costs nothing *per cell*: this grows with the number of
+    /// formatting operations and with nothing else.
+    pub fn style_heap_bytes(&self) -> usize {
+        self.styles.heap_bytes()
     }
 }

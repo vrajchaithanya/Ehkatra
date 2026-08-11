@@ -334,9 +334,12 @@ fn a_missing_relationship_part_falls_back_to_the_convention() {
 
 // ------------------------------------------------------- the corpus as a whole
 
+/// BOOTSTRAP row 12 asked for twenty; session 30 added a twenty-first for the
+/// style facets (ADR-041), because a fidelity number over a surface the corpus
+/// does not exercise measures the writer against itself.
 #[test]
-fn the_corpus_is_the_twenty_files_bootstrap_asks_for() {
-    assert_eq!(corpus_files().len(), 20);
+fn the_corpus_is_the_twenty_files_bootstrap_asks_for_plus_the_styles_file() {
+    assert_eq!(corpus_files().len(), 21);
 }
 
 /// Every file opens, and every file's report is internally consistent. This is
@@ -420,9 +423,101 @@ fn the_per_file_fidelity_report() {
 
     // The corpus deliberately contains files that *must* report a loss, so a
     // clean sweep would mean the degradation paths are not being exercised.
-    assert!(lossless >= 14, "too many files losing data: {lossless}/20");
+    assert!(lossless >= 14, "too many files losing data: {lossless}/21");
     assert!(
-        lossless < 20,
+        lossless < 21,
         "the defective files must still report losses"
     );
+}
+
+// ------------------------------------------------ styles (ADR-041, session 30)
+
+/// The four traps a naive `styles.xml` reader falls into, each asserted against
+/// corpus file 21 — which is hand-written in Excel's shapes, so this tests the
+/// reader rather than testing our writer through our reader (D-123's lesson:
+/// two halves of one codebase agreeing proves only that they agree).
+///
+/// The traps, in the order they bite: `<color>` lives inside both `<font>` and
+/// `<patternFill>`; `<xf>` lives inside both `<cellStyleXfs>` and `<cellXfs>`;
+/// fill indices 0 and 1 are the mandatory `none`/`gray125` skeleton and are not
+/// formatting; and `<b val="0"/>` means *not* bold where a bare `<b/>` means
+/// bold.
+#[test]
+fn fonts_fills_and_alignment_resolve_through_the_style_tables() {
+    let book = open("21-styles.xlsx");
+    let sheet = &book.sheets[0];
+    let cell = |row, col| sheet.cell(row, col).expect("cell must be read");
+
+    // A1: bold only. The font's own black must not have been taken from a fill.
+    let a1 = cell(0, 0).font.clone().expect("A1 has a font");
+    assert_eq!(a1.flags, usk_xlsx::FONT_BOLD);
+    assert_eq!(a1.half_points, 22);
+    assert_eq!(a1.argb, 0xFF00_0000);
+    assert_eq!(a1.name, "Calibri");
+    assert_eq!(cell(0, 0).fill, None, "a bold cell has no fill");
+
+    // B1: italic + underline, 14pt, dark red, Arial.
+    let b1 = cell(0, 1).font.clone().expect("B1 has a font");
+    assert_eq!(
+        b1.flags,
+        usk_xlsx::FONT_ITALIC | usk_xlsx::FONT_UNDERLINE,
+        "italic and underline, and NOT bold"
+    );
+    assert_eq!(b1.half_points, 28);
+    assert_eq!(b1.argb, 0xFFC0_0000);
+    assert_eq!(b1.name, "Arial");
+
+    // C1: `<b val="0"/>` is *not* bold, and 10.5pt is why the facet stores
+    // half-points rather than points.
+    let c1 = cell(0, 2).font.clone().expect("C1 has a font");
+    assert_eq!(
+        c1.flags,
+        usk_xlsx::FONT_STRIKE,
+        "b val=\"0\" must clear bold, not set it"
+    );
+    assert_eq!(c1.half_points, 21, "10.5pt is 21 half-points");
+
+    // D1: a solid fill and nothing else. Fill index 2, because 0 and 1 are the
+    // skeleton — reading the skeleton as formatting is the classic off-by-two.
+    assert_eq!(cell(0, 3).fill, Some(0xFFFF_FF00));
+    assert_eq!(cell(0, 3).font, None);
+
+    // E1: alignment on all three axes at once.
+    assert_eq!(
+        cell(0, 4).alignment,
+        Some(usk_xlsx::Alignment {
+            horizontal: 2,
+            vertical: 1,
+            wrap: true,
+        })
+    );
+
+    // F1 has a style and no value at all — XLSX's style-holding cell. It must
+    // survive the read, because there the formatting *is* the content.
+    let f1 = cell(0, 5);
+    assert_eq!(f1.value, Value::Blank);
+    assert_eq!(f1.fill, Some(0xFF00_70C0));
+
+    // A2: all four facets on one entry — the case a per-facet model has to get
+    // right and a single-blob model gets right only by accident.
+    let a2 = cell(1, 0);
+    assert_eq!(a2.number_format.as_deref(), Some("0.000"));
+    assert_eq!(a2.font.as_ref().map(|f| f.flags), Some(usk_xlsx::FONT_BOLD));
+    assert_eq!(a2.fill, Some(0xFFFF_FF00));
+    assert_eq!(
+        a2.alignment,
+        Some(usk_xlsx::Alignment {
+            horizontal: 3,
+            vertical: 2,
+            wrap: false,
+        })
+    );
+    assert_eq!(a2.facets().len(), 4, "four facets, one cell");
+
+    // B2 names xf 0, the all-defaults entry: unformatted, not "formatted with
+    // the defaults". The cell-style xf sitting beside it in `cellStyleXfs`
+    // (which names a green Consolas font and a blue fill) must not have been
+    // indexed as a cell format.
+    assert!(cell(1, 1).is_unformatted());
+    assert_eq!(book.fidelity.styles_resolved, 7);
 }

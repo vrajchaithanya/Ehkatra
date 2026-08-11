@@ -254,6 +254,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "recalc-profile"
+version = "0.1.0"
+dependencies = [
+ "usk-calc",
+ "usk-oplog",
+ "usk-state",
+ "usk-types",
+]
+
+[[package]]
 name = "replay-check"
 version = "0.1.0"
 dependencies = [
@@ -427,6 +437,7 @@ name = "usk-xlsx"
 version = "0.1.0"
 dependencies = [
  "usk-formula",
+ "usk-oplog",
  "usk-types",
  "usk-xml",
  "usk-zip",

@@ -24,6 +24,26 @@ pub trait Grid {
     /// `#REF!`; a blank but in-range cell is `Some(Value::Blank)`.
     fn read(&self, row: u32, col: u32) -> Option<Value>;
 
+    /// Reads the rectangle `r0..=r1` × `c0..=c1`, row-major, with off-grid
+    /// cells read as `Blank`. Callers pass coordinates already clamped to the
+    /// extent, exactly as `read_range` always has.
+    ///
+    /// Semantically this **is** [`Grid::read`] per cell — the default body
+    /// below is normative and any override must agree with it cell for cell.
+    /// The method exists so a grid backed by tiled storage can resolve a
+    /// range's storage slots once per range rather than once per cell
+    /// (TD-71): the evaluator has the whole rectangle in hand here, and
+    /// collapsing it to single-cell calls threw that information away.
+    fn read_rect(&self, r0: u32, c0: u32, r1: u32, c1: u32) -> Vec<Value> {
+        let mut cells = Vec::with_capacity((r1 - r0 + 1) as usize * (c1 - c0 + 1) as usize);
+        for row in r0..=r1 {
+            for col in c0..=c1 {
+                cells.push(self.read(row, col).unwrap_or(Value::Blank));
+            }
+        }
+        cells
+    }
+
     /// Current extent, used to clamp ranges. `(rows, cols)`.
     fn extent(&self) -> (u32, u32);
 }
@@ -254,12 +274,9 @@ fn read_range<G: Grid>(ctx: &Context<G>, a: &A1, b: &A1) -> Operand {
     let r1 = r1.min(max_rows.saturating_sub(1));
     let c1 = c1.min(max_cols.saturating_sub(1));
 
-    let mut cells = Vec::new();
-    for row in r0..=r1 {
-        for col in c0..=c1 {
-            cells.push(ctx.grid.read(row, col).unwrap_or(Value::Blank));
-        }
-    }
+    // One call for the whole rectangle (TD-71): a grid that knows its storage
+    // layout resolves the range's slots once instead of once per cell.
+    let cells = ctx.grid.read_rect(r0, c0, r1, c1);
     Operand::Range {
         rows: r1 - r0 + 1,
         cols: c1 - c0 + 1,

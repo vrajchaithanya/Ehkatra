@@ -8,7 +8,7 @@
 
 use usk_json::{number, string, Json};
 use usk_types::{CellError, ErrorKind, Origin, Value};
-use usk_xlsx::{Cell, Fidelity, Loss, LossReason, Sheet, Workbook};
+use usk_xlsx::{Cell, Fidelity, Loss, LossReason, Sheet, StyleFacet, Workbook};
 
 use crate::ir::IrError;
 
@@ -54,7 +54,46 @@ fn encode_cell(cell: &Cell) -> Json {
     if let Some(format) = &cell.number_format {
         fields.push((String::from("nf"), string(format)));
     }
+    // The other facets (ADR-041) cross as their **canonical op-layer bytes**,
+    // hex-encoded. Not as JSON objects: a second spelling of a facet is exactly
+    // what DP-A4 forbids, and a facet added in a later version would otherwise
+    // need this crate edited to survive the trip. The number format keeps its
+    // own `nf` field because it predates the facet model and the child's
+    // contract is not rewritten for a refactor.
+    let facets: Vec<Json> = cell
+        .facets()
+        .iter()
+        .filter(|facet| !matches!(facet, StyleFacet::NumberFormat(_)))
+        .map(|facet| Json::String(to_hex(&facet.encode())))
+        .collect();
+    if !facets.is_empty() {
+        fields.push((String::from("sf"), Json::Array(facets)));
+    }
     Json::Object(fields)
+}
+
+fn to_hex(bytes: &[u8]) -> String {
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        out.push(DIGITS[(byte >> 4) as usize] as char);
+        out.push(DIGITS[(byte & 0x0f) as usize] as char);
+    }
+    out
+}
+
+fn from_hex(text: &str) -> Option<Vec<u8>> {
+    if !text.len().is_multiple_of(2) {
+        return None;
+    }
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(text.len() / 2);
+    for pair in bytes.chunks(2) {
+        let hi = (pair[0] as char).to_digit(16)?;
+        let lo = (pair[1] as char).to_digit(16)?;
+        out.push((hi * 16 + lo) as u8);
+    }
+    Some(out)
 }
 
 /// A tagged value. The tag is explicit rather than inferred from the JSON type
@@ -99,6 +138,10 @@ fn encode_fidelity(fidelity: &Fidelity) -> Json {
         (
             String::from("formulas_read"),
             number(fidelity.formulas_read as f64),
+        ),
+        (
+            String::from("styles_resolved"),
+            number(fidelity.styles_resolved as f64),
         ),
         (
             String::from("number_formats_resolved"),
@@ -185,12 +228,38 @@ pub fn decode(json: &Json) -> Result<Workbook, IrError> {
 }
 
 fn decode_cell(json: &Json) -> Result<Cell, IrError> {
+    // A facet the child sent that this build cannot decode is **dropped**, not
+    // guessed at — the same rule `Payload::Opaque` follows one layer down. A
+    // cell has no way to hold a facet it cannot interpret, so the honest
+    // outcome is the cell without it.
+    let mut font = None;
+    let mut fill = None;
+    let mut alignment = None;
+    for facet in json
+        .get("sf")
+        .and_then(Json::as_array)
+        .unwrap_or(&[])
+        .iter()
+        .filter_map(Json::as_str)
+        .filter_map(from_hex)
+        .filter_map(|bytes| StyleFacet::decode(&bytes).ok())
+    {
+        match facet {
+            StyleFacet::Font(f) => font = Some(f),
+            StyleFacet::Fill(argb) => fill = Some(argb),
+            StyleFacet::Align(a) => alignment = Some(a),
+            StyleFacet::NumberFormat(_) | StyleFacet::Unknown(_) => {}
+        }
+    }
     Ok(Cell {
         row: index(json.get("r"))?,
         col: index(json.get("c"))?,
         value: decode_value(json.get("v").ok_or(IrError::MissingField("cell.v"))?),
         formula: json.get("f").and_then(Json::as_str).map(String::from),
         number_format: json.get("nf").and_then(Json::as_str).map(String::from),
+        font,
+        fill,
+        alignment,
     })
 }
 
@@ -251,6 +320,7 @@ fn decode_fidelity(json: &Json) -> Result<Fidelity, IrError> {
         cells_read: count(json.get("cells_read")),
         formulas_read: count(json.get("formulas_read")),
         number_formats_resolved: count(json.get("number_formats_resolved")),
+        styles_resolved: count(json.get("styles_resolved")),
         losses,
     })
 }

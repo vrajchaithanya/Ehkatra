@@ -29,6 +29,7 @@ members = [
   "tools/replay-check",
   "tools/tile-bench",
   "tools/calc-bench",
+  "tools/recalc-profile",
   "tools/sync-bench",
   "tools/open-bench",
   "tools/image-bench",

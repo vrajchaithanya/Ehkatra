@@ -78,8 +78,12 @@ impl Rect {
 /// One member of a group during construction.
 type Member = (RowId, ColId, (u32, u32), Ast);
 
-/// One member selected for evaluation: identity, derived position, formula.
-type Pending = ((RowId, ColId), (u32, u32), Ast);
+/// One member selected for evaluation: result slot, derived position, formula.
+///
+/// The slot and not the identity, because the only thing this tuple's first
+/// field is ever used for is reaching the member's result — and since TD-23
+/// that is an index rather than a tree key.
+type Pending = (u32, (u32, u32), Ast);
 
 /// A set of cells sharing one R1C1 pattern — a single node in the graph.
 pub struct Group {
@@ -96,6 +100,9 @@ pub struct Group {
     /// rectangle?" on every edit; re-walking member ASTs measured 10.5 ms
     /// against docs/31's 8 ms budget.
     member_bounds: Vec<Rect>,
+    /// The result slot each member owns, same order as `cells` (TD-23).
+    /// Assigned by `Results::rebuild` and valid until the next regroup.
+    slots: Vec<u32>,
     /// Rectangles this group reads, unioned across members.
     pub reads: Vec<Rect>,
     /// Bounding rectangle of the members — what the group writes.
@@ -122,35 +129,179 @@ pub struct RecalcStats {
 ///
 /// docs/13 specifies an R-tree over identity space. This is the cheaper
 /// structure with the right access shape — a stab lands in one bucket and scans
-/// only the groups whose read rectangles cross that band. Tracked as TD-20.
+/// only the rectangles crossing that band. Tracked as TD-20.
+///
+/// # What a band holds, and why it is the rectangles (TD-20)
+/// It used to hold **group ids**: a band recorded which groups had a read
+/// rectangle crossing it, and `stab` then asked each of those groups whether
+/// *any* of its rectangles overlapped — all of them, including the ones nowhere
+/// near this band. The index narrowed the candidates and the check threw the
+/// narrowing away, so one stab over a full-height rectangle cost
+/// `bands × candidate groups × rectangles per group`.
+///
+/// That was invisible while a group carried one rectangle. TD-66's fix made the
+/// rectangle count visible: a **gapped** column — a formula in two rows of
+/// three, which is what a real sheet looks like — cannot merge its reads, so a
+/// group carries hundreds of thousands of them. Measured at 500,000 rows, the
+/// gapped corpus had 33% fewer formulas and took 15% longer than the dense one,
+/// and the penalty grew with the sheet.
+///
+/// So a band now holds the **rectangles** crossing it, each tagged with its
+/// group. The answer is identical, and the argument is one sentence: two
+/// rectangles that overlap must share a row, therefore a row band, and that
+/// band is one of the bands the query already visits. The work becomes
+/// proportional to the rectangles near the query instead of to every rectangle
+/// a candidate group happens to own.
 #[derive(Default)]
 struct BandIndex {
-    bands: BTreeMap<u32, Vec<u32>>,
+    /// Per band: `(group, rectangle)` for every read rectangle crossing it.
+    ///
+    /// The rectangle is stored inline rather than as an index back into
+    /// `Group::reads` — it is 16 bytes, the scan is linear, and a pointer chase
+    /// per candidate is exactly what this structure exists to avoid.
+    bands: BTreeMap<u32, Vec<(u32, Rect)>>,
 }
 
 impl BandIndex {
     fn insert(&mut self, group: u32, rect: &Rect) {
         for band in (rect.r0 / BAND)..=(rect.r1 / BAND) {
-            let slot = self.bands.entry(band).or_default();
-            if !slot.contains(&group) {
-                slot.push(group);
-            }
+            self.bands.entry(band).or_default().push((group, *rect));
         }
     }
 
-    fn stab(&self, rect: &Rect, groups: &[Group], out: &mut BTreeSet<u32>) {
+    /// Every group with a read rectangle overlapping `rect`.
+    ///
+    /// No longer takes the groups: a band carries what the check needs, which
+    /// is what makes the check proportional to the query.
+    fn stab(&self, rect: &Rect, out: &mut BTreeSet<u32>) {
         for band in (rect.r0 / BAND)..=(rect.r1 / BAND) {
             let Some(candidates) = self.bands.get(&band) else {
                 continue;
             };
-            for id in candidates {
-                let Some(g) = groups.get(*id as usize) else {
-                    continue;
-                };
-                if g.reads.iter().any(|r| r.overlaps(rect)) {
-                    out.insert(*id);
+            for (group, candidate) in candidates {
+                // Cheap rejection first: a group already found needs none of
+                // its remaining rectangles in this band examined.
+                if !out.contains(group) && candidate.overlaps(rect) {
+                    out.insert(*group);
                 }
             }
+        }
+    }
+}
+
+/// Computed formula results, **slot-indexed by derived position** (TD-23).
+///
+/// # Why position and not identity
+/// This used to be a `BTreeMap<(RowId, ColId), Value>`: a tree whose key is two
+/// 24-byte identities. Keying by position instead is safe for exactly one
+/// reason, and it is worth stating because it is the whole argument —
+/// [`Engine::regroup`] clears the results and rebuilds the binder **together**,
+/// so any change that could move a position has already emptied this. Within one
+/// graph generation, positions do not move.
+///
+/// # The shape, and why it is this shape
+/// A flat `Vec` over the whole grid is the fastest thing possible and cannot be
+/// afforded — a million rows by forty columns is 40M slots for however few
+/// formulas the sheet has. So the values are dense (one slot per *formula*
+/// cell) and the index into them is `by_col`: for each column position, the
+/// formula rows in that column, sorted.
+///
+/// That shape is chosen for the read that dominates. `EngineGrid::read` is
+/// called once per cell a formula reads, and in a real sheet the overwhelming
+/// majority of those cells are **plain values in columns that hold no formulas
+/// at all** — a `SUM` over a data column, read by a formula in the column
+/// beside it. For those, this answers in one bounds check.
+///
+/// Measured, at 100,000 entries: `BTreeMap<(RowId,ColId),V>` costs **149 ns**
+/// per lookup and **366 ns** per insert; a flat indexed `Vec` costs **6.7** and
+/// **20**. Packing the key into a `u64` — the smaller, more obvious change —
+/// only reaches 97 and 152, which is why it was not the one taken.
+#[derive(Default)]
+struct Results {
+    /// One slot per formula cell. `None` until first evaluated.
+    values: Vec<Option<Value>>,
+    /// Per column position: `(row, slot)` for each formula in that column,
+    /// sorted by row so a lookup is a binary search.
+    by_col: Vec<Vec<(u32, u32)>>,
+}
+
+impl Results {
+    fn clear(&mut self) {
+        self.values.clear();
+        self.by_col.clear();
+    }
+
+    /// Assigns a slot to every formula cell in `groups`, in a deterministic
+    /// order, and records it on the group.
+    ///
+    /// Sorted by `(col, row)` rather than by group order so the slot a cell
+    /// gets is a pure function of the graph and not of the order the groups
+    /// happened to be built in (DP-A2, docs/29 §1).
+    fn rebuild(&mut self, groups: &mut [Group]) {
+        self.clear();
+        let mut cells: Vec<(u32, u32, u32, u32)> = Vec::new();
+        for (g, group) in groups.iter().enumerate() {
+            for (m, pos) in group.positions.iter().enumerate() {
+                cells.push((pos.1, pos.0, g as u32, m as u32));
+            }
+        }
+        cells.sort_unstable();
+
+        self.values = alloc::vec![None; cells.len()];
+        for group in groups.iter_mut() {
+            group.slots = alloc::vec![u32::MAX; group.cells.len()];
+        }
+        for (slot, (col, row, g, m)) in cells.into_iter().enumerate() {
+            let slot = slot as u32;
+            if self.by_col.len() <= col as usize {
+                self.by_col.resize(col as usize + 1, Vec::new());
+            }
+            self.by_col[col as usize].push((row, slot));
+            groups[g as usize].slots[m as usize] = slot;
+        }
+    }
+
+    /// The slot at a derived position, if a formula owns that cell.
+    ///
+    /// A column with no formulas answers in one bounds check, which is the
+    /// case this structure exists for.
+    fn slot_at(&self, row: u32, col: u32) -> Option<u32> {
+        let column = self.by_col.get(col as usize)?;
+        let at = column.binary_search_by_key(&row, |(r, _)| *r).ok()?;
+        Some(column[at].1)
+    }
+
+    fn get(&self, row: u32, col: u32) -> Option<&Value> {
+        self.values.get(self.slot_at(row, col)? as usize)?.as_ref()
+    }
+
+    /// Every *evaluated* result in rows `r0..=r1` of column `col`, in row
+    /// order — the overlay a rect read (TD-71) applies over stored values.
+    /// One binary search per column per range, where the per-cell path paid
+    /// one per cell; a formula cell not yet evaluated is skipped, exactly as
+    /// `get` answers `None` for it.
+    fn overlay_col<F: FnMut(u32, &Value)>(&self, col: u32, r0: u32, r1: u32, mut f: F) {
+        let Some(column) = self.by_col.get(col as usize) else {
+            return;
+        };
+        let start = column.partition_point(|(r, _)| *r < r0);
+        for (r, slot) in &column[start..] {
+            if *r > r1 {
+                break;
+            }
+            if let Some(v) = self.values.get(*slot as usize).and_then(|v| v.as_ref()) {
+                f(*r, v);
+            }
+        }
+    }
+
+    fn at(&self, slot: u32) -> Option<&Value> {
+        self.values.get(slot as usize)?.as_ref()
+    }
+
+    fn set(&mut self, slot: u32, value: Value) {
+        if let Some(cell) = self.values.get_mut(slot as usize) {
+            *cell = Some(value);
         }
     }
 }
@@ -160,17 +311,62 @@ impl BandIndex {
 struct EngineGrid<'a> {
     state: &'a State,
     binder: &'a Binder,
-    results: &'a BTreeMap<(RowId, ColId), Value>,
+    results: &'a Results,
 }
 
 impl Grid for EngineGrid<'_> {
     fn read(&self, row: u32, col: u32) -> Option<Value> {
+        // Results first, and by position — no identity is materialised on the
+        // path that hits. `by_col` only ever holds positions that existed when
+        // the graph was built, so an off-grid position misses here and is
+        // caught by the bounds check below exactly as it was before.
+        if let Some(v) = self.results.get(row, col) {
+            return Some(v.clone());
+        }
         let r = self.binder.rows.at(row as usize)?;
         let c = self.binder.cols.at(col as usize)?;
-        Some(match self.results.get(&(r, c)) {
-            Some(v) => v.clone(),
-            None => self.state.cell(r, c).unwrap_or(Value::Blank),
-        })
+        Some(self.state.cell(r, c).unwrap_or(Value::Blank))
+    }
+
+    /// The range read, with slot resolution amortised over the rectangle
+    /// (TD-71). The per-cell path above converts a position to an identity so
+    /// the tile store can convert it back to a slot — three tree lookups per
+    /// cell for questions the range answers once. Here the row and column
+    /// runs are contiguous slices of the live order, `State::read_rect`
+    /// resolves each identity's slot once per run, and the computed-results
+    /// overlay costs one binary search per column instead of one per cell.
+    /// Cell-for-cell equal to the default body by construction: stored
+    /// values first, results where a formula owns the cell, `Blank` where
+    /// neither answers.
+    fn read_rect(&self, r0: u32, c0: u32, r1: u32, c1: u32) -> Vec<Value> {
+        let (height, width) = ((r1 - r0 + 1) as usize, (c1 - c0 + 1) as usize);
+        let mut cells = alloc::vec![Value::Blank; height * width];
+        let row_run = self.binder.rows.order().get(r0 as usize..=r1 as usize);
+        let col_run = self.binder.cols.order().get(c0 as usize..=c1 as usize);
+        let (Some(rows), Some(cols)) = (row_run, col_run) else {
+            // A rectangle overhanging the live order cannot happen from
+            // `read_range` (it clamps to the extent first), but the contract
+            // is the default body's, so fall back to it rather than assume.
+            for (i, row) in (r0..=r1).enumerate() {
+                for (j, col) in (c0..=c1).enumerate() {
+                    if let Some(v) = self.read(row, col) {
+                        cells[i * width + j] = v;
+                    }
+                }
+            }
+            return cells;
+        };
+        self.state.read_rect(rows, cols, |i, j, v| {
+            cells[i * width + j] = v;
+        });
+        // Results overlay stored values, exactly as the per-cell path answers
+        // results-first.
+        for j in 0..width {
+            self.results.overlay_col(c0 + j as u32, r0, r1, |r, v| {
+                cells[(r - r0) as usize * width + j] = v.clone();
+            });
+        }
+        cells
     }
 
     fn extent(&self) -> (u32, u32) {
@@ -183,8 +379,9 @@ pub struct Engine {
     groups: Vec<Group>,
     index: BandIndex,
     binder: Binder,
-    /// Computed formula results by cell identity — the watermarked fold.
-    results: BTreeMap<(RowId, ColId), Value>,
+    /// Computed formula results, slot-indexed by derived position (TD-23) —
+    /// the watermarked fold.
+    results: Results,
     profile: Profile,
     /// Materialised volatiles (docs/13 T2): read, never computed ambiently.
     pub today: i32,
@@ -204,7 +401,7 @@ impl Engine {
             groups: Vec::new(),
             index: BandIndex::default(),
             binder: Binder::from_state(state),
-            results: BTreeMap::new(),
+            results: Results::default(),
             profile,
             today: 0,
             now: 0.0,
@@ -231,10 +428,20 @@ impl Engine {
 
     /// The value a reader sees at a cell: computed result, else stored value.
     pub fn value(&self, state: &State, row: RowId, col: ColId) -> Option<Value> {
-        match self.results.get(&(row, col)) {
-            Some(v) => Some(v.clone()),
-            None => state.cell(row, col),
+        // Identity in, position out: the caller speaks identities (DP-A6) and
+        // the results are slot-indexed, so the binder bridges the two. Two
+        // `BTreeMap` lookups on a path called once per *visible* cell, not once
+        // per cell read during evaluation — which is the path that mattered.
+        let position = (
+            self.binder.rows.position_of(&row),
+            self.binder.cols.position_of(&col),
+        );
+        if let (Some(rp), Some(cp)) = position {
+            if let Some(v) = self.results.get(rp as u32, cp as u32) {
+                return Some(v.clone());
+            }
         }
+        state.cell(row, col)
     }
 
     /// **The regrouping trigger** (TD-18, docs/13).
@@ -264,7 +471,14 @@ impl Engine {
                 // An opaque op (DP-A5) changed no state, so it dirties nothing.
                 // Treating it as structural would let an op this build cannot
                 // read force a full regroup on every arrival.
-                Payload::Opaque(_) => {}
+                //
+                // A style op dirties nothing either, and for a stronger reason
+                // than cheapness: formatting is not an input to evaluation
+                // (docs/12 — a number format is display, and `TEXT()` reads its
+                // format code from its own argument). Routing it to a regroup
+                // would make painting a column yellow cost a full recalculation
+                // of the workbook.
+                Payload::SetStyle { .. } | Payload::ClearStyle { .. } | Payload::Opaque(_) => {}
             }
         }
 
@@ -338,6 +552,10 @@ impl Engine {
                 self.push_group(pattern.clone(), members, reads, writes);
             }
         }
+
+        // Slots last, because a slot is a position in the whole sheet's
+        // ordering and cannot be known one group at a time.
+        self.results.rebuild(&mut self.groups);
     }
 
     fn push_group(
@@ -362,6 +580,10 @@ impl Engine {
         }
         self.groups.push(Group {
             pattern,
+            // Filled by `Results::rebuild` once every group exists, because a
+            // slot is a position in the whole sheet's ordering and cannot be
+            // known one group at a time.
+            slots: Vec::new(),
             cells,
             asts,
             positions,
@@ -398,7 +620,7 @@ impl Engine {
             };
             let source = Rect::point(rp as u32, cp as u32);
             let mut readers = BTreeSet::new();
-            self.index.stab(&source, &self.groups, &mut readers);
+            self.index.stab(&source, &mut readers);
             for id in readers {
                 let Some(g) = self.groups.get(id as usize) else {
                     continue;
@@ -423,7 +645,7 @@ impl Engine {
                 continue;
             };
             let mut readers = BTreeSet::new();
-            self.index.stab(&source, &self.groups, &mut readers);
+            self.index.stab(&source, &mut readers);
             for r in readers {
                 if r == id {
                     continue;
@@ -458,7 +680,7 @@ impl Engine {
             }
             let writes = ga.writes;
             let mut readers = BTreeSet::new();
-            self.index.stab(&writes, &self.groups, &mut readers);
+            self.index.stab(&writes, &mut readers);
             for b in readers {
                 if b == *a || !dirty.contains_key(&b) {
                     continue;
@@ -506,14 +728,14 @@ impl Engine {
             for id in &dirty_list {
                 if !placed_set.contains(id) {
                     stats.circular_groups += 1;
-                    let cells = self
+                    let slots = self
                         .groups
                         .get(*id as usize)
-                        .map(|g| g.cells.clone())
+                        .map(|g| g.slots.clone())
                         .unwrap_or_default();
-                    for cell in cells {
-                        self.results.insert(
-                            cell,
+                    for slot in slots {
+                        self.results.set(
+                            slot,
                             Value::Error(CellError::new(ErrorKind::Circ, Origin::Propagated)),
                         );
                         stats.evaluated_cells += 1;
@@ -556,12 +778,12 @@ impl Engine {
                     continue;
                 };
                 let members: Vec<Pending> = group
-                    .cells
+                    .slots
                     .iter()
                     .zip(group.positions.iter())
                     .zip(group.asts.iter())
                     .filter(|((_, pos), _)| region.contains(pos.0, pos.1))
-                    .map(|((cell, pos), ast)| (*cell, *pos, ast.clone()))
+                    .map(|((slot, pos), ast)| (*slot, *pos, ast.clone()))
                     .collect();
                 if members.is_empty() {
                     stats.cut_off_groups += 1;
@@ -590,8 +812,8 @@ impl Engine {
                 }
 
                 let mut changed_rect: Option<Rect> = None;
-                for ((cell, pos, _), value) in members.iter().zip(computed.iter()) {
-                    if self.results.get(cell) != Some(value) {
+                for ((slot, pos, _), value) in members.iter().zip(computed.iter()) {
+                    if self.results.at(*slot) != Some(value) {
                         let r = Rect::point(pos.0, pos.1);
                         changed_rect = Some(match changed_rect {
                             None => r,
@@ -603,8 +825,8 @@ impl Engine {
                     changed.insert(*id, r);
                 }
 
-                for ((cell, _, _), value) in members.iter().zip(computed) {
-                    self.results.insert(*cell, value);
+                for ((slot, _, _), value) in members.iter().zip(computed) {
+                    self.results.set(*slot, value);
                     stats.evaluated_cells += 1;
                 }
                 stats.evaluated_groups += 1;
@@ -704,20 +926,14 @@ fn extent_of(members: &[Member]) -> (Vec<Rect>, Rect) {
     let mut reads: Vec<Rect> = Vec::new();
     let mut writes: Option<Rect> = None;
     for (_, _, pos, ast) in members {
-        let mut member_reads = Vec::new();
-        collect_reads(ast, &mut member_reads);
-        for r in member_reads {
-            match reads.iter_mut().find(|e| rects_mergeable(e, &r)) {
-                Some(existing) => *existing = existing.union(&r),
-                None => reads.push(r),
-            }
-        }
+        collect_reads(ast, &mut reads);
         let w = Rect::point(pos.0, pos.1);
         writes = Some(match writes {
             None => w,
             Some(prev) => prev.union(&w),
         });
     }
+    merge_rects(&mut reads);
     (
         reads,
         writes.unwrap_or(Rect {
@@ -727,6 +943,62 @@ fn extent_of(members: &[Member]) -> (Vec<Rect>, Rect) {
             c1: 0,
         }),
     )
+}
+
+/// Collapses a rectangle cover, in O(n log n) (TD-66).
+///
+/// # The quadratic this replaces
+/// The previous version accumulated rectangles one at a time and, for each one,
+/// **linearly scanned everything accumulated so far** looking for something to
+/// merge with. When the merge succeeds that list stays short and the scan is
+/// free — which is why a column of formulas in *every* row was always fast. Put
+/// a gap in the column and nothing merges: the list grows one entry per
+/// formula and the scan becomes O(n²).
+///
+/// Measured, which is why this is a fix and not a guess: at 100,000 rows the
+/// **dense** corpus builds 102,703 formulas in 395 ms, and the **gapped** one
+/// builds 68,469 in 2,509 ms. Fifty per cent more formulas, six times faster.
+/// Gaps — blank rows, section breaks, subtotal bands — are what real
+/// spreadsheets are made of, so this was never a corpus artefact.
+///
+/// # Why one sort and one sweep are enough
+/// `rects_mergeable` joins same-column rectangles whose rows touch, and
+/// same-row rectangles whose columns touch. Sorting by `(c0, c1, r0, r1)` puts
+/// every same-column rectangle into one contiguous run in row order, so a
+/// single sweep comparing each entry against the previous collapses the whole
+/// run.
+///
+/// The sweep can miss a merge the old greedy scan would have found: two
+/// rectangles with *different* column spans that happen to overlap and are not
+/// adjacent after sorting. That leaves **more** rectangles, never coarser ones.
+/// `reads` is a cover used for overlap filtering, so a tighter cover is always
+/// safe — it can only cost a few more comparisons in `stab`, never a missed
+/// dependency.
+///
+/// # The second, smaller win
+/// The old version allocated a fresh `Vec` **per member** to collect that
+/// member's reads into. Collecting into one shared buffer instead is why even
+/// the *dense* chain workload — which merged on its first comparison and was
+/// never quadratic — got faster: W-CHAIN-100K's graph build went **~910 ms to
+/// ~310 ms** on the same host, 2.9×.
+///
+/// Recalculation is untouched, and that was checked rather than assumed. A cold
+/// first A/B appeared to show full recalc halving; re-running both warm gave
+/// 112–138 ms either way. `extent_of` is not on the recalculation path, and the
+/// measurement now agrees with the code.
+fn merge_rects(rects: &mut Vec<Rect>) {
+    if rects.len() < 2 {
+        return;
+    }
+    rects.sort_unstable_by_key(|r| (r.c0, r.c1, r.r0, r.r1));
+    let mut out: Vec<Rect> = Vec::with_capacity(rects.len());
+    for r in core::mem::take(rects) {
+        match out.last_mut() {
+            Some(last) if rects_mergeable(last, &r) => *last = last.union(&r),
+            _ => out.push(r),
+        }
+    }
+    *rects = out;
 }
 
 /// Bounding rectangle of each formula's reads, one per member.

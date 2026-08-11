@@ -535,3 +535,240 @@ fn recalculation_is_deterministic() {
     assert_eq!(first.2, second.2);
     assert_eq!(first.2, 3, "two fills plus one aggregate over 41 formulas");
 }
+
+/// TD-66: a group's read rectangles collapse in O(n log n), and collapse to the
+/// *same* cover the old quadratic scan produced.
+///
+/// # Why this test exists at all
+/// `extent_of` used to accumulate read rectangles one at a time and linearly
+/// scan everything accumulated so far looking for a merge. A column of formulas
+/// in **every** row merged on the first comparison and stayed fast; a column
+/// with **gaps** merged with nothing, grew one entry per formula, and became
+/// O(n²) — measured at 2.5 s for 68,469 formulas against 395 ms for 102,703
+/// dense ones, which is 50% more formulas and six times faster.
+///
+/// Gaps are what real spreadsheets are made of: blank rows, section breaks,
+/// subtotal bands.
+///
+/// **What this test is and is not.** It pins the *shape of the cover*, which is
+/// the part a rewrite could quietly get wrong — and it passes against both the
+/// old algorithm and the new one, which is the point: the fix was meant to
+/// change the cost and nothing else, and this is the evidence that it did.
+/// There is no cheap non-flaky way to assert an asymptotic in a unit test, so
+/// the complexity itself is guarded by a **measurement** rather than a test:
+/// `ehkatra-shell --open <rows>` reports the graph build by phase, and
+/// MEASUREMENTS.md records 2,509 ms -> 347 ms at 100,000 rows.
+#[test]
+fn read_rectangles_collapse_across_touching_rows_and_not_across_gaps() {
+    // Formulas in rows 0, 1, 3, 4, 6, 7 — the two-in-three shape — each summing
+    // columns A..C of its own row.
+    let mut b = Book::new(9, 4);
+    for row in [0usize, 1, 3, 4, 6, 7] {
+        b.formula_ranges(row, 3, "=SUM(A1:C1)", &[(row, row, 0, 2)]);
+    }
+    let state = b.state();
+    let engine = Engine::build(&state, Profile::Compat);
+
+    let group = engine
+        .groups()
+        .iter()
+        .find(|g| g.cells.len() == 6)
+        .expect("all six share one R1C1 pattern");
+
+    let mut rows: Vec<(u32, u32)> = group.reads.iter().map(|r| (r.r0, r.r1)).collect();
+    rows.sort_unstable();
+    assert_eq!(
+        rows,
+        [(0, 1), (3, 4), (6, 7)],
+        "touching rows merge into one rectangle; a gap starts a new one"
+    );
+    for r in &group.reads {
+        assert_eq!((r.c0, r.c1), (0, 2), "the column span is untouched");
+    }
+}
+
+/// The dense case, which is the one that was always fast and must stay exact:
+/// an unbroken run collapses to a single rectangle.
+#[test]
+fn an_unbroken_run_of_reads_collapses_to_one_rectangle() {
+    let mut b = Book::new(8, 4);
+    for row in 0..8usize {
+        b.formula_ranges(row, 3, "=SUM(A1:C1)", &[(row, row, 0, 2)]);
+    }
+    let state = b.state();
+    let engine = Engine::build(&state, Profile::Compat);
+    let group = engine
+        .groups()
+        .iter()
+        .find(|g| g.cells.len() == 8)
+        .expect("one pattern");
+    assert_eq!(group.reads.len(), 1);
+    assert_eq!(
+        (group.reads[0].r0, group.reads[0].r1),
+        (0, 7),
+        "eight touching rows are one rectangle"
+    );
+}
+
+/// The cover is an optimisation; the *answers* are the contract. A gapped sheet
+/// must still recalculate correctly and still propagate an edit through the
+/// merged rectangles — a cover that collapsed too far would silently stop
+/// dirtying something.
+#[test]
+fn a_gapped_sheet_still_recalculates_and_still_propagates_an_edit() {
+    let mut b = Book::new(9, 4);
+    for row in [0usize, 1, 3, 4, 6, 7] {
+        for col in 0..3 {
+            b.set(row, col, (row * 10 + col) as f64);
+        }
+        b.formula_ranges(row, 3, "=SUM(A1:C1)", &[(row, row, 0, 2)]);
+    }
+    let state = b.state();
+    let mut engine = Engine::build(&state, Profile::Compat);
+    engine.recalc_all(&state);
+
+    // `approx` because `SUM` answers in `Decimal` — exact currency math is the
+    // point of that (ADR-035), and the test should not care which numeric type
+    // carries the answer.
+    assert_eq!(approx(&engine, &state, b.rows[0], b.cols[3]), 3.0);
+    assert_eq!(approx(&engine, &state, b.rows[7], b.cols[3]), 213.0);
+
+    // Edit a precedent in the *last* gap-separated band and check the dependent
+    // follows: if the cover had merged too far or too little, this is where it
+    // shows.
+    let mut b2 = b;
+    let op = b2.set(7, 0, 1000.0);
+    let state = b2.state();
+    engine.observe(&state, core::slice::from_ref(&op));
+    assert_eq!(
+        approx(&engine, &state, b2.rows[7], b2.cols[3]),
+        1000.0 + 71.0 + 72.0,
+        "the edit must reach the formula through the merged rectangle"
+    );
+}
+
+/// TD-20: the band index across **more than one band**.
+///
+/// # A gap this fix exposed
+/// `BAND` is 256 rows, and every other test in this file uses a sheet small
+/// enough to fit in band 0 — so the multi-band path had no coverage at all.
+/// These sheets are 600 rows, which is three bands.
+///
+/// Stated plainly: **these pass against the old index too.** Moving a band from
+/// holding group ids to holding rectangles changes what the index *costs*, not
+/// what it answers, and no behavioural test can discriminate a pure performance
+/// change. What they are for is the coverage gap — the band arithmetic itself
+/// was untested, and a rewrite of the structure that carries it should not have
+/// been made against tests that never left band 0.
+#[test]
+fn an_edit_reaches_a_formula_three_bands_away() {
+    let mut b = Book::new(600, 2);
+    // One formula per band, all sharing an R1C1 pattern (each sums the ten
+    // rows above it), so they are one group with three read rectangles in
+    // three different bands.
+    for row in [20usize, 300, 590] {
+        b.formula_ranges(row, 1, "=SUM(A11:A20)", &[(row - 10, row, 0, 0)]);
+    }
+    for row in 0..600usize {
+        b.set(row, 0, 1.0);
+    }
+    let state = b.state();
+    let mut engine = Engine::build(&state, Profile::Compat);
+    engine.recalc_all(&state);
+    assert_eq!(approx(&engine, &state, b.rows[590], b.cols[1]), 11.0);
+
+    // An edit in the *last* band must reach the formula there and no other.
+    let op = b.set(585, 0, 100.0);
+    let state = b.state();
+    let stats = engine.observe(&state, core::slice::from_ref(&op));
+    assert_eq!(
+        stats.evaluated_cells, 1,
+        "only the formula whose rectangle covers row 585 should re-evaluate"
+    );
+    assert_eq!(approx(&engine, &state, b.rows[590], b.cols[1]), 110.0);
+    assert_eq!(
+        approx(&engine, &state, b.rows[20], b.cols[1]),
+        11.0,
+        "the formula in band 0 must not have moved"
+    );
+}
+
+/// A single read rectangle that spans several bands must be found from any of
+/// them — the case the band arithmetic gets wrong if the range is registered
+/// only against its first band.
+#[test]
+fn a_read_rectangle_spanning_bands_is_found_from_every_band_it_crosses() {
+    let mut b = Book::new(600, 2);
+    // One formula reading rows 0..=599 — four bands' worth in one rectangle.
+    b.formula_ranges(0, 1, "=SUM(A1:A600)", &[(0, 599, 0, 0)]);
+    for row in 0..600usize {
+        b.set(row, 0, 1.0);
+    }
+    let state = b.state();
+    let mut engine = Engine::build(&state, Profile::Compat);
+    engine.recalc_all(&state);
+    assert_eq!(approx(&engine, &state, b.rows[0], b.cols[1]), 600.0);
+
+    // Edit one row in each band; every one of them must reach the formula.
+    for row in [5usize, 260, 520, 599] {
+        let op = b.set(row, 0, 2.0);
+        let state = b.state();
+        let stats = engine.observe(&state, core::slice::from_ref(&op));
+        assert_eq!(
+            stats.evaluated_cells, 1,
+            "an edit at row {row} did not reach the formula"
+        );
+        let _ = state;
+    }
+    let state = b.state();
+    assert_eq!(approx(&engine, &state, b.rows[0], b.cols[1]), 604.0);
+}
+
+/// An edit far from every formula must reach none of them. The negative case,
+/// which is what an index is *for* — a stab that matched everything would still
+/// give right answers and would make the index pointless.
+#[test]
+fn an_edit_in_an_empty_band_dirties_nothing() {
+    let mut b = Book::new(600, 3);
+    b.formula_ranges(20, 1, "=SUM(A11:A20)", &[(10, 20, 0, 0)]);
+    for row in 0..30usize {
+        b.set(row, 0, 1.0);
+    }
+    let state = b.state();
+    let mut engine = Engine::build(&state, Profile::Compat);
+    engine.recalc_all(&state);
+
+    // Row 500, column C: two bands away and a column nothing reads.
+    let op = b.set(500, 2, 42.0);
+    let state = b.state();
+    let stats = engine.observe(&state, core::slice::from_ref(&op));
+    assert_eq!(
+        stats.evaluated_cells, 0,
+        "an edit nothing reads must evaluate nothing"
+    );
+    assert_eq!(stats.dirty_groups, 0);
+}
+
+/// TD-71: the amortised rect read a range evaluation performs must be
+/// indistinguishable from per-cell reads. The range here spans every kind of
+/// cell a read can meet — another formula's computed result, stored values,
+/// and a blank — and the overlay rule (results win over stored values) is
+/// exercised by a formula cell that also carries an older stored value.
+#[test]
+fn a_range_read_sees_results_values_and_blanks_alike() {
+    let mut b = Book::new(4, 2);
+    b.set(0, 0, 5.0); // A1 stored
+                      // A2 left blank
+    b.set(2, 0, 90.0); // A3 stored, then overwritten by a formula:
+    b.formula(2, 0, "=A1+1", &[(0, 0)]); // A3 computes 6, shadowing the 90
+    b.set(3, 0, 2.0); // A4 stored
+    b.formula_ranges(0, 1, "=SUM(A1:A4)", &[(0, 3, 0, 0)]); // B1
+
+    let state = b.state();
+    let mut engine = Engine::build(&state, Profile::Compat);
+    engine.recalc_all(&state);
+
+    // 5 (stored) + 0 (blank) + 6 (computed, not the stored 90) + 2 (stored).
+    assert_eq!(approx(&engine, &state, b.rows[0], b.cols[1]), 13.0);
+    assert_eq!(approx(&engine, &state, b.rows[2], b.cols[0]), 6.0);
+}

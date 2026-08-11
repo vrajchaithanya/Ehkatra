@@ -17,12 +17,12 @@
 //! convergence property depends on the value of a slot, only on its determinism.
 
 use alloc::boxed::Box;
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 use core::borrow::Borrow;
 use core::mem::size_of;
 use usk_oplog::{Op, Payload};
-use usk_types::{ActorId, Decimal, Lamport, OpId, Value};
+use usk_types::{ActorId, ColId, Decimal, Lamport, OpId, RowId, Value};
 
 /// Rows per tile (docs/14; frozen by ADR-005 as part of tile granularity).
 pub const TILE_ROWS: u32 = 256;
@@ -129,6 +129,28 @@ impl Presence {
         }
         let mask = (1u64 << (idx % 64)) - 1;
         n + (self.words[w] & mask).count_ones() as usize
+    }
+
+    /// Number of present cells in `lo..hi` (`lo` included, `hi` excluded).
+    ///
+    /// The incremental step for a rank that continues from a known one:
+    /// `rank(hi) == rank(lo) + rank_between(lo, hi)` whenever `lo <= hi`.
+    /// Exists for [`TileStore::read_rect`] (TD-71), where consecutive cells of
+    /// a run usually ascend within one tile and a full `rank` per cell would
+    /// re-walk the same words once per cell.
+    fn rank_between(&self, lo: u16, hi: u16) -> usize {
+        debug_assert!(lo <= hi);
+        let (lw, hw) = (lo as usize / 64, hi as usize / 64);
+        let lo_mask = !((1u64 << (lo % 64)) - 1);
+        let hi_mask = (1u64 << (hi % 64)) - 1;
+        if lw == hw {
+            return (self.words[lw] & lo_mask & hi_mask).count_ones() as usize;
+        }
+        let mut n = (self.words[lw] & lo_mask).count_ones() as usize;
+        for word in &self.words[lw + 1..hw] {
+            n += word.count_ones() as usize;
+        }
+        n + (self.words[hw] & hi_mask).count_ones() as usize
     }
 
     /// Marks `idx` present. Returns `true` if it was newly inserted.
@@ -441,13 +463,21 @@ pub struct TileStore {
     contested: BTreeMap<TileKey, [u64; PRESENCE_WORDS]>,
 }
 
-/// Result of the replay pre-pass: the slot assignment and the set of tiles that
-/// must start promoted.
+/// Result of the replay pre-pass.
+///
+/// One traversal answers every question that must be settled *before the first
+/// write lands*: which slot each identity gets, which cells are contested (so
+/// their tile starts stamped), and which cells a formula ever names (so the
+/// formula registry can stamp value writes there — TD-22, see `formula.rs`).
+/// They share a pass because they share that timing constraint, and because a
+/// second traversal of a 10M-cell import is not free.
 pub struct Plan {
     pub rows: SlotMap,
     pub cols: SlotMap,
     /// Contested cell indices per tile.
     pub contested: BTreeMap<TileKey, [u64; PRESENCE_WORDS]>,
+    /// Cells named by any `SetFormula` op — the formula registry's seed set.
+    pub formula_cells: BTreeSet<(OpId, OpId)>,
 }
 
 impl TileStore {
@@ -459,6 +489,109 @@ impl TileStore {
             tiles: BTreeMap::new(),
             contested: plan.contested,
         }
+    }
+
+    /// Claims the slot a newly inserted row or column will occupy.
+    ///
+    /// `plan_promotions` interns on **structural** ops and not only on cell
+    /// writes — that is what ADR-034 means by "slot order follows creation
+    /// order", and it is what gives tiles their locality. So the applier must
+    /// do it too, or an incrementally applied `InsertRow` would leave its
+    /// identity unslotted until something wrote into it, and every slot handed
+    /// out in between would land one place off. Slot order is the order
+    /// [`TileStore::for_each`] walks, which is the order the **state hash**
+    /// folds in — so "one place off" is a divergent hash, not a cosmetic
+    /// difference. Found exactly that way: the relay's convergence tests went
+    /// red the first time `State::apply_tip` existed.
+    ///
+    /// Idempotent, and therefore free on the replay path, where the plan has
+    /// already interned every identity before the first `apply`.
+    pub(crate) fn intern_row(&mut self, id: OpId) {
+        self.rows.intern(id);
+    }
+
+    pub(crate) fn intern_col(&mut self, id: OpId) {
+        self.cols.intern(id);
+    }
+
+    /// Promotes one cell **retroactively**, seeding it with the stamp the
+    /// image recorded for it (ADR-036).
+    ///
+    /// This is the operation the `write` contract below says is impossible
+    /// without help, and the sidecar is that help. A state adopted from an
+    /// image was planned over the *image's* op set; a tail op from a second
+    /// actor contests a cell that plan proved uncontested, so the cell has to
+    /// join the stamped path carrying the winner it already has — otherwise
+    /// the tail overwrites it on the summary path and the loser ADR-006
+    /// promises is gone before anything can retain it.
+    ///
+    /// Idempotent: a cell already contested keeps the stamp it has, because
+    /// that stamp is either the same one or a newer one the tail installed.
+    pub(crate) fn adopt_stamp(&mut self, row: OpId, col: OpId, stamp: (Lamport, OpId)) {
+        let (Some(row_slot), Some(col_slot)) = (self.rows.slot_of(&row), self.cols.slot_of(&col))
+        else {
+            // The image never held this cell, so there is no winner to keep
+            // and the ordinary write path is already correct.
+            return;
+        };
+        let key = TileKey::of(row_slot, col_slot);
+        let idx = cell_index(row_slot, col_slot);
+        let bits = self.contested.entry(key).or_insert([0u64; PRESENCE_WORDS]);
+        if bits[idx as usize / 64] & (1u64 << (idx % 64)) != 0 {
+            return;
+        }
+        bits[idx as usize / 64] |= 1u64 << (idx % 64);
+
+        let Some(tile) = self.tiles.get_mut(&key) else {
+            return;
+        };
+        // A tile holding a contested cell is `Mixed`, and its frontier is
+        // preserved: anti-entropy diffs on it (docs/15), so resetting it here
+        // would make a tile that has not changed look stale.
+        let (max_lamport, writer) = match &tile.meta {
+            Meta::Summary {
+                max_lamport,
+                writer,
+            }
+            | Meta::Mixed {
+                max_lamport,
+                writer,
+                ..
+            } => (*max_lamport, *writer),
+        };
+        let mut stamps = match core::mem::replace(
+            &mut tile.meta,
+            Meta::Summary {
+                max_lamport,
+                writer,
+            },
+        ) {
+            Meta::Mixed { stamps, .. } => stamps,
+            Meta::Summary { .. } => BTreeMap::new(),
+        };
+        stamps.entry(idx).or_insert(CellMeta {
+            lamport: stamp.0,
+            id: stamp.1,
+            losers: Vec::new(),
+        });
+        tile.meta = Meta::Mixed {
+            max_lamport,
+            writer,
+            stamps,
+        };
+    }
+
+    /// Whether a cell is already on the stamped path.
+    pub(crate) fn is_contested(&self, row: OpId, col: OpId) -> bool {
+        let (Some(row_slot), Some(col_slot)) = (self.rows.slot_of(&row), self.cols.slot_of(&col))
+        else {
+            return false;
+        };
+        let key = TileKey::of(row_slot, col_slot);
+        let idx = cell_index(row_slot, col_slot);
+        self.contested
+            .get(&key)
+            .is_some_and(|bits| bits[idx as usize / 64] & (1u64 << (idx % 64)) != 0)
     }
 
     /// Applies one cell write.
@@ -594,6 +727,79 @@ impl TileStore {
             return None;
         }
         Some(tile.payload.get(tile.presence.rank(idx)))
+    }
+
+    /// Reads a rectangle of cells, resolving each identity's slot **once per
+    /// run** rather than once per cell (TD-71).
+    ///
+    /// [`TileStore::get`] pays three `BTreeMap` lookups per cell — row
+    /// identity → slot, column identity → slot, tile key → tile — plus a full
+    /// popcount `rank` inside the tile. W-RECALC-PROFILE experiment 4 priced
+    /// the three lookups at ~103 ns of a ~195 ns read, and a range read asks
+    /// the same row's slot once per column and the same columns' slots once
+    /// per row. This entry point resolves the column run once, each row once,
+    /// fetches each tile once per (row, column band) instead of once per
+    /// cell, and continues ranks incrementally while the in-tile index
+    /// ascends within a tile.
+    ///
+    /// `emit` receives `(row index, col index, value)` — indices into the
+    /// argument slices — for every cell that has a value, grouped by column
+    /// band within each row; absent cells are not emitted, so a caller
+    /// wanting `Blank`s pre-fills its buffer. Purely a read-path shortcut:
+    /// the result is cell-for-cell identical to calling `get` per cell (the
+    /// `a_rect_read_agrees_with_get` test holds it to that), and the
+    /// identity-based path stays intact for every other caller.
+    pub fn read_rect<F: FnMut(usize, usize, Value)>(
+        &self,
+        rows: &[RowId],
+        cols: &[ColId],
+        mut emit: F,
+    ) {
+        // Column slots once per run, grouped by column band so the tile
+        // lookup below is per band, not per cell. Slot order is creation
+        // order (ADR-034), so nothing here may assume the run ascends.
+        let mut bands: Vec<(u32, Vec<(usize, u32)>)> = Vec::new();
+        for (j, col) in cols.iter().enumerate() {
+            let Some(col_slot) = self.cols.slot_of(&col.0) else {
+                continue;
+            };
+            let band = col_slot / TILE_COLS;
+            match bands.iter_mut().find(|(b, _)| *b == band) {
+                Some((_, run)) => run.push((j, col_slot)),
+                None => bands.push((band, alloc::vec![(j, col_slot)])),
+            }
+        }
+        for (i, row) in rows.iter().enumerate() {
+            let Some(row_slot) = self.rows.slot_of(&row.0) else {
+                continue;
+            };
+            let base = (row_slot % TILE_ROWS) * TILE_COLS;
+            for (band, run) in &bands {
+                let key = TileKey {
+                    row_band: row_slot / TILE_ROWS,
+                    col_band: *band,
+                };
+                let Some(tile) = self.tiles.get(&key) else {
+                    continue;
+                };
+                // `rank(hi) = rank(lo) + rank_between(lo, hi)`: while the
+                // in-tile index ascends, each rank continues from the last
+                // instead of recounting the words below it.
+                let mut prev: Option<(u16, usize)> = None;
+                for (j, col_slot) in run {
+                    let idx = (base + col_slot % TILE_COLS) as u16;
+                    if !tile.presence.contains(idx) {
+                        continue;
+                    }
+                    let rank = match prev {
+                        Some((p, r)) if idx >= p => r + tile.presence.rank_between(p, idx),
+                        _ => tile.presence.rank(idx),
+                    };
+                    prev = Some((idx, rank));
+                    emit(i, *j, tile.payload.get(rank));
+                }
+            }
+        }
     }
 
     /// Retained concurrent losers (ADR-006). A summary tile has none by
@@ -783,6 +989,7 @@ pub fn plan_promotions<B: Borrow<Op>, I: Iterator<Item = B>>(ops: I) -> Plan {
     let mut rows = SlotMap::default();
     let mut cols = SlotMap::default();
     let mut writers: BTreeMap<TileKey, TileWriters> = BTreeMap::new();
+    let mut formula_cells: BTreeSet<(OpId, OpId)> = BTreeSet::new();
 
     for op in ops {
         let op = op.borrow();
@@ -802,13 +1009,20 @@ pub fn plan_promotions<B: Borrow<Op>, I: Iterator<Item = B>>(ops: I) -> Plan {
                     .or_default()
                     .record(op.id.actor, cell_index(r, c));
             }
-            // Formulas live in the flat registry, not in tiles; undeletes
-            // touch axis order only. Neither writes a tile.
+            // Formulas live in the flat registry, not in tiles, so they claim
+            // no slot and contest no cell — but the registry must know which
+            // cells they name before any value write reaches one (TD-22).
+            Payload::SetFormula { row, col, .. } => {
+                formula_cells.insert((row.0, col.0));
+            }
+            // Undeletes touch axis order only. An opaque op (DP-A5) applies to
+            // nothing, so it interns no identity and contests no cell — a
+            // preserved op must not be able to promote a tile.
             Payload::DeleteRow { .. }
             | Payload::DeleteCol { .. }
-            | Payload::SetFormula { .. }
             | Payload::UndeleteRow { .. }
-            | Payload::UndeleteCol { .. } => {}
+            | Payload::UndeleteCol { .. }
+            | Payload::Opaque(_) => {}
         }
     }
 
@@ -820,5 +1034,469 @@ pub fn plan_promotions<B: Borrow<Op>, I: Iterator<Item = B>>(ops: I) -> Plan {
         rows,
         cols,
         contested,
+        formula_cells,
     }
+}
+
+// ---------------------------------------------------------------- tile image
+//
+// The serialised form of a tile (docs/16's "tile image"). It lives here rather
+// than in `image.rs` because it needs the private layout, and because a tile's
+// bytes and a tile's meaning should be defined in one place — the invariant
+// `payload.len() == presence.count` is enforced on read, so an image cannot
+// produce a tile whose `rank` would index past its payload.
+
+use crate::image::{ImageError, Reader, Writer, MAX_LOSERS_PER_CELL};
+// --------------------------------------------------- tile store (crate-internal)
+
+impl TileStore {
+    pub(crate) fn write_image(&self, w: &mut Writer) {
+        // Slot maps: the `to_id` vector is the whole truth, `to_slot` is its
+        // inverse and is rebuilt rather than stored.
+        w.len(self.rows.ids().len());
+        for id in self.rows.ids() {
+            w.opid(id);
+        }
+        w.len(self.cols.ids().len());
+        for id in self.cols.ids() {
+            w.opid(id);
+        }
+
+        w.len(self.tiles.len());
+        for (key, tile) in &self.tiles {
+            let start = w.out.len();
+            w.u32(key.row_band);
+            w.u32(key.col_band);
+            tile.write_image(w);
+            // The contested bitmap belongs to the tile's chunk: it is fixed
+            // before the first write lands and is part of what the tile means.
+            match self.contested.get(key) {
+                None => w.u8(0),
+                Some(bits) => {
+                    w.u8(1);
+                    for word in bits {
+                        w.u64(*word);
+                    }
+                }
+            }
+            w.tiles.push((*key, start, w.out.len()));
+        }
+    }
+
+    /// The winner-stamp sidecar, laid out **per tile and positionally**
+    /// (ADR-036, D-102 — and TD-56, which is what happens when it is not).
+    ///
+    /// The tile already knows which cells it holds, so a stamp needs no
+    /// identity: cells are written in presence order and the reader walks the
+    /// same order. That is the whole difference between **3.10 B/cell** and the
+    /// 66 B/cell a flat identity-keyed map costs, because identity is 48 of
+    /// those bytes and it is information the tile already has.
+    ///
+    /// Per tile: a writer table (the distinct actors, usually one), then per
+    /// present cell a writer index and delta-varint `(lamport, counter)`. A
+    /// bulk write assigns lamports and counters that ascend almost in lockstep,
+    /// so each delta is a single byte.
+    pub(crate) fn write_stamps(&self, w: &mut Writer, stamps: &crate::stamps::WinnerStamps) {
+        for (key, tile) in &self.tiles {
+            let mut writers: Vec<ActorId> = Vec::new();
+            let mut cells: Vec<(u32, u64, u64)> = Vec::new();
+            for idx in tile.presence.indices() {
+                let Some(stamp) = self.stamp_of(key, idx, stamps) else {
+                    continue;
+                };
+                let writer = match writers.iter().position(|a| *a == stamp.1.actor) {
+                    Some(i) => i as u32,
+                    None => {
+                        writers.push(stamp.1.actor);
+                        (writers.len() - 1) as u32
+                    }
+                };
+                cells.push((writer, stamp.0, stamp.1.counter));
+            }
+            w.len(writers.len());
+            for actor in &writers {
+                w.out.extend_from_slice(&actor.0.to_le_bytes());
+            }
+            w.len(cells.len());
+            let (mut last_lamport, mut last_counter) = (0i64, 0i64);
+            for (writer, lamport, counter) in cells {
+                w.varint(writer as u64);
+                w.varint(crate::stamps::zigzag(lamport as i64 - last_lamport));
+                w.varint(crate::stamps::zigzag(counter as i64 - last_counter));
+                last_lamport = lamport as i64;
+                last_counter = counter as i64;
+            }
+        }
+    }
+
+    /// Reads the sidecar back, rebuilding identities from the tiles it already
+    /// read. Bounded on every count, because an image is an untrusted input
+    /// (docs/37).
+    pub(crate) fn read_stamps(
+        &self,
+        r: &mut Reader,
+        stamps: &mut crate::stamps::WinnerStamps,
+    ) -> Result<(), ImageError> {
+        for (key, tile) in &self.tiles {
+            let n = r.count(256, "tile stamp writers")?;
+            let mut writers = Vec::with_capacity(n);
+            for _ in 0..n {
+                writers.push(ActorId(r.u128()?));
+            }
+            let present: Vec<u16> = tile.presence.indices().collect();
+            let n = r.count(TILE_CELLS, "tile stamps")?;
+            if n > present.len() {
+                return Err(ImageError::Malformed("more stamps than present cells"));
+            }
+            let (mut last_lamport, mut last_counter) = (0i64, 0i64);
+            for &idx in present.iter().take(n) {
+                let writer = r.varint()? as usize;
+                let actor = *writers
+                    .get(writer)
+                    .ok_or(ImageError::Malformed("stamp names an unknown writer"))?;
+                let lamport = last_lamport
+                    .checked_add(crate::stamps::unzigzag(r.varint()?))
+                    .ok_or(ImageError::Malformed("stamp lamport delta overflows"))?;
+                let counter = last_counter
+                    .checked_add(crate::stamps::unzigzag(r.varint()?))
+                    .ok_or(ImageError::Malformed("stamp counter delta overflows"))?;
+                if lamport < 0 || counter < 0 {
+                    return Err(ImageError::Malformed("stamp delta went negative"));
+                }
+                last_lamport = lamport;
+                last_counter = counter;
+                if let Some((row, col)) = self.identity_of(key, idx) {
+                    stamps.insert(
+                        row,
+                        col,
+                        (
+                            lamport as u64,
+                            OpId {
+                                actor,
+                                counter: counter as u64,
+                            },
+                        ),
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn stamp_of(
+        &self,
+        key: &TileKey,
+        idx: u16,
+        stamps: &crate::stamps::WinnerStamps,
+    ) -> Option<(Lamport, OpId)> {
+        let (row, col) = self.identity_of(key, idx)?;
+        stamps.get(row, col)
+    }
+
+    /// The cell identity a tile slot names, recovered from the slot maps the
+    /// image already carries.
+    fn identity_of(&self, key: &TileKey, idx: u16) -> Option<(RowId, ColId)> {
+        let row_slot =
+            key.row_band as usize * TILE_ROWS as usize + idx as usize / TILE_COLS as usize;
+        let col_slot =
+            key.col_band as usize * TILE_COLS as usize + idx as usize % TILE_COLS as usize;
+        Some((
+            RowId(*self.rows.ids().get(row_slot)?),
+            ColId(*self.cols.ids().get(col_slot)?),
+        ))
+    }
+
+    pub(crate) fn read_image(r: &mut Reader) -> Result<TileStore, ImageError> {
+        let mut store = TileStore::default();
+        let n = r.count(crate::image::MAX_AXIS_ENTRIES, "row slots")?;
+        for _ in 0..n {
+            store.rows.intern(r.opid()?);
+        }
+        let n = r.count(crate::image::MAX_AXIS_ENTRIES, "col slots")?;
+        for _ in 0..n {
+            store.cols.intern(r.opid()?);
+        }
+
+        let n = r.count(crate::image::MAX_TILES, "tiles")?;
+        for _ in 0..n {
+            let key = TileKey {
+                row_band: r.u32()?,
+                col_band: r.u32()?,
+            };
+            let tile = Tile::read_image(r)?;
+            match r.u8()? {
+                0 => {}
+                1 => {
+                    let mut bits = [0u64; PRESENCE_WORDS];
+                    for word in bits.iter_mut() {
+                        *word = r.u64()?;
+                    }
+                    store.contested.insert(key, bits);
+                }
+                _ => return Err(ImageError::Malformed("contested tag")),
+            }
+            store.tiles.insert(key, Box::new(tile));
+        }
+
+        // **Every present cell must name a slot the slot maps actually have.**
+        // Without this a corrupted image produces a tile whose band points past
+        // the slot map, and the first read of it indexes out of bounds — which
+        // is precisely what the image fuzz test found on its first run. The
+        // check is O(present cells), the same order as having read them.
+        // Arithmetic in `u64`: a corrupted band is an arbitrary `u32`, and
+        // `band * TILE_ROWS` overflows in a debug build long before it produces
+        // a wrong answer. The fuzz test found that too, one fix later.
+        let (rows, cols) = (store.rows.ids().len() as u64, store.cols.ids().len() as u64);
+        for (key, tile) in &store.tiles {
+            for idx in tile.presence.indices() {
+                let row_slot =
+                    key.row_band as u64 * TILE_ROWS as u64 + idx as u64 / TILE_COLS as u64;
+                let col_slot =
+                    key.col_band as u64 * TILE_COLS as u64 + idx as u64 % TILE_COLS as u64;
+                if row_slot >= rows || col_slot >= cols {
+                    return Err(ImageError::Malformed(
+                        "a tile holds a cell outside the slot maps",
+                    ));
+                }
+            }
+        }
+        Ok(store)
+    }
+}
+
+impl Presence {
+    /// Rebuilds `count` and `max_set` from the bitmap. They are **derived, not
+    /// stored**, so an image cannot disagree with itself about which cells
+    /// exist — and that agreement is what makes the dense payload's `rank`
+    /// valid.
+    pub(crate) fn from_words(words: [u64; PRESENCE_WORDS]) -> Presence {
+        let mut count = 0u32;
+        let mut max_set = None;
+        for (w, word) in words.iter().enumerate() {
+            if *word != 0 {
+                count += word.count_ones();
+                let highest = 63 - word.leading_zeros();
+                max_set = Some((w * 64 + highest as usize) as u16);
+            }
+        }
+        Presence {
+            words,
+            count,
+            max_set,
+        }
+    }
+
+    pub(crate) fn write_image(&self, w: &mut Writer) {
+        for word in &self.words {
+            w.u64(*word);
+        }
+    }
+
+    pub(crate) fn read_image(r: &mut Reader) -> Result<Presence, ImageError> {
+        let mut words = [0u64; PRESENCE_WORDS];
+        for word in words.iter_mut() {
+            *word = r.u64()?;
+        }
+        Ok(Presence::from_words(words))
+    }
+}
+
+impl SlotMap {
+    /// The identities in slot order — the whole truth of a slot map, since
+    /// `to_slot` is its inverse and is rebuilt by re-interning.
+    pub(crate) fn ids(&self) -> &[OpId] {
+        &self.to_id
+    }
+}
+
+impl Kind {
+    fn tag(self) -> u8 {
+        match self {
+            Kind::Numbers => 0,
+            Kind::Decimals => 1,
+            Kind::Tagged => 2,
+        }
+    }
+
+    fn of_tag(tag: u8) -> Result<Kind, ImageError> {
+        Ok(match tag {
+            0 => Kind::Numbers,
+            1 => Kind::Decimals,
+            2 => Kind::Tagged,
+            _ => return Err(ImageError::Malformed("cell pack kind")),
+        })
+    }
+}
+
+impl CellPack {
+    fn kind(&self) -> Kind {
+        match self {
+            CellPack::Numbers(_) => Kind::Numbers,
+            CellPack::Decimals(_) => Kind::Decimals,
+            CellPack::Tagged(_) => Kind::Tagged,
+        }
+    }
+
+    fn write_image(&self, w: &mut Writer) {
+        w.u8(self.kind().tag());
+        match self {
+            // The numeric fast path stays a run of f64 bits — no tags, no
+            // lengths. This is where the image's size advantage over the op set
+            // comes from: 8 bytes per cell against an op's 24-byte identity
+            // plus its payload.
+            CellPack::Numbers(v) => {
+                w.len(v.len());
+                for n in v {
+                    w.f64(*n);
+                }
+            }
+            CellPack::Decimals(v) => {
+                w.len(v.len());
+                for d in v {
+                    w.i128(d.coefficient());
+                    w.i16(d.exponent());
+                }
+            }
+            CellPack::Tagged(v) => {
+                w.len(v.len());
+                for value in v {
+                    w.value(value);
+                }
+            }
+        }
+    }
+
+    fn read_image(r: &mut Reader) -> Result<CellPack, ImageError> {
+        let kind = Kind::of_tag(r.u8()?)?;
+        let n = r.count(TILE_CELLS, "packed cells")?;
+        Ok(match kind {
+            Kind::Numbers => {
+                let mut v = Vec::with_capacity(n);
+                for _ in 0..n {
+                    v.push(f64::from_bits(r.u64()?));
+                }
+                CellPack::Numbers(v)
+            }
+            Kind::Decimals => {
+                let mut v = Vec::with_capacity(n);
+                for _ in 0..n {
+                    let coefficient = r.i128()?;
+                    let exponent = r.i16()?;
+                    v.push(Decimal::new(coefficient, exponent));
+                }
+                CellPack::Decimals(v)
+            }
+            Kind::Tagged => {
+                let mut v = Vec::with_capacity(n);
+                for _ in 0..n {
+                    v.push(r.value()?);
+                }
+                CellPack::Tagged(v)
+            }
+        })
+    }
+}
+
+impl Tile {
+    pub(crate) fn write_image(&self, w: &mut Writer) {
+        self.presence.write_image(w);
+        self.payload.write_image(w);
+        match &self.meta {
+            Meta::Summary {
+                max_lamport,
+                writer,
+            } => {
+                w.u8(0);
+                w.u64(*max_lamport);
+                w.out.extend_from_slice(&writer.0.to_le_bytes());
+            }
+            Meta::Mixed {
+                max_lamport,
+                writer,
+                stamps,
+            } => {
+                w.u8(1);
+                w.u64(*max_lamport);
+                w.out.extend_from_slice(&writer.0.to_le_bytes());
+                w.len(stamps.len());
+                for (idx, cell) in stamps {
+                    w.u16(*idx);
+                    w.u64(cell.lamport);
+                    w.opid(&cell.id);
+                    // Retained losers are content, not bookkeeping (ADR-006,
+                    // DP-A8): dropping them here would make an image a lossy
+                    // projection of the state it claims to be.
+                    w.len(cell.losers.len());
+                    for (lamport, id, value) in &cell.losers {
+                        w.u64(*lamport);
+                        w.opid(id);
+                        w.value(value);
+                    }
+                }
+            }
+        }
+    }
+
+    pub(crate) fn read_image(r: &mut Reader) -> Result<Tile, ImageError> {
+        let presence = Presence::read_image(r)?;
+        let payload = CellPack::read_image(r)?;
+        let meta = match r.u8()? {
+            0 => Meta::Summary {
+                max_lamport: r.u64()?,
+                writer: read_actor(r)?,
+            },
+            1 => {
+                let max_lamport = r.u64()?;
+                let writer = read_actor(r)?;
+                let n = r.count(TILE_CELLS, "stamps")?;
+                let mut stamps = BTreeMap::new();
+                for _ in 0..n {
+                    let idx = r.u16()?;
+                    let lamport = r.u64()?;
+                    let id = r.opid()?;
+                    let losers_len = r.count(MAX_LOSERS_PER_CELL, "losers")?;
+                    let mut losers = Vec::with_capacity(losers_len.min(64));
+                    for _ in 0..losers_len {
+                        losers.push((r.u64()?, r.opid()?, r.value()?));
+                    }
+                    stamps.insert(
+                        idx,
+                        CellMeta {
+                            lamport,
+                            id,
+                            losers,
+                        },
+                    );
+                }
+                Meta::Mixed {
+                    max_lamport,
+                    writer,
+                    stamps,
+                }
+            }
+            _ => return Err(ImageError::Malformed("tile meta tag")),
+        };
+        let tile = Tile {
+            presence,
+            payload,
+            meta,
+        };
+        // The tile's core structural invariant, checked on the way in rather
+        // than trusted: a payload that is not dense over exactly the present
+        // cells would make every later `rank` index the wrong value, silently.
+        if !tile.invariant_holds() {
+            return Err(ImageError::Malformed(
+                "tile payload is not dense over its presence bitmap",
+            ));
+        }
+        Ok(tile)
+    }
+}
+
+fn read_actor(r: &mut Reader) -> Result<ActorId, ImageError> {
+    let mut a = [0u8; 16];
+    for byte in a.iter_mut() {
+        *byte = r.u8()?;
+    }
+    Ok(ActorId(u128::from_le_bytes(a)))
 }

@@ -131,6 +131,28 @@ impl Presence {
         n + (self.words[w] & mask).count_ones() as usize
     }
 
+    /// Number of present cells in `lo..hi` (`lo` included, `hi` excluded).
+    ///
+    /// The incremental step for a rank that continues from a known one:
+    /// `rank(hi) == rank(lo) + rank_between(lo, hi)` whenever `lo <= hi`.
+    /// Exists for [`TileStore::read_rect`] (TD-71), where consecutive cells of
+    /// a run usually ascend within one tile and a full `rank` per cell would
+    /// re-walk the same words once per cell.
+    fn rank_between(&self, lo: u16, hi: u16) -> usize {
+        debug_assert!(lo <= hi);
+        let (lw, hw) = (lo as usize / 64, hi as usize / 64);
+        let lo_mask = !((1u64 << (lo % 64)) - 1);
+        let hi_mask = (1u64 << (hi % 64)) - 1;
+        if lw == hw {
+            return (self.words[lw] & lo_mask & hi_mask).count_ones() as usize;
+        }
+        let mut n = (self.words[lw] & lo_mask).count_ones() as usize;
+        for word in &self.words[lw + 1..hw] {
+            n += word.count_ones() as usize;
+        }
+        n + (self.words[hw] & hi_mask).count_ones() as usize
+    }
+
     /// Marks `idx` present. Returns `true` if it was newly inserted.
     fn set(&mut self, idx: u16) -> bool {
         let bit = 1u64 << (idx % 64);
@@ -469,6 +491,29 @@ impl TileStore {
         }
     }
 
+    /// Claims the slot a newly inserted row or column will occupy.
+    ///
+    /// `plan_promotions` interns on **structural** ops and not only on cell
+    /// writes — that is what ADR-034 means by "slot order follows creation
+    /// order", and it is what gives tiles their locality. So the applier must
+    /// do it too, or an incrementally applied `InsertRow` would leave its
+    /// identity unslotted until something wrote into it, and every slot handed
+    /// out in between would land one place off. Slot order is the order
+    /// [`TileStore::for_each`] walks, which is the order the **state hash**
+    /// folds in — so "one place off" is a divergent hash, not a cosmetic
+    /// difference. Found exactly that way: the relay's convergence tests went
+    /// red the first time `State::apply_tip` existed.
+    ///
+    /// Idempotent, and therefore free on the replay path, where the plan has
+    /// already interned every identity before the first `apply`.
+    pub(crate) fn intern_row(&mut self, id: OpId) {
+        self.rows.intern(id);
+    }
+
+    pub(crate) fn intern_col(&mut self, id: OpId) {
+        self.cols.intern(id);
+    }
+
     /// Promotes one cell **retroactively**, seeding it with the stamp the
     /// image recorded for it (ADR-036).
     ///
@@ -682,6 +727,79 @@ impl TileStore {
             return None;
         }
         Some(tile.payload.get(tile.presence.rank(idx)))
+    }
+
+    /// Reads a rectangle of cells, resolving each identity's slot **once per
+    /// run** rather than once per cell (TD-71).
+    ///
+    /// [`TileStore::get`] pays three `BTreeMap` lookups per cell — row
+    /// identity → slot, column identity → slot, tile key → tile — plus a full
+    /// popcount `rank` inside the tile. W-RECALC-PROFILE experiment 4 priced
+    /// the three lookups at ~103 ns of a ~195 ns read, and a range read asks
+    /// the same row's slot once per column and the same columns' slots once
+    /// per row. This entry point resolves the column run once, each row once,
+    /// fetches each tile once per (row, column band) instead of once per
+    /// cell, and continues ranks incrementally while the in-tile index
+    /// ascends within a tile.
+    ///
+    /// `emit` receives `(row index, col index, value)` — indices into the
+    /// argument slices — for every cell that has a value, grouped by column
+    /// band within each row; absent cells are not emitted, so a caller
+    /// wanting `Blank`s pre-fills its buffer. Purely a read-path shortcut:
+    /// the result is cell-for-cell identical to calling `get` per cell (the
+    /// `a_rect_read_agrees_with_get` test holds it to that), and the
+    /// identity-based path stays intact for every other caller.
+    pub fn read_rect<F: FnMut(usize, usize, Value)>(
+        &self,
+        rows: &[RowId],
+        cols: &[ColId],
+        mut emit: F,
+    ) {
+        // Column slots once per run, grouped by column band so the tile
+        // lookup below is per band, not per cell. Slot order is creation
+        // order (ADR-034), so nothing here may assume the run ascends.
+        let mut bands: Vec<(u32, Vec<(usize, u32)>)> = Vec::new();
+        for (j, col) in cols.iter().enumerate() {
+            let Some(col_slot) = self.cols.slot_of(&col.0) else {
+                continue;
+            };
+            let band = col_slot / TILE_COLS;
+            match bands.iter_mut().find(|(b, _)| *b == band) {
+                Some((_, run)) => run.push((j, col_slot)),
+                None => bands.push((band, alloc::vec![(j, col_slot)])),
+            }
+        }
+        for (i, row) in rows.iter().enumerate() {
+            let Some(row_slot) = self.rows.slot_of(&row.0) else {
+                continue;
+            };
+            let base = (row_slot % TILE_ROWS) * TILE_COLS;
+            for (band, run) in &bands {
+                let key = TileKey {
+                    row_band: row_slot / TILE_ROWS,
+                    col_band: *band,
+                };
+                let Some(tile) = self.tiles.get(&key) else {
+                    continue;
+                };
+                // `rank(hi) = rank(lo) + rank_between(lo, hi)`: while the
+                // in-tile index ascends, each rank continues from the last
+                // instead of recounting the words below it.
+                let mut prev: Option<(u16, usize)> = None;
+                for (j, col_slot) in run {
+                    let idx = (base + col_slot % TILE_COLS) as u16;
+                    if !tile.presence.contains(idx) {
+                        continue;
+                    }
+                    let rank = match prev {
+                        Some((p, r)) if idx >= p => r + tile.presence.rank_between(p, idx),
+                        _ => tile.presence.rank(idx),
+                    };
+                    prev = Some((idx, rank));
+                    emit(i, *j, tile.payload.get(rank));
+                }
+            }
+        }
     }
 
     /// Retained concurrent losers (ADR-006). A summary tile has none by
@@ -900,10 +1018,17 @@ pub fn plan_promotions<B: Borrow<Op>, I: Iterator<Item = B>>(ops: I) -> Plan {
             // Undeletes touch axis order only. An opaque op (DP-A5) applies to
             // nothing, so it interns no identity and contests no cell — a
             // preserved op must not be able to promote a tile.
+            // Style rules live in their own registry over identity rectangles
+            // (ADR-041), never in tiles: a formatted-but-empty column must not
+            // be able to materialise a tile, which is the whole memory claim.
+            // They also intern no slot — a style op names identities, it does
+            // not create them.
             Payload::DeleteRow { .. }
             | Payload::DeleteCol { .. }
             | Payload::UndeleteRow { .. }
             | Payload::UndeleteCol { .. }
+            | Payload::SetStyle { .. }
+            | Payload::ClearStyle { .. }
             | Payload::Opaque(_) => {}
         }
     }

@@ -30,7 +30,7 @@ use alloc::vec::Vec;
 use usk_calc::refs::Binder;
 use usk_calc::Engine;
 use usk_formula::parse::{parse, Ast, A1};
-use usk_oplog::{Anchor, Op, OpLog, Payload, RangeBinding};
+use usk_oplog::{Anchor, AxisSpan, Op, OpLog, Payload, RangeBinding, StyleFacet, StyleTarget};
 use usk_state::State;
 use usk_types::coerce::Profile;
 use usk_types::{ActorId, ColId, OpId, RowId, Value};
@@ -68,8 +68,62 @@ pub enum Command {
     DeleteCol {
         at: u32,
     },
+    /// Sets one formatting facet over a rectangle (ADR-041). The rectangle is
+    /// bound to identities here, once, exactly as a formula's references are.
+    SetStyle {
+        target: RectSpec,
+        facet: StyleFacet,
+    },
+    /// Returns one facet over a rectangle to the workbook default.
+    ClearStyle {
+        target: RectSpec,
+        facet_slot: u8,
+    },
     Undo,
     Redo,
+}
+
+/// A rectangle as an author names it: view ordinals, or "the whole axis".
+///
+/// `All` is what a column header click means, and it is not sugar for
+/// `Range(0, row_count - 1)`: the reducer binds it to [`AxisSpan::All`], so the
+/// rule keeps applying to rows that do not exist yet. Binding it to today's
+/// last row would silently make tomorrow's rows unformatted.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SpanSpec {
+    All,
+    /// Inclusive, in view ordinals.
+    Range(u32, u32),
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct RectSpec {
+    pub rows: SpanSpec,
+    pub cols: SpanSpec,
+}
+
+impl RectSpec {
+    pub fn cell(row: u32, col: u32) -> RectSpec {
+        RectSpec {
+            rows: SpanSpec::Range(row, row),
+            cols: SpanSpec::Range(col, col),
+        }
+    }
+
+    /// A whole column, by view ordinal — the gesture that has to cost one op.
+    pub fn column(col: u32) -> RectSpec {
+        RectSpec {
+            rows: SpanSpec::All,
+            cols: SpanSpec::Range(col, col),
+        }
+    }
+
+    pub fn row(row: u32) -> RectSpec {
+        RectSpec {
+            rows: SpanSpec::Range(row, row),
+            cols: SpanSpec::All,
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -120,6 +174,19 @@ enum UndoEntry {
     },
     ColDeleted {
         col: ColId,
+    },
+    /// A style write over a rectangle (ADR-041 decision 5).
+    ///
+    /// `prior` is what the facet resolved to over this exact rectangle *before*
+    /// the write: every earlier rule that overlapped it, **clipped to the
+    /// overlap**, ascending by the original stamp. Replaying that list on top
+    /// of a clear reproduces the previous resolution cell for cell, and touches
+    /// nothing outside the rectangle — which is why a rectangle-addressed
+    /// undo can be exact rather than approximate.
+    StyleWrite {
+        target: StyleTarget,
+        slot: u8,
+        prior: Vec<(StyleTarget, Option<StyleFacet>)>,
     },
 }
 
@@ -278,6 +345,35 @@ pub fn reduce_v1(
             group.entries.push(UndoEntry::ColDeleted { col });
             ops.push(op);
         }
+        Command::SetStyle { target, facet } => {
+            let t = bind_target(&binder, target)?;
+            let slot = facet.slot();
+            let prior = prior_rules(state, &t, slot);
+            let op = mint.0.op(Payload::SetStyle {
+                target: t,
+                facet: facet.clone(),
+            });
+            group.entries.push(UndoEntry::StyleWrite {
+                target: t,
+                slot,
+                prior,
+            });
+            ops.push(op);
+        }
+        Command::ClearStyle { target, facet_slot } => {
+            let t = bind_target(&binder, target)?;
+            let prior = prior_rules(state, &t, *facet_slot);
+            let op = mint.0.op(Payload::ClearStyle {
+                target: t,
+                facet_slot: *facet_slot,
+            });
+            group.entries.push(UndoEntry::StyleWrite {
+                target: t,
+                slot: *facet_slot,
+                prior,
+            });
+            ops.push(op);
+        }
         Command::Undo | Command::Redo => return Err(CommandError::OutOfRange),
     }
 
@@ -314,6 +410,81 @@ fn bind_cell(binder: &Binder, row: u32, col: u32) -> Result<(RowId, ColId), Comm
         .at(col as usize)
         .ok_or(CommandError::OutOfRange)?;
     Ok((r, c))
+}
+
+/// Binds a rectangle of view ordinals to identities (ADR-041).
+///
+/// `SpanSpec::All` becomes `AxisSpan::All` rather than the current first/last
+/// pair, which is the difference between "this column" and "these 20 rows that
+/// happen to be in this column right now".
+fn bind_target(binder: &Binder, spec: &RectSpec) -> Result<StyleTarget, CommandError> {
+    let rows = match spec.rows {
+        SpanSpec::All => AxisSpan::All,
+        SpanSpec::Range(a, b) => AxisSpan::Between(
+            binder
+                .rows
+                .at(a as usize)
+                .ok_or(CommandError::OutOfRange)?
+                .0,
+            binder
+                .rows
+                .at(b as usize)
+                .ok_or(CommandError::OutOfRange)?
+                .0,
+        ),
+    };
+    let cols = match spec.cols {
+        SpanSpec::All => AxisSpan::All,
+        SpanSpec::Range(a, b) => AxisSpan::Between(
+            binder
+                .cols
+                .at(a as usize)
+                .ok_or(CommandError::OutOfRange)?
+                .0,
+            binder
+                .cols
+                .at(b as usize)
+                .ok_or(CommandError::OutOfRange)?
+                .0,
+        ),
+    };
+    Ok(StyleTarget { rows, cols })
+}
+
+/// What one facet resolved to over `target` before this write — the list undo
+/// replays. Ascending by the original stamp, each rule clipped to its overlap
+/// with `target`.
+fn prior_rules(
+    state: &State,
+    target: &StyleTarget,
+    slot: u8,
+) -> Vec<(StyleTarget, Option<StyleFacet>)> {
+    if state.styles().is_empty() {
+        return Vec::new();
+    }
+    state
+        .style_resolver()
+        .overlapping(state.styles(), target, slot)
+        .into_iter()
+        .map(|(t, value, _)| (t, value))
+        .collect()
+}
+
+/// The actor whose rule currently wins `slot` anywhere in `target` — the style
+/// analogue of `cell_winner`, and the whole of the undo block rule.
+///
+/// Taken from the registry rather than by scanning the log because they are the
+/// same thing: every style op becomes exactly one rule, so the greatest-stamped
+/// overlapping rule *is* the greatest-stamped overlapping op.
+fn style_winner(state: &State, target: &StyleTarget, slot: u8) -> Option<ActorId> {
+    if state.styles().is_empty() {
+        return None;
+    }
+    state
+        .style_resolver()
+        .overlapping(state.styles(), target, slot)
+        .last()
+        .map(|(_, _, stamp)| stamp.1.actor)
 }
 
 /// Binds every reference in a formula's AST, in traversal order — the order
@@ -515,6 +686,47 @@ fn invert_group(
                 inverse.entries.push(UndoEntry::ColInserted { col: *col });
                 ops.push(op);
             }
+            UndoEntry::StyleWrite {
+                target,
+                slot,
+                prior,
+            } => {
+                // Same rule as a cell write, read for a rectangle: undo only
+                // while this actor's own rule still wins. A *later* rule from
+                // somebody else anywhere in the rectangle blocks the whole
+                // entry — narrowing rather than destroying (docs/11).
+                if style_winner(state, target, *slot).is_some_and(|a| a != mint.actor) {
+                    blocked += 1;
+                    continue;
+                }
+                // Read before anything is emitted: this is the resolution
+                // *including* my rule, which is what redo has to restore.
+                let now = prior_rules(state, target, *slot);
+                ops.push(mint.op(Payload::ClearStyle {
+                    target: *target,
+                    facet_slot: *slot,
+                }));
+                // Ascending by the original stamp, minted with ascending fresh
+                // stamps: the layering that produced the previous resolution is
+                // reproduced rather than approximated.
+                for (t, value) in prior {
+                    ops.push(mint.op(match value {
+                        None => Payload::ClearStyle {
+                            target: *t,
+                            facet_slot: *slot,
+                        },
+                        Some(facet) => Payload::SetStyle {
+                            target: *t,
+                            facet: facet.clone(),
+                        },
+                    }));
+                }
+                inverse.entries.push(UndoEntry::StyleWrite {
+                    target: *target,
+                    slot: *slot,
+                    prior: now,
+                });
+            }
         }
     }
     (ops, inverse, blocked)
@@ -563,6 +775,59 @@ impl Session {
         }
     }
 
+    /// Opens a session over a log that already exists — which is what *opening
+    /// a workbook* is.
+    ///
+    /// The alternative, feeding the log through [`integrate_batch`], is
+    /// quadratic: that method checks each arriving op against every op already
+    /// held, which is right for a relay redelivering a handful and wrong for a
+    /// two-million-op document. Here the log *is* the starting point, so it is
+    /// folded once and the mint is advanced past everything in it.
+    ///
+    /// Advancing the mint is the part that must not be skipped. `(actor,
+    /// counter)` is the globally unique op identity; reopening a document and
+    /// minting from zero would re-issue counters this actor has already spent,
+    /// and the log's own merge rule would silently discard the second op
+    /// bearing each id (DP-A4).
+    ///
+    /// [`integrate_batch`]: Session::integrate_batch
+    pub fn from_log(actor: ActorId, log: OpLog) -> Session {
+        let mut lamport = 0;
+        let mut counter = 0;
+        for op in log.ops() {
+            lamport = lamport.max(op.lamport);
+            if op.id.actor == actor {
+                counter = counter.max(op.id.counter);
+            }
+        }
+        let state = State::replay(&log);
+        let mut engine = Engine::build(&state, Profile::Compat);
+        // `Engine::build` builds the *graph* and evaluates nothing — every
+        // other caller reaches evaluation through `observe`, because every
+        // other caller got here by making an edit. Opening a document is the
+        // one path with no edit behind it, so without this a freshly opened
+        // workbook shows a blank cell wherever it holds a formula: the tile
+        // store has no value there, and the value is what the engine has not
+        // computed yet.
+        //
+        // Found by looking at the rendered frame rather than by a test. The
+        // whole editing suite passed, because the first formula a *user* types
+        // is a structural change that forces a full recalc and fills the rest
+        // of the sheet in behind it.
+        engine.recalc_all(&state);
+        Session {
+            log,
+            state,
+            engine,
+            actor,
+            counter,
+            lamport,
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+            pending: Vec::new(),
+        }
+    }
+
     /// Takes the outstanding fold, if any. Idempotent and cheap when nothing is
     /// pending, which is the common case for a reader in a loop.
     ///
@@ -574,7 +839,27 @@ impl Session {
             return;
         }
         let batch = core::mem::take(&mut self.pending);
-        self.state = State::replay(&self.log);
+        // The fold, incrementally where the ops allow it (TD-24's residual).
+        //
+        // A locally authored edit is minted above every lamport in the log, so
+        // for that edit arrival order *is* canonical order and `apply_tip`
+        // takes it in time proportional to the batch. Anything else — a remote
+        // batch that interleaves with local history, a first contention at a
+        // cell an unpromoted tile keeps no stamp for — is refused and re-folded
+        // here, producing exactly the state a full replay would.
+        //
+        // Measured: at 60,000 cells this took keystroke->paint from **25.3 ms
+        // to 2.5 ms**, against docs/31's 16 ms budget, because a full replay
+        // costs the whole document where an edit costs the edit.
+        if self.state.apply_tip(&batch).is_err() {
+            self.state = State::replay(&self.log);
+        }
+        // Not asserted here that the two agree: proving it costs the full
+        // replay this exists to avoid, and a debug build that re-folded on
+        // every keystroke would be unusable for exactly the workload the fast
+        // path was built for. The property is a test instead —
+        // `crates/usk-state/tests/tip.rs`, which asserts hash equality against
+        // a full replay after every edit of a sixty-edit run.
         self.engine.observe(&self.state, &batch);
     }
 
@@ -586,6 +871,19 @@ impl Session {
     pub fn engine(&mut self) -> &Engine {
         self.settle();
         &self.engine
+    }
+
+    /// State and engine together, settled once.
+    ///
+    /// A renderer needs both — the state for what a cell *holds* and the engine
+    /// for what it *shows* — and taking them one at a time cannot be written:
+    /// `state()` borrows the session for as long as its result lives, so the
+    /// `&mut self` that `engine()` wants is already spoken for. Returning the
+    /// pair from one settle is the whole fix, and it also guarantees both
+    /// halves of a frame were read at the same generation (docs/27 §3).
+    pub fn view(&mut self) -> (&State, &Engine) {
+        self.settle();
+        (&self.state, &self.engine)
     }
 
     /// What a reader sees at a cell: the computed formula result if the cell

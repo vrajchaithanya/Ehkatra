@@ -8,5 +8,8 @@ publish = false
 [dependencies]
 usk-types = { path = "../usk-types" }
 usk-formula = { path = "../usk-formula" }
+# The style facets are the op layer's (ADR-041), not a second spelling of them:
+# an importer must be able to hand what it read straight to `Payload::SetStyle`.
+usk-oplog = { path = "../usk-oplog" }
 usk-xml = { path = "../usk-xml" }
 usk-zip = { path = "../usk-zip" }

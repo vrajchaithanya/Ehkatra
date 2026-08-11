@@ -950,11 +950,16 @@ the convenient interpretation D-062 forbids.** It includes a full
 texture-to-buffer readback and a blocking map, which exist so the frame can be
 written to a PNG and committed as evidence; a presenting frame does none of it.
 The real GPU present cost is **unmeasured** until the windowed path exists, and
-is recorded as unmeasured rather than inferred from this.
+is recorded as unmeasured rather than inferred from this. *Session 23: the
+windowed path exists and it is measured — see W-PRESENT below. The answer is
+2.15 ms p50, and the first attempt to measure it got 7.93 ms by timing the vsync
+wait along with the work.*
 
 Zero-jank at p99 is likewise not yet claimed: 120 frames is enough to see a
 median, not enough to characterise a tail, and there is no compositor in the
-loop to jank against.
+loop to jank against. *Session 23: there is now — 300 presented frames, p99
+4.10 ms, one frame of 300 over budget and it is the teardown frame. Still not
+enough to characterise a tail properly, and still not claimed.*
 
 ### Evidence
 
@@ -972,6 +977,21 @@ because a screenshot is what found them:
 * Colours were washed out. The theme was written in sRGB and handed to an
   `Rgba8UnormSrgb` target, which encodes linear→sRGB on write — so everything
   was encoded twice. Tokens are now converted sRGB→linear on the way to the GPU.
+
+**A third, session 23, and the same lesson a third time.** With the calc engine
+wired in, the formula column rendered `#REF!` on every row: the seeded corpus
+wrote `SetFormula` with an **empty binding list**, and a formula carries the
+*identities* its references resolve to — the A1 text is the display of that
+binding, not its source (DP-A6). The renderer was telling the truth about an
+unbound formula. It is exactly the mistake an importer would make, and again
+nothing but the image caught it.
+
+**And a fourth, which no test could have caught.** Once the bindings were fixed,
+the column still rendered blank on a *freshly opened* workbook: `Engine::build`
+builds the graph and evaluates nothing. Every editing test passed, because the
+first formula a test types is a structural change that forces a full recalc and
+fills the sheet in behind it — the tests only ever looked *after* an edit.
+`Session::from_log` now recalculates on open (ADR-039).
 
 ### PNG writer: 4.1 MB → 341 KB
 
@@ -1162,6 +1182,760 @@ reaches it, the load cost is the image's own bytes.
 state it encodes* — 9.59 against 11.33 B/cell at the collab pattern, and 68.43
 against 137.80 at the adversarial one, where the tagged-union in-memory layout is
 far heavier than the packed serialised form.
+
+## W-PRESENT (TD-60) — the first **presented** frame · session 23
+
+Run: `shell/target/release/ehkatra-shell --present 300`. A real winit window on
+a real compositor, 300 consecutive frames each scrolled one row, on a
+**1600×1000 physical surface at 1.25× DPI** (1280×800 logical), over the
+shell's default 5,000-row × 40-column document.
+
+| | p50 | p99 | budget (docs/31) |
+|---|---:|---:|---:|
+| scene build — viewport + scene, CPU | **1.83** ms | **3.57** ms | — |
+| **frame cost** — scene + encode + submit | **2.15** ms | **4.10** ms | **8.3 ms** |
+| vsync wait — blocked in `get_current_texture` | 6.00 ms | 7.58 ms | *not a cost* |
+
+**299 of 300 frames inside the 8.3 ms budget.** The one over is index 299 — the
+final frame, taken as the loop exits — at 11.75 ms. Frame 0, which uploads the
+1 MiB glyph atlas, cost 1.60 ms.
+
+**Run-to-run variance, stated rather than hidden.** A second run of 240 frames
+on the same machine gave frame cost p50 **2.53** ms, p99 **5.13** ms, and **2 of
+240** over budget — again including the teardown frame, at 18.3 ms. So the p50
+moves by about 20% and the p99 by about 25% between runs on an ordinary desktop
+with other things running on it. Two runs is not a distribution. The honest
+reading is *the frame costs a small single-digit number of milliseconds against
+a budget of 8.3*, and **zero-jank-at-p99 is still not claimed**: the tail is
+dominated by the frame taken as the event loop exits, which is an artefact of
+the harness rather than a property of the renderer, and a harness that produces
+its own worst frame is not yet a jank measurement.
+
+**Cold launch: 39.8 ms**, against docs/31's *"desktop cold launch → blank
+workbook < 1.0 s"*. That is process start to the first presented frame, on the
+5,000-row document.
+
+### The correction that makes this number mean anything
+
+The first run of this bench reported *"frame to present p50 7.93 ms, p99 10.22
+ms"* and would have read as **a p99 breach of the scroll budget**. It was not.
+Under `PresentMode::Fifo`, `get_current_texture` **blocks until the display is
+ready for another image**, so timing the whole present measures the refresh
+interval and not the renderer: on this 120 Hz panel every frame comes out at
+about 8.3 ms whether the scene took 0.2 ms or 5 ms to build. The 7.93 ms was the
+panel.
+
+The wait is now measured separately and reported as what it is. Only the work —
+scene, encode, submit — is judged against the budget, because only the work can
+drop a frame. Note the arithmetic holds: 2.15 ms of work + 6.00 ms of wait ≈ the
+8.3 ms refresh interval, which is the evidence that the split is real rather
+than a convenient re-labelling.
+
+**What W-SCROLL's 8.010 ms readback figure could not tell us is now known.** The
+prior entry recorded the real present cost as *"unmeasured until the windowed
+path exists, and recorded as unmeasured rather than inferred"*. It exists; it is
+2.15 ms p50.
+
+## W-KEYSTROKE (docs/31) — keystroke → paint · session 23
+
+Run: `shell/target/release/ehkatra-shell --keystroke <rows>`. Forty edits, each
+a character typed into the in-cell editor and then an `Enter` that commits it
+through the reducer, folds the log, recalculates and repaints. Every keystroke
+goes through the real keymap. Offscreen, so no vsync wait is counted.
+
+| document | type a character (p50 / p95) | **commit with `Enter`** (p50 / p95) | of which model | of which paint |
+|---|---:|---:|---:|---:|
+| 850 rows ≈ **10,200 cells** | 1.51 / 1.93 ms | **1.77 / 2.03 ms** | 0.20 ms | 1.56 ms |
+| 5,000 rows ≈ 60,000 cells | 1.50 / 2.31 ms | **2.74 / 3.38 ms** | — | — |
+| 50,000 rows ≈ 600,000 cells | 1.57 / 3.11 ms | **15.62 / 17.76 ms** | 11.85 ms | 4.09 ms |
+
+**docs/31's budget is *keystroke→paint on a 10k sheet, < 16 ms*, and the
+measurement against that workload is 1.77 ms p50 — 9× under.** The second
+budget, *< 50 ms including a 10k-cell recalc*, is met at every size measured.
+
+### The IME composition path (session 31, docs/33 §IME)
+
+The same workload gained a third series: forty `Ime::Preedit` updates, each the
+next prefix of `にほんご`, each followed by a full frame. A composition update
+*is* a keystroke — the input method repaints the cell on every key of a word
+before committing any of it — so it carries the same 16 ms budget.
+
+| document | IME composition (p50 / p95) | four runs, M1 |
+|---|---:|---|
+| 850 rows ≈ **10,200 cells** | **1.64–2.03 / 1.69–3.19 ms** | against 16 ms |
+
+Indistinguishable from typing a character on the same run (1.44–1.71 ms p50),
+which is the shape the code predicts and therefore the shape worth checking: a
+preedit mutates one `String` and repaints, with **no reducer, no fold and no
+recalculation** — nothing reaches the document until the composition is
+committed *and* the cell is. If this series had come out slower than `type a
+character`, the splice in `Editor::display` would have been the suspect.
+
+**What this number is not.** It is latency, not correctness, and docs/48's
+acceptance item — *"IME validated by native JP/CN/KR typists"* — is untouched by
+it and remains unchecked. It is measured here because it is the one thing about
+IME quality this host can measure without a native typist.
+
+### Re-measured after font fallback (session 32, D-125)
+
+Fallback put a coverage lookup on every character of every shaped run, so the
+question the change owed an answer to is whether the frame moved. Three runs at
+10,000 rows, M1:
+
+| series | session 31 | session 32 (3 runs) | |
+|---|---:|---:|---|
+| type a character | 1.77 ms p50 | **1.76 / 2.00 / 2.30 ms p50** | against 16 ms |
+| IME composition | 1.64–2.03 ms p50 | **1.79 / 1.89 / 3.12 ms p50** | against 16 ms |
+
+Unmoved inside this host's stated ±30% read: the lowest run of each series is
+within 1% of its predecessor. The reason it is free is structural rather than
+lucky — the bundled face answers for every Latin codepoint from its own `cmap`
+before the fallback map is consulted at all, and
+`latin_is_shaped_entirely_from_the_bundled_face_and_says_so` asserts that path
+is taken by asserting **no system font was ever enumerated**.
+
+**The one keystroke that is not free is the first non-Latin one — see
+W-FALLBACK below, and TD-80.** The *rendered* result is no longer wrong: the
+composition above now draws as kana (`demo/editing-ime.png`).
+
+### The fix these numbers paid for (D-117)
+
+Before `State::apply_tip`, `Session::settle` re-folded the entire log on every
+read. Measured on the same bench:
+
+| document | before | after | |
+|---|---:|---:|---:|
+| 10,200 cells | 7.05 ms | **1.79 ms** | 3.9× |
+| 60,000 cells | 25.31 ms | **2.74 ms** | 9.2× |
+
+The 60,000-cell figure was **over the 16 ms budget before the fix** — outside
+the 10k workload the budget names, which is why it was not a breach on paper,
+and heading straight for it.
+
+At 600,000 cells the commit is 15.6 ms and the split says where it goes: 11.85
+ms of model and 4.09 ms of paint. The model cost is the reducer rebuilding a
+`Binder` over the whole axis on every command; the paint cost is filed as
+**TD-65**, because measuring it is not the same as attributing it — removing the
+one duplicated identity→ordinal resolve moved it 4.18 → 4.09 ms, which is the
+evidence that the obvious suspect is not the whole answer.
+
+## W-OPEN-SHELL (TD-66) — what opening a workbook costs, by phase · session 23
+
+Run: `shell/target/release/ehkatra-shell --open <rows>`. The corpus is 12 value
+cells and one `=SUM(A n :L n )` per two rows in three, so the formula count is
+about 0.68 × rows.
+
+| rows | formulas | replay | axis build | **= skeleton** | graph build | full recalc | **= total** |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 5,000 | 3,425 | 13.9 ms | 0.6 ms | **14.4 ms** | 14.3 ms | 14.9 ms | **43.6 ms** |
+| 20,000 | 13,695 | 60.5 ms | 2.8 ms | **63.2 ms** | 100.7 ms | 60.5 ms | **224.4 ms** |
+| 50,000 | 34,236 | 151.7 ms | 7.0 ms | **158.7 ms** | 529.7 ms | 161.9 ms | **850.3 ms** |
+| 100,000 | 68,469 | 377.0 ms | 15.8 ms | **392.8 ms** | 2,142.8 ms | 333.7 ms | **2,869.3 ms** |
+| 1,000,000 | ~666,000 | — | — | — | — | — | **218 s** |
+
+**docs/31's 1.5 s cold-open budget names *skeleton + viewport*, and that column
+is 393 ms at 100,000 rows (1.2M cells).** The budget is met on its own terms.
+Saying only that would be reading the budget against the wrong thing: the window
+is not usable until the graph build and the recalc finish, and those are the
+other 2.5 s.
+
+**This corrects TD-19.** TD-19 records the graph build at 857 ms per 100k
+formulas and says it *"extrapolates to ~7 s for 1M formulas"* — a linear
+reading. It is not linear. Measured: 14 ms at 3.4k formulas, 101 ms at 13.7k,
+530 ms at 34k, 2.14 s at 68k, and **218 s** for the 1,000,000-row corpus.
+Roughly O(n^1.7), and **75% of the total open cost** at 100,000 rows. Replay and
+recalc are both linear; the graph build is the term to profile. Filed as TD-66.
+
+The shell's default document is 5,000 rows, where the whole open is 43.6 ms and
+the launch-to-first-frame is 39.8 ms. Nothing ships over the line today.
+
+## W-DEPS-CLIPBOARD (ADR-040) — what a feature flag is worth · session 24
+
+Run: `cargo add arboard` against `shell/Cargo.toml`, then `node tools/dep-budget.mjs`, twice.
+
+| | crates added | shell closure | of a 280 ceiling |
+|---|---:|---:|---:|
+| `arboard` default features | **28** | 239 → **267** | 13 slots left |
+| `arboard` `default-features = false` | **7** | 239 → **246** | 34 slots left |
+
+The difference is the `image-data` feature, and what it drags in is an entire
+image codec stack: `image`, `png`, `tiff`, `zune-jpeg`, `weezl`, `flate2`,
+`miniz_oxide`, `moxcms`, `half`. All of it for a clipboard flavour a
+spreadsheet never writes — a copied range is text, not a bitmap.
+
+**Why the number decided something.** ADR-038 recorded that ~41 slots survive
+for accesskit and the platform dialogs. 267 would have left **13**, and
+accesskit alone is more than 13 — so the default-featured version would have
+spent the a11y budget on a JPEG decoder, and nothing would have said so until
+accesskit failed to fit. A four-fold difference, invisible without running the
+number. That is D-115's lesson arriving for the third time, and the flag is
+commented in `Cargo.toml` as load-bearing so it is not tidied away.
+
+**The alternative, priced.** `windows-sys` is already in the closure via winit,
+and so are `objc2`/`objc2-app-kit` on macOS, so a hand-written clipboard would
+cost **zero** new crates. It would also be three platform backends of unsafe
+FFI — `GlobalAlloc`/`CF_UNICODETEXT` pairing, `NSPasteboard` change counts, X11
+selection ownership with its own event loop — of which this host can test
+exactly one. Seven crates is the cheaper mistake.
+
+## W-OPEN-SHELL re-measured — TD-66's quadratic found and fixed · session 25
+
+Run: `ehkatra-shell --open <rows> [dense]`. **All figures in this section are
+from the Windows x86 host**, not the M1 the earlier calc numbers were taken on,
+so they are comparable to each other and not to those.
+
+### The experiment that found it
+
+The graph build was superlinear and the cause was unattributed. The decisive
+test was to vary the corpus's *gap pattern* while leaving everything else alone
+— the default corpus writes a formula in two rows of every three, `dense` writes
+one in every row:
+
+| rows | dense: formulas / graph build | gapped: formulas / graph build |
+|---:|---:|---:|
+| 20,000 | 20,541 / **112 ms** | 13,695 / 131 ms |
+| 50,000 | 51,352 / **334 ms** | 34,236 / 984 ms |
+| 100,000 | 102,703 / **395 ms** | 68,469 / **2,509 ms** |
+
+**Fifty per cent more formulas, six times faster.** The cost was never the
+formula count. `extent_of` accumulated read rectangles one at a time and
+linearly scanned everything accumulated so far looking for a merge: an unbroken
+column merges on the first comparison and stays O(n), while a column with gaps
+merges with nothing, grows one entry per formula, and becomes **O(n²)**. Gaps —
+blank rows, section breaks, subtotal bands — are what real spreadsheets are made
+of, so this was never a corpus artefact.
+
+### After: one sort and one sweep
+
+| rows | formulas | graph build before | after |
+|---:|---:|---:|---:|
+| 20,000 | 13,695 | 131 ms | **97 ms** |
+| 50,000 | 34,236 | 984 ms | **236 ms** |
+| 100,000 | 68,469 | 2,509 ms | **269–434 ms** (3 runs) |
+| 200,000 | 136,938 | — | **764 ms** |
+| 1,000,000 | 684,686 | **218 s** | **5.36 s** |
+
+**41× at a million rows, and linear where it was quadratic.** Sorting by
+`(c0, c1, r0, r1)` puts every same-column rectangle into one contiguous run in
+row order, so a single sweep collapses it.
+
+### W-CHAIN-100K, and the number that was noise again
+
+The chain workload merges perfectly and was *never* quadratic, so it should not
+have changed. It did — because the old version also allocated a fresh `Vec` per
+member. A/B on the same host, same binary shape:
+
+| W-CHAIN-100K | old | new |
+|---|---:|---:|
+| graph build | 898–1045 ms | **304–317 ms** (2.9×) |
+| full recalc | 112–138 ms | 115–135 ms — **unchanged** |
+| incremental, one edit | 0.377–0.628 ms | 0.427–0.438 ms — **unchanged** |
+
+**The first A/B suggested full recalc had halved, 217 → 135 ms.** It had not:
+the "before" runs were taken on a machine that had just finished a large build,
+and re-running the old algorithm warm gave 112–138 ms — the same as the new one.
+`extent_of` is not on the recalculation path, so a change there halving recalc
+would have needed an explanation, and the explanation was that it did not
+happen. Recorded because the temptation to keep the flattering number is exactly
+what D-062 is about, and this is the third measurement this quarter that turned
+out to be the harness rather than the code.
+
+### Where the cost is now
+
+At 100,000 rows (1.2M cells), three runs: skeleton **377–524 ms**, graph build
+**269–434 ms**, full recalc **423–457 ms**, total **1.07–1.41 s**. docs/31's
+1.5 s cold-open budget names *skeleton + viewport*, which is the first column.
+
+At 1,000,000 rows the shape has changed: replay 5.07 s, axis 0.57 s, graph build
+5.36 s, and **full recalc 16.1 s — now the largest single item**. Its *per-cell*
+cost grows with the size of the result map: **4.9 µs/cell at 68k results, 23.5
+µs/cell at 685k**. That is the shape of an identity-keyed `BTreeMap` falling out
+of cache, which is what **TD-23** already describes and names a fix for
+(slot-indexed results). Stated as consistent-with rather than proven: no
+profiler was run, and the per-cell curve is the whole of the evidence.
+
+**Run-to-run variance on this host is real** — the same `--open 100000` gave
+graph builds of 269, 319 and 434 ms in three consecutive runs. Single figures
+from it should be read as ±30%, which is why the ranges above are ranges.
+
+## W-RECALC-PROFILE (TD-23) — where a full recalculation's time goes · session 26
+
+Run: `cargo run --release -p recalc-profile [rows]`. **Windows x86 host**, and
+this host is noisy — every figure below is a range over repeated runs, not a
+single reading.
+
+### The method, since no profiler runs here
+
+No sampling profiler works on this host without elevation (DP-S5: no admin) and
+the kernel is `no_std`, so it cannot time itself. What works is what found
+TD-66's quadratic: **vary one thing and measure**. Three experiments.
+
+### Experiment 1 — shape
+
+100,000 formulas, varying only how many cells each one reads. Fitting a line
+through the points separates the per-formula cost from the per-read cost.
+
+| shape | formulas | reads/formula | full recalc |
+|---|---:|---:|---:|
+| narrow | 100,000 | 1 | 79–96 ms |
+| medium | 100,000 | 4 | 158–185 ms |
+| wide | 100,000 | 12 | 493–725 ms |
+
+**Before the fix**: intercept **1.554 µs/formula**, slope **~300 ns/read**.
+**After**: intercept **0.383 µs/formula**, slope **~300 ns/read — unchanged.**
+
+That is the finding, and it corrected the guess this work started from. The
+previous session's note attributed the recalculation cost to the results map
+growing with the sheet. The map *was* costing 1.2 µs per formula — and it was
+**not** what a read costs. Reads never touched it in the dominant case, because
+a formula reading a column of plain values misses the map every time and the
+miss was never the expensive part.
+
+### Experiment 2 — the structure on its own
+
+100,000 entries, then twelve lookups each — the access pattern
+`EngineGrid::read` produces for a 12-cell `SUM`.
+
+| structure | ns/insert | ns/lookup |
+|---|---:|---:|
+| `BTreeMap<(RowId,ColId),V>` — what it was | 159–223 | 76–115 |
+| `BTreeMap<u64,V>` — packed position key | 111–207 | 60–89 |
+| `Vec<Option<V>>` — flat, indexed | **14–15** | **3.4–6.3** |
+
+Packing the key is the smaller, more obvious change and buys about 1.5×. The
+flat vector buys 20×, which is why the fix went to slots rather than to a
+cheaper key.
+
+### Experiment 3 — what a read costs when the results miss
+
+`State::cell`, the call every read of a plain value falls through to:
+**214–322 ns**, and **flat** from 50,000 to 500,000 rows (233, 255, 223 ns at
+50k/200k/500k). It is a constant, not a scaling problem — and at ~300 ns per
+engine read it is roughly two-thirds of what a read costs. `TileStore::locate`
+makes three `BTreeMap` lookups per cell: row identity → slot, column identity →
+slot, and tile key → tile. Filed as **TD-71**.
+
+### The fix, and what it moved
+
+`results` was a `BTreeMap<(RowId, ColId), Value>` — a tree keyed by two 24-byte
+identities. It is now slot-indexed by derived position: a dense `Vec` of values,
+one slot per formula cell, reached through a per-column sorted list of formula
+rows.
+
+Keying by position is safe for one reason and it is the whole argument:
+`Engine::regroup` clears the results and rebuilds the binder **together**, so
+anything that could move a position has already emptied the map.
+
+| W-CHAIN-100K (same host) | before | after |
+|---|---:|---:|
+| full recalc | 112–138 ms | **41–60 ms** |
+| incremental, one edit | 0.377–0.628 ms | **0.324–0.572 ms** |
+
+*(The `after` ranges widened when re-measured across sessions — this host varies
+by ~30% between runs. The chain workload carries one rectangle per group, so
+TD-20's change should not have moved it either way, and within that noise it did
+not.)*
+
+**TD-23 recorded the regression as 53.0 → 92.6 ms. The recalculation is now
+below the 53.0 it started from.**
+
+### Experiment 4 — and the *next* bottleneck, measured rather than assumed
+
+The 1,000,000-row shell corpus barely moved: 16.1 → 15.3 s. It is gapped — a
+formula in two rows of three — and after TD-66 a gapped column's read
+rectangles no longer merge into one, so a group carries hundreds of thousands
+of them. `BandIndex::stab` scans **every rectangle of every candidate group, per
+band**.
+
+Adding a gapped shape to experiment 1 confirms it:
+
+| rows | dense: formulas / recalc / per formula | gapped: formulas / recalc / per formula |
+|---:|---|---|
+| 100,000 | 100,000 / 493–725 ms / 4.9–7.2 µs | 66,667 / 319–467 ms / 4.8–7.0 µs |
+| 500,000 | 500,000 / 3.3 s / **6.69 µs** | 333,334 / 3.8 s / **11.33 µs** |
+
+At 100,000 rows the two are the same per formula. At 500,000 the gapped corpus
+has **33% fewer formulas and takes 15% longer** — 1.7× per formula — and the
+penalty grows with the sheet. That is **TD-20**'s row (the band index is not the
+R-tree docs/13 specifies), now with a number against it instead of a prediction.
+
+### Experiment 5 — the band index, and a defect hiding inside a debt row
+
+`BandIndex::stab` narrowed the candidates to a band and then asked each
+candidate group whether **any** of its rectangles overlapped — all of them,
+including the ones nowhere near that band. The index did the narrowing and the
+check threw it away, so one stab over a full-height rectangle cost
+`bands × candidate groups × rectangles per group`.
+
+That was invisible while a group carried one rectangle, which is every sheet
+without gaps and every test in the suite. A band now holds the **rectangles**
+crossing it, each tagged with its group. The answer is identical — two
+rectangles that overlap share a row, therefore a row band, and that band is one
+the query already visits — and the work becomes proportional to the query.
+
+| 500,000 rows | before | after |
+|---|---:|---:|
+| dense, per formula | 6.69 µs | **4.46–4.55 µs** |
+| gapped, per formula | **11.33 µs** | **4.50–4.86 µs** |
+
+**The gapped penalty is gone**: 1.7× worse per formula before, indistinguishable
+from dense after. Note this is the one entry in this section that was a
+*defect* rather than debt — docs/44's rule is that debt is chosen at decision
+time, and nobody chose for the index to discard its own narrowing. It had been
+sitting inside TD-20's row, whose *stated* claim (this is not an R-tree) is true
+and remains open.
+
+### The arc, end to end
+
+The shell's 1,000,000-row corpus, which is gapped as a real sheet is:
+
+| | graph build | full recalc | total |
+|---|---:|---:|---:|
+| session 24 (before TD-66) | **218 s** | — | — |
+| after TD-66 | 5.4–6.3 s | 15.3–16.1 s | 27.1–27.7 s |
+| after TD-23 | 6.3 s | 15.3 s | 27.7 s |
+| **after TD-20** | **3.2–4.0 s** | **3.6–3.9 s** | **12.0–12.6 s** |
+
+Three fixes, each found by measuring rather than by reading, and each one's
+cause different from the one named in the register before it was measured.
+
+## W-RECALC-PROFILE — TD-71: the tile store speaks positions · session 28
+
+Run: `cargo run --release -p recalc-profile [rows]`, same Windows x86 host,
+same ±30% noise discipline: every figure is a range over ≥3 runs.
+
+### Experiment 4 — `State::cell` decomposed, before building anything
+
+Three-for-three said the register's named cause is usually not the measured
+cause, so the three `BTreeMap` lookups of `TileStore::locate` were rebuilt
+outside the store — identical content, key types and probe pattern — and
+priced against the whole call. At 100,000 rows:
+
+| | ns/read |
+|---|---:|
+| three lookups alone (simulated) | 91–108 |
+| `State::cell`, whole | 195–272 |
+| residue — `Presence::rank` + payload + call | 92–181 |
+
+**The register was right, for once — mostly.** The lookups are the largest
+single term, but only just over half; the rank's popcount walk is most of the
+rest. Both findings shaped the fix: `TileStore::read_rect` resolves a range's
+column slots once per run and each row's slot once per row, fetches each tile
+once per (row, column band), *and* continues ranks incrementally while the
+in-tile index ascends. `Grid::read_rect` (default = the per-cell loop,
+normative) carries the rectangle down from the evaluator; `EngineGrid`
+overlays computed results at one binary search per column. Identity-based
+single-cell reads are untouched (D-120).
+
+### Before / after
+
+| | before | after |
+|---|---:|---:|
+| `State::cell`, per read (kept path) | 206–241 ns | 185–227 ns — unchanged |
+| the same reads as 1×12 rect runs | — | **64–78 ns (≈3×)**, flat at 500k |
+| wide (12-read SUMs), 100k rows | 4.30 µs/formula | **2.73–2.94 µs/formula** |
+| wide, 500,000 rows | 4.46–4.55 µs/formula | **2.87 µs/formula** |
+| wide/gapped, 500,000 rows | 4.50–4.86 µs/formula | **2.70 µs/formula** |
+| narrow (1-read), 100k rows | 1.01 µs/formula | 0.75–0.82 µs/formula |
+
+The per-read slope of experiment 1's fitted line went **~300 → ~185 ns**; the
+remainder is evaluator-side per-cell work (operand materialisation, the
+aggregate's own walk), which is now the larger half of a range read's cost.
+
+**W-CHAIN-100K: 45–57 ms full recalc, 0.36–0.63 ms incremental — unchanged**,
+and that is the honest shape of this fix: the chain's reads are single-cell
+references that mostly hit computed results, so it never paid the per-cell
+locate cost. Range-heavy sheets did, and theirs is the number that moved.
+
+Verification: 396 kernel + 98 shell tests, ALL GATES GREEN, replay hashes
+`c79fa533…` / `b58d5505…` unchanged — the read path moved and the op algebra
+did not.
+
+## W-XLSX-WRITE — XLSX write + corpus round-trip: the first write-fidelity number · session 29
+
+Run: `cargo test -p usk-xlsx --test roundtrip --release -- the_write_fidelity_report --nocapture`,
+M1, ranges over 3 runs. The workload's comparison rules are in docs/38; the
+writer's design decisions are D-121/D-122/D-123.
+
+### THE FIDELITY NUMBER
+
+**100.0% — 49/49 modelled cells identical after read → write → re-read, across
+all 20 corpus files.** "Modelled" is the honest qualifier and it is load-bearing:
+the surface compared is what the reader models — addresses, values, formula
+texts, resolved number-format codes, sheet names — and everything else is
+*named*, not counted silently: 4 source parts are dropped on write across the
+corpus (`xl/vbaProject.bin` quarantined per docs/24, never re-emitted; one
+chart, one drawing, one theme from `14-unmodelled-parts`), and 0 cells lost.
+The synthetic workbook (34 cells: stress doubles, every representable error,
+both format levels, sparse to row 500,001, three sheets) asserts 100% rather
+than measuring it.
+
+**Excel as the external oracle: 20/20 written files open in real Excel
+(16.0, via COM), 21/21 cell checks pass** — values including
+`1234567890123456` and π, number formats at both levels (builtin id 14 reads
+back locale-mapped, `dd-mm-yyyy` on this host, which is what a builtin id
+means), the escapable sheet name, formulas, literal errors, AA100/ZZ100. No
+orphan EXCEL.EXE after any run.
+
+| File | Cells | Identical | Formulas | Formats | Parts dropped | Cell losses | In B | Out B |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `01-minimal.xlsx` | 1 | 1 | 0 | 0 | 0 | 0 | 1528 | 3202 |
+| `02-numbers.xlsx` | 6 | 6 | 0 | 0 | 0 | 0 | 1588 | 3370 |
+| `03-shared-strings.xlsx` | 3 | 3 | 0 | 0 | 0 | 0 | 1817 | 3875 |
+| `04-formulas.xlsx` | 4 | 4 | 2 | 0 | 0 | 0 | 1572 | 3313 |
+| `05-errors.xlsx` | 5 | 5 | 1 | 0 | 0 | 0 | 1585 | 3353 |
+| `06-booleans.xlsx` | 3 | 3 | 1 | 0 | 0 | 0 | 1549 | 3273 |
+| `07-inline-strings.xlsx` | 2 | 2 | 1 | 0 | 0 | 0 | 1572 | 3829 |
+| `08-number-formats.xlsx` | 4 | 4 | 0 | 3 | 0 | 0 | 1879 | 3640 |
+| `09-multi-sheet.xlsx` | 3 | 3 | 0 | 0 | 0 | 0 | 2132 | 4509 |
+| `10-rels-out-of-order.xlsx` | 2 | 2 | 0 | 0 | 0 | 0 | 1834 | 3857 |
+| `11-sparse.xlsx` | 4 | 4 | 0 | 0 | 0 | 0 | 1561 | 3313 |
+| `12-entities.xlsx` | 3 | 3 | 0 | 0 | 0 | 0 | 1838 | 3889 |
+| `13-macro-enabled.xlsm` | 1 | 1 | 0 | 0 | 1 | 0 | 1659 | 3201 |
+| `14-unmodelled-parts.xlsx` | 1 | 1 | 0 | 0 | 3 | 0 | 1913 | 3201 |
+| `15-stored.xlsx` | 1 | 1 | 0 | 0 | 0 | 0 | 2102 | 3202 |
+| `16-dangling-style.xlsx` | 1 | 1 | 0 | 0 | 0 | 0 | 1800 | 3201 |
+| `17-bad-shared-index.xlsx` | 1 | 1 | 0 | 0 | 0 | 0 | 1801 | 3784 |
+| `18-odd-cells.xlsx` | 2 | 2 | 0 | 0 | 0 | 0 | 1555 | 3823 |
+| `19-no-optional-parts.xlsx` | 1 | 1 | 0 | 0 | 0 | 0 | 1529 | 3200 |
+| `20-missing-rels.xlsx` | 1 | 1 | 0 | 0 | 0 | 0 | 1227 | 3205 |
+| **total** | **49** | **49** | **5** | **3** | **4** | **0** | **34,041** | **70,240** |
+
+### Time and size
+
+| | measured |
+|---|---:|
+| corpus write, 20 files (release, 3 runs) | **524–885 µs** |
+| corpus re-read of our own output | 762–1,646 µs |
+| output ÷ input bytes | **2.06×** |
+
+The 2.06× is the stored-entries honesty row (D-121, TD-72): the writer has no
+DEFLATE compressor on purpose, so a written workbook is the size of its
+uncompressed XML. At corpus scale that is ~3.5 KB/file of mostly fixed part
+skeleton; the multiplier is what matters and it is published with the design
+decision, not hidden behind it.
+
+### What the Excel oracle caught that our own reader could not
+
+The first synthetic workbook Excel saw, it **refused to open** — while our
+reader round-tripped it at 100%. Bisection to single-cell containers: a bare
+`t="e"` cell holding `#SPILL!`, literal or formula-cached, poisons the whole
+container; `#DIV/0!`/`#N/A` in the identical shape are fine, and the prime
+suspects (f64::MAX, a 5e-324 subnormal) were innocent. The writer now degrades
+`#SPILL!` (and `#CIRC!`, which was already handled) to `#N/A` **with a named
+loss** (D-123). Two halves of one codebase agreeing proves only that they
+agree; the fidelity number above is published *with* the Excel validation for
+exactly this reason.
+
+Verification: 406 kernel + 98 shell tests, ALL GATES GREEN, replay hashes
+`c79fa533…` / `b58d5505…` unchanged — the writer sits downstream of the op
+algebra and touches none of it.
+
+## W-STYLE-COLUMN (docs/38) — what a formatted-but-empty column costs · session 30 · M1
+
+ADR-041 chose an **identity rectangle** as the unit a style op addresses, and
+the memory claim is the whole reason. This is that claim, measured: an *N*-row ×
+64-column sheet with **no cell values at all**, every column formatted by one
+whole-column rule (`AxisSpan::All` on rows).
+
+| Rows | Cols | Addressed cells | Rules | Interned values | Style state B | B / addressed cell | Tiles | Cell store B | Same sheet, unstyled | Resolve ns/cell/facet |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1,024 | 64 | 65,536 | 64 | 1 | 14,576 | 0.2224 | 0 | 73,984 | 73,984 | 195 |
+| 16,384 | 64 | 1,048,576 | 64 | 1 | 14,576 | 0.0139 | 0 | 1,118,464 | 1,118,464 | 112 |
+| 262,144 | 64 | 16,777,216 | 64 | 1 | 14,576 | **0.00087** | 0 | 17,830,144 | 17,830,144 | 124 |
+
+**Style state is flat at 14,576 B across a 256× range of sheet size**, because it
+is a function of the number of formatting *operations* and of nothing else. 64
+rules and **one** interned value at every size — the flyweight docs/04 and
+docs/14 specify, made the storage rather than an optimisation.
+
+Two columns exist to stop the table being read too generously. **Tiles** is 0:
+no cell was materialised for 16.7 million addressed cells. **Cell store B** is
+*not* 0, and is printed beside the identical **unstyled** sheet to show why —
+that number is the axis slot map, which exists because the sheet has rows. The
+two are equal at every size, which is the actual claim: formatting adds nothing
+to the cell store. A test asserts the equality so the table cannot drift from it.
+
+**The comparison this exists to make.** A per-cell style store cannot beat 24
+B/cell — two `OpId`s are 48 bytes before any value — so the 262,144 × 64 case
+would cost **~1.5 GB** for a sheet with nothing in it, against 14.6 kB here.
+That is the argument ADR-041 rejected a per-cell store on, now with a number
+under it.
+
+### The defect this workload found, before the number was published
+
+The first working resolver measured **1,826–3,361 ns per cell per facet** — 2.4
+ms to resolve *one* facet over a 40 × 20 viewport, against docs/31's **8.3 ms
+whole-frame** budget, and there are four facets. It would have shipped as a
+budget breach discovered by a renderer months later.
+
+The cause was **not** the linear scan ADR-041 knowingly traded memory for.
+`covers` re-walked the row and column `BTreeMap`s *inside* the per-rule loop, so
+a cell paid two tree lookups **per rule** instead of two in total. Hoisting the
+lookup to once per cell:
+
+| | Before | After | Factor |
+|---|---:|---:|---:|
+| 1,024 rows | 3,361 ns/cell | **195** | 17× |
+| 16,384 rows | 3,131 ns/cell | **112** | 28× |
+| 262,144 rows | 1,826 ns/cell | **124** | 15× |
+
+Flat in sheet size afterwards, which is the shape that says the tree walks are
+gone. ≈0.1 ms for a viewport — comfortably inside the frame budget, and TD-78
+(the scan itself) is filed with a trigger rather than a fear.
+
+This is **TD-71's defect in a different organ**, found the same way: by
+measuring rather than by reasoning about it. Five sessions, five times the
+profile named a different line than the design note would have.
+
+Regenerate: `cargo test -p usk-state --release --test styles -- --nocapture w_style_column`
+
+## W-REPLAY-5K — corpus extended again for the style ops (session 30)
+
+ADR-041 added the first new op types since the taxonomy was sealed. docs/29's
+rule fires exactly as it did for `Opaque` in session 12: *"a new op type → …
+add to replay-check's generator so the corpus exercises it"*, so the corpus is a
+different corpus and **both hashes legitimately move**.
+
+| | Session 12 (10/10 variants) | Session 30 (12/12 variants) |
+|---|---|---|
+| oplog hash | `c79fa5335520542f1363fe32f8bc7d3df53910e4e736637f22babd9a0143afee` | `a1b35c1ac5afa7b58611acb604420798667e4a4d1a3e79828b03a54c5c80a533` |
+| state hash | `b58d550544c971313ad86167c05beaedddad7c13855d29c4997bcec0b2ff6215` | `b95f16327e2e9e887413dbe59a6471cbffcdc43edf30016abfd140781c0db707` |
+| native == wasm32 | yes | **yes** |
+
+**No existing op encoding moved**, and the distinction matters as much as it did
+in session 12. Tags `0x10`–`0x18` are byte-for-byte what they were; `0x19` and
+`0x1A` are new. The hashes moved because the corpus gained `SetStyle`,
+`ClearStyle`, all four facet shapes and an **unknown** facet — not because
+anything already written changed meaning. A hash that had *not* moved would have
+meant the generator had stopped covering the taxonomy, which is the failure
+docs/29 exists to prevent.
+
+One generator change is worth recording on its own. The opaque arm minted tags
+from `0x19`, which are now **ours**: left alone, `OpaqueOp::new` would have
+refused two values in sixteen and the arm would have quietly emitted its
+fallback instead. The gate would still have run, still have printed a hash, and
+covered DP-A5 preservation **one-eighth less** — with nothing to show for it.
+The base moved to `0x2B`. This is the same class of silent un-testing session 9
+walked into over four variants at once.
+
+These hashes are the reference from session 30 onward.
+
+## W-XLSX-WRITE re-measured — a wider modelled surface (session 30) · M1 · release
+
+ADR-041 widened what the model claims about a cell from *(value, formula, number
+format)* to include **font, fill and alignment**, so the round-trip comparison
+key grew and the published number is over a larger surface than session 29's.
+
+| | Session 29 | Session 30 |
+|---|---|---|
+| Corpus files | 20 | **21** |
+| Cells compared | 49 | **57** |
+| Identical after read → write → re-read | 49 | **57** |
+| **Write fidelity** | **100.0%** | **100.0%** |
+| Compared per cell | value, formula, number format | + font, fill, alignment |
+| Output / input | 2.06× | 2.08× (stored entries, TD-72) |
+| Corpus write / re-read | 524–885 µs / 762–1,646 µs | 772 µs / 1,264 µs |
+
+**The number held, and the reason it is not a free pass.** Running the widened
+comparison against the *existing* 20 files also produced 49/49 and 100.0% — and
+it would have, whatever the style code did, because none of those 20 files
+carries a font, a fill or an alignment. A fidelity percentage over a surface the
+corpus does not exercise measures the writer against itself.
+
+So the corpus gained a **21st file**. `21-styles.xlsx` is generated by
+`make_corpus.py` in the shapes Excel actually emits, and is deliberately awkward
+in the four places a naive styles reader goes wrong: `<color>` appears inside
+both `<font>` and `<patternFill>`; `<xf>` appears inside both `<cellStyleXfs>`
+and `<cellXfs>`; fill indices 0 and 1 are the mandatory `none`/`gray125`
+skeleton and are *not* formatting; and `<b val="0"/>` means **not** bold where a
+bare `<b/>` means bold. Eight cells, seven of them formatted, all eight
+identical after the round-trip. That is where the 49 → 57 comes from.
+
+The synthetic half — which asserts 100% rather than measuring it, because any
+loss on our own output is a defect — grew a fourth sheet: 48 cells, 19 formatted,
+covering every facet alone, all four on one cell, a 10.5 pt half-point size, two
+cells sharing one fill, and a cell that is *only* a fill (XLSX's style-holding
+cell, which the reader used to drop). `cellXfs` is asserted to behave as the
+flyweight it is: fifty identically formatted cells share **one** entry.
+
+**What is not claimed.** Borders (TD-75), theme-referenced colours (TD-76) and
+named cell styles (TD-77) are unmodelled and filed with triggers. The Excel COM
+oracle was **not** re-run this session, so session 29's "20/20 open in real
+Excel" stands for those files and the styled output has our own reader's word
+only — which D-123 is on record saying is not validation. That is a gap, stated
+rather than papered over, and it is the first thing the next session touching
+XLSX should close.
+
+Regenerate: `cargo test -p usk-xlsx --release --test roundtrip the_write_fidelity_report -- --nocapture`
+
+## W-DEPS-FALLBACK (TD-79, D-125) — what a system-font crate costs · session 32
+
+Run: add the crate to `shell/ehkatra-shell/Cargo.toml`, `node tools/dep-budget.mjs`,
+remove it. The baseline is the shell closure **246 of 280** (ADR-037, D-116).
+Measured *before* choosing, which is the whole discipline here — the `arboard`
+precedent (session 24, W-DEPS-CLIPBOARD) is that a default feature set was 4×
+the trimmed one and nothing in the crate's description would have said so.
+
+| candidate | features | shell closure | delta |
+|---|---|---:|---:|
+| **`fontdb` 0.23** | `default-features = false, features = ["fs"]` | **249 / 280** | **+3** |
+| `fontdb` 0.23 | default (`std, fs, memmap, fontconfig`) | 251 / 280 | +5 |
+| `font-kit` 0.14 | `default-features = false` | 265 / 280 | +19 |
+
+The three `fontdb` brings are `fontdb`, `slotmap`, `tinyvec` — `log`,
+`ttf-parser`, `libm` and `version_check` were already in the closure, most of
+them via `rustybuzz`, which is why the trimmed number is this small. **Taken:
+`fontdb` with `fs`.** `memmap` is off deliberately, and not only for the crate
+it costs: it maps font files that another process may rewrite underneath us
+(the crate's own docs say so), and it saves nothing on a database consulted a
+handful of times per process. `fontconfig` is unix-only and does nothing here.
+
+**Headroom after: 31 crates**, against ~50 earmarked at ADR-037 for accesskit
+plus the file-dialog and menu adapters. That earmark is now the thing to watch,
+and it is the reason `font-kit`'s 19 was not merely "also fine".
+
+## W-FALLBACK (TD-79, D-125, TD-80) — what fallback costs, and to what face · session 32
+
+Run: `shell/target/release/ehkatra-shell --fonts`. Three layouts in order — a
+Latin run, then `にほん` (the first codepoint the bundled `DejaVu Sans` cannot
+draw), then `にほんご` — plus an independent enumeration timed on its own so the
+first miss can be split. Three runs, M1.
+
+| stage | cost (3 runs) | faces used | |
+|---|---:|---|---|
+| Latin run | **230–575 µs** | `[0]` (bundled) | nothing enumerated |
+| **first miss** | **238–412 ms** | `[1]` | once per process |
+|  · of which enumeration | **203–321 ms** | — | 379 faces on M1 |
+| same script again | **22–49 µs** | `[1]` | cached |
+
+**Resolved face on M1: `Yu Gothic`**, from `text::PREFERRED`'s bundled order —
+also printed by `--script`, which is where `demo/editing-ime.png`'s kana
+composition comes from.
+
+**Profiled before any fix was built, and the profile decided the fix.** The
+enumeration is essentially the whole of the first miss: `fontdb` reads and
+parses all 379 face files to learn their names, and the pick — testing the
+preferred families for coverage until `Yu Gothic`, the 7th entry, answers — is
+the small remainder. So the work item is *move the enumeration off the frame*,
+not *make the search cleverer*. That is **TD-80**, and it is deliberately not in
+this session: warming needs a background thread and a decision about where it
+starts, and stacking that unverified on the fallback layer this session proved
+is what DP-C4 forbids.
+
+**Stated as a budget relationship, not smoothed:** 238–412 ms is **15–25× docs/31's
+16 ms keystroke→paint budget**, paid on exactly one keystroke per process — the
+first non-Latin character a session ever shows. Every subsequent one costs
+22–49 µs, four orders of magnitude below it (W-KEYSTROKE above, re-measured and
+unmoved). A native JP/CN/KR typist's *first* keystroke is the one that pays it,
+which is why TD-80's trigger is "before docs/48's IME acceptance item is
+attempted".
+
+**What this number is not.** It is this host's font set. A machine with more
+fonts enumerates for longer; one whose fonts are in none of `PREFERRED` also
+pays the exhaustive second pass, which re-reads every face and is untested
+because M1 never reaches it (named in TD-80). Cross-host layout agreement for
+fallback runs is **not** claimed at all — that is TD-81.
 
 ## Not yet measured (targets remain targets — docs/42)
 A-001 memory/10M cells · A-002 promotion rate · A-003 recalc 100k · A-005 wasm32 **in a real browser / Safari** (WASI-under-Node is not a browser and must not be reported as one) · all docs/31 budget rows.

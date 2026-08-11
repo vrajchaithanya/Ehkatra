@@ -96,6 +96,20 @@ impl FormulaRegistry {
         }
     }
 
+    /// Seeds one cell, as the pre-pass would have.
+    ///
+    /// For the incremental path (`State::apply_tip`), whose ops arrive *after*
+    /// the pre-pass has run and so name cells it could not have known about.
+    /// Idempotent, and it never disturbs an existing entry: a seed is the
+    /// *absence* of a write, and resetting a real stamp to `FLOOR` would
+    /// resurrect a formula that a later value write had shadowed.
+    pub fn seed(&mut self, row: RowId, col: ColId) {
+        self.entries.entry((row.0, col.0)).or_insert(Entry {
+            stamp: FLOOR,
+            formula: None,
+        });
+    }
+
     /// Applies a `SetFormula`. Wins only if its stamp is the greatest seen at
     /// this cell.
     ///

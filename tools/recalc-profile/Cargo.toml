@@ -1,0 +1,16 @@
+[package]
+name = "recalc-profile"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "recalc-profile"
+path = "src/main.rs"
+
+[dependencies]
+usk-types = { path = "../../crates/usk-types" }
+usk-calc = { path = "../../crates/usk-calc" }
+usk-oplog = { path = "../../crates/usk-oplog" }
+usk-state = { path = "../../crates/usk-state" }

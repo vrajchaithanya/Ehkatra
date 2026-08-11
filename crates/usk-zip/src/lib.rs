@@ -8,9 +8,13 @@
 //! things to be wrong about, and DP-C4 says do not stack two unverified layers.
 //!
 //! # What this deliberately does not do
-//! **It does not write.** v0.1 reads XLSX and does not produce it (BOOTSTRAP
-//! "Explicitly NOT in v0.1: XLSX write"), so a writer would be untested surface
-//! in a security-critical parser.
+//! **It does not compress.** The [`write`] module (session 29, D-121) produces
+//! containers with STORED entries only — writing was out of v0.1's scope while
+//! reading was the untested security surface, and now that a writer exists it
+//! deliberately contains no DEFLATE compressor: nothing hostile flows through
+//! a writer, so a second codec would be complexity without a threat. The size
+//! cost is measured in MEASUREMENTS.md (W-XLSX-WRITE) and the compressor is
+//! filed as TD-72.
 //!
 //! **It does not decrypt.** An encrypted entry is reported as unsupported
 //! rather than skipped, because "we silently dropped a sheet" is exactly the
@@ -26,6 +30,7 @@
 extern crate alloc;
 
 pub mod inflate;
+pub mod write;
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -44,9 +49,9 @@ pub const MAX_TOTAL_OUTPUT: usize = 1 << 30;
 /// The longest entry name accepted, in bytes.
 pub const MAX_NAME_BYTES: usize = 512;
 
-const EOCD_SIGNATURE: u32 = 0x0605_4b50;
-const CENTRAL_SIGNATURE: u32 = 0x0201_4b50;
-const LOCAL_SIGNATURE: u32 = 0x0403_4b50;
+pub(crate) const EOCD_SIGNATURE: u32 = 0x0605_4b50;
+pub(crate) const CENTRAL_SIGNATURE: u32 = 0x0201_4b50;
+pub(crate) const LOCAL_SIGNATURE: u32 = 0x0403_4b50;
 const EOCD_MIN_LEN: usize = 22;
 
 /// Why a byte string is not a ZIP we will read.
@@ -271,12 +276,13 @@ fn check_caps(entry: &Entry, total_output: &mut usize) -> Result<(), ZipError> {
 }
 
 /// Refuses names that would escape a directory if anything ever extracted them.
+/// `pub(crate)` because the writer enforces the same rule on what it emits.
 ///
 /// Nothing here writes to disk, so this cannot currently be exploited. It is
 /// enforced anyway because the day someone adds extraction, the check they
 /// forget is this one — and a container format crate is the right place for it
 /// to already exist.
-fn is_safe_name(name: &str) -> bool {
+pub(crate) fn is_safe_name(name: &str) -> bool {
     if name.starts_with('/') || name.starts_with('\\') {
         return false;
     }

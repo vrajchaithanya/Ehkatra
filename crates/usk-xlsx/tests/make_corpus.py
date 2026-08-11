@@ -95,6 +95,56 @@ def styles(cell_xfs, num_fmts=()):
     )
 
 
+# A full styles part in Excel's own shape, for corpus file 21. Written out
+# literally rather than generated, because the point of it is the exact nesting
+# a reader has to survive - see the note beside the `write` call.
+STYLED_STYLES = (
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    '<numFmts count="1"><numFmt numFmtId="164" formatCode="0.000"/></numFmts>'
+    '<fonts count="5">'
+    '<font><sz val="11"/><color theme="1"/><name val="Calibri"/></font>'
+    '<font><b/><sz val="11"/><color rgb="FF000000"/><name val="Calibri"/></font>'
+    '<font><i/><u/><sz val="14"/><color rgb="FFC00000"/><name val="Arial"/></font>'
+    '<font><b val="0"/><strike/><sz val="10.5"/><color rgb="FF203040"/><name val="Segoe UI"/></font>'
+    '<font><sz val="9"/><color rgb="FF00FF00"/><name val="Consolas"/></font>'
+    "</fonts>"
+    '<fills count="4">'
+    '<fill><patternFill patternType="none"/></fill>'
+    '<fill><patternFill patternType="gray125"/></fill>'
+    '<fill><patternFill patternType="solid"><fgColor rgb="FFFFFF00"/><bgColor indexed="64"/></patternFill></fill>'
+    '<fill><patternFill patternType="solid"><fgColor rgb="FF0070C0"/><bgColor indexed="64"/></patternFill></fill>'
+    "</fills>"
+    '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
+    '<cellStyleXfs count="2">'
+    '<xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>'
+    '<xf numFmtId="9" fontId="4" fillId="3" borderId="0"/>'
+    "</cellStyleXfs>"
+    '<cellXfs count="8">'
+    # 0 - the all-defaults entry.
+    '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
+    # 1 - bold only.
+    '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>'
+    # 2 - italic + underline, 14pt, dark red, Arial.
+    '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>'
+    # 3 - a 10.5pt strike font: the half-point the facet exists for.
+    '<xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1"/>'
+    # 4 - a solid yellow fill and nothing else.
+    '<xf numFmtId="0" fontId="0" fillId="2" borderId="0" xfId="0" applyFill="1"/>'
+    # 5 - alignment on all three axes at once.
+    '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1">'
+    '<alignment horizontal="center" vertical="top" wrapText="1"/></xf>'
+    # 6 - the style-holding cell's entry: a fill on a cell with no value.
+    '<xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="0" applyFill="1"/>'
+    # 7 - all four facets on one entry, custom number format included.
+    '<xf numFmtId="164" fontId="1" fillId="2" borderId="0" xfId="0"'
+    ' applyNumberFormat="1" applyFont="1" applyFill="1" applyAlignment="1">'
+    '<alignment horizontal="right" vertical="center"/></xf>'
+    "</cellXfs>"
+    "</styleSheet>"
+)
+
+
 def write(name, parts, compression=zipfile.ZIP_DEFLATED):
     os.makedirs(OUT, exist_ok=True)
     path = os.path.join(OUT, name)
@@ -258,6 +308,32 @@ def main():
         "xl/workbook.xml": workbook(["Recovered"]),
         "xl/worksheets/sheet1.xml": sheet([(1, ['<c r="A1"><v>20</v></c>'])]),
     })
+
+    # 21 - fonts, fills and alignment (ADR-041, session 30). Written in the
+    # shapes Excel actually emits, and deliberately awkward in the four places
+    # a naive styles reader goes wrong:
+    #   * `<color rgb=...>` appears inside BOTH `<font>` and `<patternFill>`,
+    #     so a reader matching on local name alone takes the fill's colour as
+    #     the font's;
+    #   * `<xf>` appears inside BOTH `<cellStyleXfs>` and `<cellXfs>`, so the
+    #     same reader indexes the cell-style defaults as cell formats;
+    #   * fill index 0 (`none`) and 1 (`gray125`) are the mandatory skeleton
+    #     and are NOT formatting, so a solid fill starts at 2;
+    #   * `<b/>` with no `val` means bold, while `<b val="0"/>` means the
+    #     opposite - both occur in real files.
+    # F1 is a cell with a style and no value at all: the style-holding cell.
+    write("21-styles.xlsx", base(
+        [sheet([
+            (1, ['<c r="A1" s="1"><v>1</v></c>',
+                 '<c r="B1" s="2"><v>2</v></c>',
+                 '<c r="C1" s="3"><v>3</v></c>',
+                 '<c r="D1" s="4"><v>4</v></c>',
+                 '<c r="E1" s="5"><v>5</v></c>',
+                 '<c r="F1" s="6"/>']),
+            (2, ['<c r="A2" s="7"><v>7</v></c>',
+                 '<c r="B2" s="0"><v>8</v></c>']),
+        ])],
+        {"xl/styles.xml": STYLED_STYLES}))
 
     print("wrote", len(os.listdir(OUT)), "files to", OUT)
 

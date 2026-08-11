@@ -65,12 +65,22 @@ Step 'Tests (DP-C4)'             { cargo test --workspace }
 Step 'no_std kernel (DP-A3)'     { cargo build -p usk-types -p usk-oplog -p usk-state -p usk-formula -p usk-calc -p usk-reduce -p usk-sync -p usk-recover -p usk-json -p usk-csv -p usk-zip -p usk-xml -p usk-xlsx -p usk-mcp -p usk-view --target wasm32-wasip1 }
 Step 'Complexity budget (DP-S2)' { node tools/dep-budget.mjs }
 
-# The shell is a separate workspace (D-116), so `cargo test --workspace` above
-# does not reach it. Checked rather than built: it has no tests yet and a full
-# wgpu build is minutes, where a check is one. It compiles on this host's
-# x86_64-pc-windows-gnu toolchain, which was not a given.
+# The shell is a separate workspace (D-116), so *none* of the three gates above
+# reaches it: `cargo fmt --all`, `cargo clippy --workspace` and
+# `cargo test --workspace` all stop at this workspace's members. It therefore
+# gets the same three explicitly.
+#
+# Until the editing surface landed this was a bare `cargo check`, justified by
+# "it has no tests yet". It has 54 now, and a gate that compiles code without
+# running its tests is a gate in name only. The mingw `dlltool` must be ahead of
+# rustup's stub on PATH for this to link (D-078), which is why the supply-chain
+# step's PATH edit is hoisted above it.
+$mingw = Join-Path (Split-Path $PSScriptRoot -Parent) '.toolchain\mingw64\bin'
+if (Test-Path $mingw) { $env:PATH = "$mingw;" + $env:PATH }
 if (Test-Path 'shell\Cargo.toml') {
-    Step 'Shell workspace (ADR-037)' { cargo check --manifest-path shell/Cargo.toml }
+    Step 'Shell format (DP-C1)' { cargo fmt --all --manifest-path shell/Cargo.toml -- --check }
+    Step 'Shell clippy (DP-C1)' { cargo clippy --manifest-path shell/Cargo.toml --all-targets -- -D warnings }
+    Step 'Shell tests (DP-C4)'  { cargo test --manifest-path shell/Cargo.toml }
 }
 
 # Supply chain (DP-E8). For eight sessions this ran only on CI - which meant in

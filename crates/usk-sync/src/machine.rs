@@ -110,6 +110,14 @@ pub struct Hello {
 
 /// Inbound events. Transport and timer events are facts the shell observes;
 /// everything else is a protocol message or a local edit.
+///
+/// `LocalOp(Op)` makes this enum as large as an `Op`, which ADR-041 grew when
+/// `Payload::SetStyle` added an identity rectangle. Boxing it is the obvious
+/// answer and is the wrong one here: an `Event` is constructed once per op and
+/// consumed immediately by `step`, so the allocation would be paid on the hot
+/// path to save stack bytes on a value that never outlives its call. The lint
+/// is silenced with the reason rather than obeyed.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug)]
 pub enum Event {
     Connect,

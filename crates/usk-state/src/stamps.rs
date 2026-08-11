@@ -152,7 +152,14 @@ pub fn image_represents(payload: &Payload) -> bool {
         | Payload::UndeleteCol { .. }
         | Payload::SetCell { .. }
         | Payload::ClearCell { .. }
-        | Payload::SetFormula { .. } => true,
+        | Payload::SetFormula { .. }
+        // Style rules are carried by the image's styles section
+        // (`IMAGE_VERSION` 3, ADR-041). They are listed here only because that
+        // section exists; adding a facet is safe, adding a *variant* the image
+        // does not write would make a style op prunable that nothing could
+        // reconstruct.
+        | Payload::SetStyle { .. }
+        | Payload::ClearStyle { .. } => true,
     }
 }
 

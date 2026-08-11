@@ -139,6 +139,19 @@ pub fn validate(
         // not seen is a *causal gap*, not an invalid op — the causal buffer
         // holds it. Confusing the two would quarantine honest work.
         Payload::InsertRow { .. } | Payload::InsertCol { .. } => {}
+        // A style op names identities it does not create, so the same
+        // malformed-identity rule applies to its endpoints. The facet gets a
+        // byte bound for the reason every untrusted payload does; an *unknown*
+        // facet is bounded and otherwise unjudged, exactly as an opaque op is —
+        // refusing it on any stricter rule would refuse the forward
+        // compatibility ADR-041 built it for.
+        Payload::SetStyle { target, facet } => {
+            check_target(target)?;
+            if facet.encode().len() > MAX_OPAQUE_BYTES {
+                return Err(RejectReason::OpaqueTooLong);
+            }
+        }
+        Payload::ClearStyle { target, .. } => check_target(target)?,
         // DP-A5 requires us to retransmit an op we cannot read, which means we
         // must store it — so it gets a bound like every other untrusted input.
         // The bound is the *only* check available: the payload's meaning is by
@@ -147,6 +160,19 @@ pub fn validate(
         Payload::Opaque(o) => {
             if o.body().len() > MAX_OPAQUE_BYTES {
                 return Err(RejectReason::OpaqueTooLong);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// A style rectangle's endpoints, where it has any: `AxisSpan::All` names no
+/// identity and so has nothing to malform.
+fn check_target(target: &usk_oplog::StyleTarget) -> Result<(), RejectReason> {
+    for span in [&target.rows, &target.cols] {
+        if let usk_oplog::AxisSpan::Between(start, end) = span {
+            if start.counter == 0 || end.counter == 0 {
+                return Err(RejectReason::MalformedBinding);
             }
         }
     }

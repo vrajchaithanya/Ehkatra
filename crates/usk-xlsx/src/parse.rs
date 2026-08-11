@@ -8,8 +8,8 @@ use usk_xml::{Event, Reader};
 use usk_zip::Archive;
 
 use crate::{
-    is_active_content, is_known_unmodelled, Cell, Fidelity, Loss, LossReason, Sheet, Workbook,
-    XlsxError,
+    is_active_content, is_known_unmodelled, Alignment, Cell, Fidelity, FontFacet, Loss, LossReason,
+    Sheet, Workbook, XlsxError,
 };
 
 /// Reads a workbook from a container's bytes.
@@ -75,6 +75,7 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, XlsxError> {
         fidelity.formulas_read += cells.iter().filter(|c| c.formula.is_some()).count();
         fidelity.number_formats_resolved +=
             cells.iter().filter(|c| c.number_format.is_some()).count();
+        fidelity.styles_resolved += cells.iter().filter(|c| !c.is_unformatted()).count();
         sheets.push(Sheet {
             name: reference.name,
             part,
@@ -193,12 +194,28 @@ fn read_shared_strings(
     Ok(strings)
 }
 
-/// `styles.xml` → the number-format code for each style index.
+/// One `cellXfs` entry, resolved to the facets ADR-041 models.
 ///
-/// Two levels of indirection, both of which XLSX requires: a cell names a
-/// `cellXfs` index, that entry names a `numFmtId`, and the id is either a
-/// built-in or defined in `numFmts`.
-fn read_styles(archive: &Archive, fidelity: &mut Fidelity) -> Result<Vec<String>, XlsxError> {
+/// This is the flyweight table XLSX has always had: a cell names an index, the
+/// entry names a `numFmtId`, a `fontId` and a `fillId`, and each of those is an
+/// index into its own table. Reading it is the reason a whole formatted column
+/// costs one entry in the file rather than a million.
+#[derive(Clone, Default, PartialEq, Debug)]
+pub(crate) struct CellXf {
+    pub number_format: String,
+    pub font: Option<FontFacet>,
+    pub fill: Option<u32>,
+    pub alignment: Option<Alignment>,
+}
+
+/// `styles.xml` → the facets each `cellXfs` index resolves to.
+///
+/// `fontId` 0 and `fillId` 0/1 resolve to `None` on purpose: index 0 is the
+/// workbook default font and 0/1 are the `none`/`gray125` fills every styles
+/// part is required to carry. Treating those as facets would mark every cell in
+/// every workbook as formatted, and a facet is by definition what *differs*
+/// from the default.
+fn read_styles(archive: &Archive, fidelity: &mut Fidelity) -> Result<Vec<CellXf>, XlsxError> {
     let part = "xl/styles.xml";
     let Some(bytes) = archive.read_named(part) else {
         return Ok(Vec::new());
@@ -208,12 +225,21 @@ fn read_styles(archive: &Archive, fidelity: &mut Fidelity) -> Result<Vec<String>
 
     let mut reader = Reader::new(&bytes);
     let mut custom: Vec<(u32, String)> = Vec::new();
-    let mut styles: Vec<String> = Vec::new();
-    let mut in_cell_xfs = false;
+    let mut fonts: Vec<FontFacet> = Vec::new();
+    let mut fills: Vec<Option<u32>> = Vec::new();
+    let mut styles: Vec<CellXf> = Vec::new();
+    // `<color>` appears inside both `<font>` and `<patternFill>`, and `<xf>`
+    // appears inside both `<cellStyleXfs>` and `<cellXfs>`, so every rule below
+    // is guarded by which section is open. A reader that matched on local names
+    // alone would take the cell-style defaults for the cell formats.
+    let mut section = Section::None;
+    let mut font: Option<FontFacet> = None;
+    let mut pattern_solid = false;
+    let mut fill_argb: Option<u32> = None;
     while let Some(event) = reader.next() {
         match event.map_err(|e| bad(part, e))? {
-            Event::Start(element) => match element.local_name() {
-                "numFmt" => {
+            Event::Start(element) => match (section, element.local_name()) {
+                (_, "numFmt") => {
                     if let (Some(id), Some(code)) = (
                         element.attribute("numFmtId").and_then(|v| v.parse().ok()),
                         element.attribute("formatCode"),
@@ -221,27 +247,194 @@ fn read_styles(archive: &Archive, fidelity: &mut Fidelity) -> Result<Vec<String>
                         custom.push((id, code.to_string()));
                     }
                 }
-                "cellXfs" => in_cell_xfs = true,
-                "xf" if in_cell_xfs => {
+                (Section::None, "fonts") => section = Section::Fonts,
+                (Section::None, "fills") => section = Section::Fills,
+                (Section::None, "cellXfs") => section = Section::CellXfs,
+                (Section::Fonts, "font") => font = Some(default_font()),
+                (Section::Fonts, name) => {
+                    if let Some(f) = font.as_mut() {
+                        apply_font_child(f, name, &element);
+                    }
+                }
+                (Section::Fills, "patternFill") => {
+                    pattern_solid = element.attribute("patternType") == Some("solid");
+                    fill_argb = None;
+                }
+                (Section::Fills, "fgColor") => {
+                    fill_argb = element.attribute("rgb").and_then(parse_argb);
+                }
+                (Section::CellXfs, "xf") => {
                     let id: u32 = element
                         .attribute("numFmtId")
                         .and_then(|v| v.parse().ok())
                         .unwrap_or(0);
-                    let code = custom
+                    let number_format = custom
                         .iter()
                         .find(|(candidate, _)| *candidate == id)
                         .map(|(_, code)| code.clone())
                         .or_else(|| builtin_format(id).map(String::from))
                         .unwrap_or_default();
-                    styles.push(code);
+                    let font_id = index_attr(&element, "fontId");
+                    let fill_id = index_attr(&element, "fillId");
+                    styles.push(CellXf {
+                        number_format,
+                        font: font_id
+                            .filter(|i| *i != 0)
+                            .and_then(|i| fonts.get(i).cloned()),
+                        fill: fill_id
+                            .filter(|i| *i > 1)
+                            .and_then(|i| fills.get(i).copied())
+                            .flatten(),
+                        alignment: None,
+                    });
+                }
+                (Section::CellXfs, "alignment") => {
+                    if let Some(xf) = styles.last_mut() {
+                        xf.alignment = read_alignment(&element);
+                    }
                 }
                 _ => {}
             },
-            Event::End(name) if usk_xml::local(&name) == "cellXfs" => in_cell_xfs = false,
+            Event::End(name) => match (section, usk_xml::local(&name)) {
+                (Section::Fonts, "font") => {
+                    if let Some(f) = font.take() {
+                        fonts.push(f);
+                    }
+                }
+                (Section::Fills, "fill") => {
+                    fills.push(if pattern_solid { fill_argb } else { None });
+                    pattern_solid = false;
+                    fill_argb = None;
+                }
+                (Section::Fonts, "fonts")
+                | (Section::Fills, "fills")
+                | (Section::CellXfs, "cellXfs") => section = Section::None,
+                _ => {}
+            },
             _ => {}
         }
     }
     Ok(styles)
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Section {
+    None,
+    Fonts,
+    Fills,
+    CellXfs,
+}
+
+/// Excel's default: 11pt Calibri, black, no bits set. A `<font>` is read as a
+/// delta from this, because that is how XLSX writes it — an absent `<b/>` means
+/// not bold, not "unspecified".
+fn default_font() -> FontFacet {
+    FontFacet {
+        flags: 0,
+        half_points: 22,
+        argb: 0xFF00_0000,
+        name: String::from("Calibri"),
+    }
+}
+
+fn apply_font_child(font: &mut FontFacet, name: &str, element: &usk_xml::Element) {
+    // `<b/>` means bold; `<b val="0"/>` means explicitly not bold. Both occur.
+    let on = element.attribute("val").map(is_true).unwrap_or(true);
+    match name {
+        "b" => set_flag(font, usk_oplog::FONT_BOLD, on),
+        "i" => set_flag(font, usk_oplog::FONT_ITALIC, on),
+        "u" => set_flag(font, usk_oplog::FONT_UNDERLINE, on),
+        "strike" => set_flag(font, usk_oplog::FONT_STRIKE, on),
+        "sz" => {
+            if let Some(points) = element.attribute("val").and_then(|v| v.parse::<f64>().ok()) {
+                // Half-points, rounded. Excel's UI offers half-point sizes and
+                // the wire format is points, so this is the finest integer that
+                // loses nothing. Rounded by hand rather than with `f64::round`,
+                // which is std-only — the kernel is `no_std` (DP-A3).
+                let half = points * 2.0;
+                // NaN falls through to 0 by taking the `else` of `> 0.0`, which
+                // is written positively so the partially-ordered comparison is
+                // readable rather than negated.
+                font.half_points = if half > 0.0 {
+                    if half >= 65_534.5 {
+                        65_535
+                    } else {
+                        (half + 0.5) as u16
+                    }
+                } else {
+                    0
+                };
+            }
+        }
+        "color" => {
+            if let Some(argb) = element.attribute("rgb").and_then(parse_argb) {
+                font.argb = argb;
+            }
+        }
+        "name" | "rFont" => {
+            if let Some(value) = element.attribute("val") {
+                font.name = value.to_string();
+            }
+        }
+        _ => {}
+    }
+}
+
+fn set_flag(font: &mut FontFacet, bit: u8, on: bool) {
+    if on {
+        font.flags |= bit;
+    } else {
+        font.flags &= !bit;
+    }
+}
+
+fn is_true(value: &str) -> bool {
+    value == "1" || value.eq_ignore_ascii_case("true")
+}
+
+fn index_attr(element: &usk_xml::Element, name: &str) -> Option<usize> {
+    element.attribute(name).and_then(|v| v.parse().ok())
+}
+
+/// `"FFFF0000"` → `0xFFFF0000`. A 6-digit form (no alpha) is taken as opaque,
+/// which is what every consumer does with it.
+fn parse_argb(text: &str) -> Option<u32> {
+    let text = text.trim();
+    match text.len() {
+        8 => u32::from_str_radix(text, 16).ok(),
+        6 => u32::from_str_radix(text, 16).ok().map(|v| v | 0xFF00_0000),
+        _ => None,
+    }
+}
+
+/// An `<alignment>` that says nothing is not an alignment: `None` keeps
+/// "explicitly default" and "unstyled" the same document.
+fn read_alignment(element: &usk_xml::Element) -> Option<Alignment> {
+    let horizontal = match element.attribute("horizontal") {
+        None | Some("general") => 0,
+        Some("left") => 1,
+        Some("center") | Some("centre") => 2,
+        Some("right") => 3,
+        // `fill`, `justify`, `centerContinuous`, `distributed` are outside the
+        // modelled vocabulary (TD-75); they read as general rather than as a
+        // guess at which of the four they resemble.
+        Some(_) => 0,
+    };
+    let vertical = match element.attribute("vertical") {
+        None | Some("bottom") => 0,
+        Some("top") => 1,
+        Some("center") | Some("centre") => 2,
+        Some(_) => 0,
+    };
+    let wrap = element.attribute("wrapText").map(is_true).unwrap_or(false);
+    if horizontal == 0 && vertical == 0 && !wrap {
+        return None;
+    }
+    Some(Alignment {
+        horizontal,
+        vertical,
+        wrap,
+    })
 }
 
 /// The built-in number formats (ECMA-376 §18.8.30). Only the ids Excel actually
@@ -285,7 +478,7 @@ fn read_sheet(
     bytes: &[u8],
     part: &str,
     shared: &[String],
-    formats: &[String],
+    formats: &[CellXf],
     fidelity: &mut Fidelity,
 ) -> Result<Vec<Cell>, XlsxError> {
     let mut reader = Reader::new(bytes);
@@ -366,7 +559,7 @@ fn build_cell(
     formula_text: &str,
     inline_text: &str,
     shared: &[String],
-    formats: &[String],
+    formats: &[CellXf],
     fidelity: &mut Fidelity,
 ) -> Option<Cell> {
     // `parse_a1` is the engine's own, not a second implementation: a reader
@@ -381,10 +574,9 @@ fn build_cell(
         return None;
     };
 
-    let number_format = match style {
+    let xf = match style {
         Some(index) => match formats.get(index) {
-            Some(code) if !code.is_empty() => Some(code.clone()),
-            Some(_) => None,
+            Some(xf) => Some(xf.clone()),
             None => {
                 fidelity.losses.push(Loss {
                     part: part.to_string(),
@@ -396,6 +588,13 @@ fn build_cell(
         },
         None => None,
     };
+    let number_format = xf
+        .as_ref()
+        .map(|x| x.number_format.clone())
+        .filter(|code| !code.is_empty());
+    let font = xf.as_ref().and_then(|x| x.font.clone());
+    let fill = xf.as_ref().and_then(|x| x.fill);
+    let alignment = xf.as_ref().and_then(|x| x.alignment);
 
     let value = match cell_type {
         // Shared string: `<v>` is an index into the table.
@@ -459,7 +658,15 @@ fn build_cell(
 
     // A cell with nothing in it at all carries no information; XLSX emits them
     // to hold a style, and keeping them would put empty cells in every import.
-    if matches!(value, Value::Blank) && formula.is_none() && number_format.is_none() {
+    // "A style" now means any facet, not just a number format — dropping a
+    // blank cell that exists only to be yellow would lose the yellow.
+    if matches!(value, Value::Blank)
+        && formula.is_none()
+        && number_format.is_none()
+        && font.is_none()
+        && fill.is_none()
+        && alignment.is_none()
+    {
         return None;
     }
 
@@ -469,6 +676,9 @@ fn build_cell(
         value,
         formula,
         number_format,
+        font,
+        fill,
+        alignment,
     })
 }
 

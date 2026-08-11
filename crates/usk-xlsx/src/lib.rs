@@ -1,4 +1,4 @@
-//! usk-xlsx — XLSX **read** (BOOTSTRAP row 12, docs/24).
+//! usk-xlsx — XLSX **read and write** (BOOTSTRAP row 12 + session 29, docs/24).
 //!
 //! > *XLSX read (values+formulas) in a sandboxed subprocess ... per-file
 //! > fidelity reports on legacy imports; the number is published.*
@@ -7,11 +7,19 @@
 //! `no_std + alloc`, no I/O: it is handed a container's bytes by
 //! `ehkatra-parse`, which is the process that may safely be wrong about them.
 //!
-//! # Read, not round-trip
-//! BOOTSTRAP puts XLSX *write* explicitly outside v0.1, so this is deliberately
+//! # A projection, in both directions
+//! BOOTSTRAP put XLSX *write* outside v0.1, so the read side is deliberately
 //! a projection and not a lossless model. The parts that are not read are
 //! **named in the report** rather than silently dropped — a fidelity number
 //! that counts only what it looked at is not a fidelity number.
+//!
+//! The [`write`] module (session 29) is that projection's inverse: it emits
+//! exactly the modelled surface — values, formulas with cached results,
+//! number formats — and holds itself to the same honesty rule via
+//! [`write::WriteReport`]: source parts not re-emitted and cells that could
+//! not cross losslessly are named, never silently dropped. Round-trip
+//! read → write → re-read over the corpus is the published write-fidelity
+//! number (MEASUREMENTS.md, W-XLSX-WRITE).
 //!
 //! # Active content (docs/24)
 //! > *active (vbaProject, OLE, ActiveX, DDE) → quarantine ... never executed,
@@ -26,9 +34,13 @@
 extern crate alloc;
 
 mod parse;
+pub mod write;
 
 use alloc::string::String;
 use alloc::vec::Vec;
+pub use usk_oplog::{
+    Alignment, FontFacet, StyleFacet, FONT_BOLD, FONT_ITALIC, FONT_STRIKE, FONT_UNDERLINE,
+};
 use usk_types::Value;
 use usk_zip::ZipError;
 
@@ -51,6 +63,48 @@ pub struct Cell {
     /// The resolved number-format code (`"0.00"`, `"yyyy-mm-dd"`), if the cell
     /// has a style that names one.
     pub number_format: Option<String>,
+    /// The resolved font, if the cell's `cellXfs` entry names one other than
+    /// the workbook default. `fontId` 0 is the default and produces `None`,
+    /// because "styled with the default font" and "unstyled" are the same
+    /// document (ADR-041's facets are what *differs* from the default).
+    pub font: Option<FontFacet>,
+    /// A solid pattern fill's foreground colour, ARGB. `fillId` 0 (`none`) and
+    /// 1 (`gray125`) are the skeleton every styles part carries and produce
+    /// `None`, for the same reason.
+    pub fill: Option<u32>,
+    /// Horizontal/vertical alignment and wrap, where the entry carries an
+    /// `<alignment>` that is not the default.
+    pub alignment: Option<Alignment>,
+}
+
+impl Cell {
+    /// The cell's formatting as op-layer facets, ready for `Payload::SetStyle`
+    /// — which is why these are `usk_oplog` types rather than a second
+    /// spelling of them (DP-A4).
+    pub fn facets(&self) -> Vec<StyleFacet> {
+        let mut out = Vec::new();
+        if let Some(code) = &self.number_format {
+            out.push(StyleFacet::NumberFormat(code.clone()));
+        }
+        if let Some(font) = &self.font {
+            out.push(StyleFacet::Font(font.clone()));
+        }
+        if let Some(argb) = self.fill {
+            out.push(StyleFacet::Fill(argb));
+        }
+        if let Some(a) = self.alignment {
+            out.push(StyleFacet::Align(a));
+        }
+        out
+    }
+
+    /// True when the cell carries no formatting at all.
+    pub fn is_unformatted(&self) -> bool {
+        self.number_format.is_none()
+            && self.font.is_none()
+            && self.fill.is_none()
+            && self.alignment.is_none()
+    }
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -90,6 +144,11 @@ pub struct Fidelity {
     pub formulas_read: usize,
     /// Cells carrying a number format this build resolved to a code.
     pub number_formats_resolved: usize,
+    /// Cells carrying any style facet this build resolved — number format,
+    /// font, fill or alignment (ADR-041). Counted separately from
+    /// [`Fidelity::number_formats_resolved`] so session 29's number stays
+    /// comparable with itself.
+    pub styles_resolved: usize,
     /// Things that were read but lost something on the way — an unsupported
     /// cell type, an unresolvable style. Each is a fidelity miss with a reason.
     pub losses: Vec<Loss>,

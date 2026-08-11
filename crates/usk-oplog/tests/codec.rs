@@ -6,7 +6,9 @@
 //! string per op, and decoding it returns the op unchanged.
 
 use usk_oplog::{
-    is_known_tag, Anchor, DecodeError, Op, OpLog, OpaqueOp, Payload, RangeBinding, MAX_OP_BYTES,
+    is_known_facet, is_known_tag, Alignment, Anchor, AxisSpan, DecodeError, FontFacet, Op, OpLog,
+    OpaqueOp, Payload, RangeBinding, StyleFacet, StyleTarget, UnknownFacet, FONT_BOLD, FONT_ITALIC,
+    FONT_STRIKE, FONT_UNDERLINE, MAX_OP_BYTES,
 };
 use usk_types::{
     ActorId, ArithOp, CellError, ColId, Decimal, ErrorKind, OpId, Origin, RowId, TypeTag, Value,
@@ -127,6 +129,71 @@ fn corpus() -> Vec<Op> {
         op(10, Payload::UndeleteRow { row: cell().0 }),
         op(11, Payload::UndeleteCol { col: cell().1 }),
     ];
+    // Styles (ADR-041). Every span shape and every facet shape, because the
+    // list above is the one docs/29 asks to be kept complete and these are the
+    // first new variants since the taxonomy was sealed.
+    let targets = [
+        StyleTarget::cell(cell().0, cell().1),
+        StyleTarget {
+            rows: AxisSpan::All,
+            cols: AxisSpan::Between(id(3, 1), id(3, 4)),
+        },
+        StyleTarget {
+            rows: AxisSpan::Between(id(2, 1), id(2, 9)),
+            cols: AxisSpan::All,
+        },
+        StyleTarget {
+            rows: AxisSpan::All,
+            cols: AxisSpan::All,
+        },
+    ];
+    let facets = [
+        StyleFacet::NumberFormat(String::from("#,##0.00;[Red](#,##0.00)")),
+        // An empty format code: the zero-length facet body, which is the case a
+        // length prefix is easiest to get wrong on.
+        StyleFacet::NumberFormat(String::new()),
+        StyleFacet::Font(FontFacet {
+            flags: FONT_BOLD | FONT_ITALIC | FONT_UNDERLINE | FONT_STRIKE,
+            half_points: 21,
+            argb: 0xFFC0_00FF,
+            name: String::from("Segoe UI — üñî"),
+        }),
+        // An empty font name: the font body at its minimum length.
+        StyleFacet::Font(FontFacet {
+            flags: 0,
+            half_points: 0,
+            argb: 0,
+            name: String::new(),
+        }),
+        StyleFacet::Fill(0xFFFF_FF00),
+        StyleFacet::Align(Alignment {
+            horizontal: 3,
+            vertical: 2,
+            wrap: true,
+        }),
+        StyleFacet::Align(Alignment {
+            horizontal: 0,
+            vertical: 0,
+            wrap: false,
+        }),
+        StyleFacet::Unknown(
+            UnknownFacet::new(0x40, vec![0xDE, 0xAD, 0xBE, 0xEF]).expect("0x40 is not ours"),
+        ),
+        // An unknown facet with an empty body: nothing to preserve, and it must
+        // still round-trip rather than becoming a differently-shaped nothing.
+        StyleFacet::Unknown(UnknownFacet::new(0x7F, Vec::new()).expect("0x7F is not ours")),
+    ];
+    let mut counter = 200u64;
+    for target in targets {
+        for facet in facets.clone() {
+            counter += 1;
+            ops.push(op(counter, Payload::SetStyle { target, facet }));
+        }
+        for facet_slot in [0x01, 0x02, 0x03, 0x04, 0x05, 0xFF] {
+            counter += 1;
+            ops.push(op(counter, Payload::ClearStyle { target, facet_slot }));
+        }
+    }
     for (n, value) in values.into_iter().enumerate() {
         ops.push(op(
             100 + n as u64,
@@ -376,17 +443,93 @@ fn every_known_tag_decodes_and_every_other_is_opaque() {
     }
 }
 
+/// `is_known_facet` and the facet decoder's match are two lists that must
+/// agree, exactly as `is_known_tag` and `Op::decode` are. Pinned over all 256
+/// facet tags rather than trusted (ADR-041 decision 3).
+#[test]
+fn every_known_facet_decodes_and_every_other_is_unknown() {
+    for tag in 0u8..=0xFF {
+        // A four-byte body: valid for `Fill`, wrong length for the others, and
+        // meaningless for an unknown tag — which is the point. What is asserted
+        // is only *which arm* the tag reaches.
+        let mut bytes = vec![tag];
+        bytes.extend_from_slice(&4u32.to_be_bytes());
+        bytes.extend_from_slice(&[1, 2, 3, 4]);
+        let decoded = StyleFacet::decode(&bytes);
+        match decoded {
+            Ok(StyleFacet::Unknown(u)) => {
+                assert!(
+                    !is_known_facet(tag),
+                    "tag {tag:#04x} is ours and was not decoded"
+                );
+                assert_eq!(u.tag(), tag);
+                assert_eq!(u.body(), &[1, 2, 3, 4]);
+            }
+            other => assert!(
+                is_known_facet(tag),
+                "tag {tag:#04x} is not ours but did not become Unknown: {other:?}"
+            ),
+        }
+    }
+}
+
+/// DP-A4 one level down: an unknown facet carrying a tag we *do* understand
+/// would be a second spelling of a facet with exactly one, so it cannot be
+/// built.
+#[test]
+fn an_unknown_facet_cannot_carry_a_tag_this_build_knows() {
+    for tag in 0x01u8..=0x04 {
+        assert!(
+            UnknownFacet::new(tag, Vec::new()).is_none(),
+            "facet tag {tag:#04x} is ours and must be decoded, not preserved"
+        );
+    }
+    assert!(UnknownFacet::new(0x00, Vec::new()).is_some());
+    assert!(UnknownFacet::new(0x05, Vec::new()).is_some());
+}
+
+/// The facet length prefix is checked, not trusted: a known facet whose body
+/// does not fill the length it claims is a framing lie, and the decoder must
+/// say so rather than read past it or silently accept the gap.
+#[test]
+fn a_facet_that_underfills_its_length_is_refused() {
+    // Tag 0x03 is `Fill`, whose body is exactly four bytes. Claim six.
+    let mut bytes = vec![0x03u8];
+    bytes.extend_from_slice(&6u32.to_be_bytes());
+    bytes.extend_from_slice(&[1, 2, 3, 4, 5, 6]);
+    assert_eq!(
+        StyleFacet::decode(&bytes),
+        Err(DecodeError::TrailingBytes { used: 4, len: 6 })
+    );
+}
+
+/// An alignment discriminant outside its defined range is a named error, not a
+/// silently different alignment — the same rule `Anchor` and `Origin` follow.
+#[test]
+fn an_out_of_range_alignment_is_a_named_error() {
+    for body in [[9u8, 0, 0], [0, 9, 0], [0, 0, 2]] {
+        let mut bytes = vec![0x04u8];
+        bytes.extend_from_slice(&3u32.to_be_bytes());
+        bytes.extend_from_slice(&body);
+        assert_eq!(
+            StyleFacet::decode(&bytes),
+            Err(DecodeError::BadDiscriminant),
+            "body {body:?} must not decode"
+        );
+    }
+}
+
 /// DP-A4 says one canonical byte string per op. An opaque op carrying a tag we
 /// *do* understand would be a second spelling, so it cannot be built.
 #[test]
 fn an_opaque_op_cannot_carry_a_tag_this_build_knows() {
-    for tag in 0x10u8..=0x18 {
+    for tag in 0x10u8..=0x1A {
         assert!(
             OpaqueOp::new(tag, Vec::new()).is_none(),
             "tag {tag:#04x} is ours and must be decoded, not preserved"
         );
     }
-    assert!(OpaqueOp::new(0x19, Vec::new()).is_some());
+    assert!(OpaqueOp::new(0x1B, Vec::new()).is_some());
     assert!(OpaqueOp::new(0x00, Vec::new()).is_some());
 }
 

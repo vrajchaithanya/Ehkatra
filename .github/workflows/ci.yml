@@ -48,6 +48,33 @@ jobs:
       - name: Complexity budget (DP-S2, docs/07 §3)
         run: node tools/dep-budget.mjs
 
+  # The shell is a separate workspace with its own lockfile (ADR-037 Amd 1,
+  # D-116), which means *every* gate in the job above misses it:
+  # `cargo fmt --all`, `cargo clippy --workspace` and `cargo test --workspace`
+  # all stop at the kernel workspace's members. It had no CI coverage at all
+  # until the editing surface landed and gave it tests worth running.
+  #
+  # These tests need no GPU and no display: `app`, `input`, `scene`, `text` and
+  # `png` are all decided without one, which is the point of keeping the
+  # decisions out of `window.rs`. The paths that *do* need an adapter
+  # (`--render`, `--script`, `--present`) are binaries, not tests.
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: "shell" }
+      # winit's Linux backends dlopen their libraries at run time, but the
+      # xkbcommon bindings want the headers present to build.
+      - run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev
+      - name: Format (DP-C1)
+        run: cargo fmt --all --manifest-path shell/Cargo.toml -- --check
+      - name: Clippy (DP-C1)
+        run: cargo clippy --manifest-path shell/Cargo.toml --all-targets -- -D warnings
+      - name: Tests (DP-C4)
+        run: cargo test --manifest-path shell/Cargo.toml
+
   supply-chain:
     # docs/07 gap register: "No dependency/supply-chain scanning — solo devs get
     # owned via deps". Closed here (DP-E8).

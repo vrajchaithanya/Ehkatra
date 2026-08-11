@@ -7,10 +7,12 @@
 //! per-cell vertex buffer to rebuild, which is what keeps a scroll frame inside
 //! docs/31's 8.3 ms.
 //!
-//! Rendering is **offscreen by default**, and that is deliberate rather than a
-//! limitation: a render that targets a texture can be read back, hashed and
-//! committed as evidence (`demo/`), and it runs on a machine with no display.
-//! The windowed path presents the same scene to a surface.
+//! Rendering has **two targets and one path**: a texture that can be read
+//! back, hashed and committed as evidence (`demo/`) on a machine with no
+//! display, and a window surface that is presented to the compositor
+//! ([`Present`]). [`Renderer::encode_scene`] is the single place a scene
+//! becomes GPU commands, so the two cannot drift — the presented frame is the
+//! frame the PNG shows, by construction rather than by discipline.
 
 use std::borrow::Cow;
 
@@ -95,6 +97,56 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
 }
 "#;
 
+/// The offscreen colour format. sRGB, so the hardware does the linear→sRGB
+/// encode on write and the theme can be authored in the space a designer picks
+/// colours in.
+pub const OFFSCREEN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
+
+/// A window surface configured for presentation, and the DPI scale the frames
+/// drawn into it are laid out at.
+///
+/// Held apart from [`Renderer`] because the renderer outlives any particular
+/// window and a headless one never has a surface at all.
+pub struct Present {
+    surface: wgpu::Surface<'static>,
+    config: wgpu::SurfaceConfiguration,
+    /// Display scale factor. The scene is authored in logical pixels; this is
+    /// the only place the conversion to device pixels happens.
+    pub scale: f32,
+}
+
+impl Present {
+    /// Logical size of the drawable area — the coordinate space a scene is
+    /// built in.
+    pub fn logical_size(&self) -> (f32, f32) {
+        (
+            self.config.width as f32 / self.scale,
+            self.config.height as f32 / self.scale,
+        )
+    }
+
+    pub fn physical_size(&self) -> (u32, u32) {
+        (self.config.width, self.config.height)
+    }
+}
+
+/// What one presented frame cost, split so the number means something.
+///
+/// Under `Fifo`, `get_current_texture` **blocks until the display is ready for
+/// another image**. Timing the whole call therefore measures the refresh
+/// interval and not the renderer: on a 120 Hz panel every frame comes out at
+/// about 8.3 ms whether the scene took 0.2 ms or 5 ms to build. So the wait is
+/// reported apart from the work, and docs/31's 8.3 ms scroll-frame budget is
+/// judged against the work — the part the application controls, and the only
+/// part that can actually drop a frame.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct FrameTiming {
+    /// Time blocked in `get_current_texture`. Vsync, not cost.
+    pub acquire_ms: f64,
+    /// Encoding the pass and submitting it.
+    pub submit_ms: f64,
+}
+
 pub struct Renderer {
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -102,6 +154,7 @@ pub struct Renderer {
     bind_group_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     atlas: Option<(wgpu::TextureView, u32)>,
+    format: wgpu::TextureFormat,
 }
 
 impl Renderer {
@@ -117,20 +170,106 @@ impl Renderer {
             force_fallback_adapter: false,
             compatible_surface: None,
         }))?;
-        let (device, queue) = pollster::block_on(adapter.request_device(
+        let (device, queue) = Self::open_device(&adapter)?;
+        Some(Self::with_device(device, queue, OFFSCREEN_FORMAT))
+    }
+
+    fn open_device(adapter: &wgpu::Adapter) -> Option<(wgpu::Device, wgpu::Queue)> {
+        pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
                 label: Some("ehkatra"),
                 required_features: wgpu::Features::empty(),
+                // `downlevel_defaults` and not `default()`: the grid needs
+                // nothing a 2015 integrated GPU lacks, and asking for more
+                // would refuse to open on hardware that can run the product
+                // perfectly well.
                 required_limits: wgpu::Limits::downlevel_defaults(),
                 memory_hints: wgpu::MemoryHints::Performance,
             },
             None,
         ))
-        .ok()?;
-        Some(Self::with_device(device, queue))
+        .ok()
     }
 
-    pub fn with_device(device: wgpu::Device, queue: wgpu::Queue) -> Renderer {
+    /// Creates a renderer bound to a window surface, and the surface itself.
+    ///
+    /// The adapter is requested **with the surface as `compatible_surface`**,
+    /// which is not a formality: on a multi-GPU laptop the adapter that can
+    /// present to this window is not always the one a headless request would
+    /// pick, and the failure mode is a device that creates textures happily and
+    /// cannot show them.
+    ///
+    /// `scale` is the display's DPI factor; frames are authored in logical
+    /// pixels and stretched to the physical surface by the projection, so a
+    /// caller never converts coordinates itself.
+    pub fn for_surface<T>(
+        target: T,
+        width: u32,
+        height: u32,
+        scale: f32,
+    ) -> Result<(Renderer, Present), String>
+    where
+        T: Into<wgpu::SurfaceTarget<'static>>,
+    {
+        let instance = wgpu::Instance::default();
+        let surface = instance
+            .create_surface(target)
+            .map_err(|e| format!("creating the window surface: {e}"))?;
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            // A grid is not a game: the integrated GPU draws it inside budget
+            // and the discrete one costs battery, which docs/31 budgets
+            // explicitly ("<8% per hour of active editing").
+            power_preference: wgpu::PowerPreference::LowPower,
+            force_fallback_adapter: false,
+            compatible_surface: Some(&surface),
+        }))
+        .ok_or("no GPU adapter can present to this window")?;
+        let (device, queue) =
+            Self::open_device(&adapter).ok_or("the GPU adapter refused to open a device")?;
+
+        let caps = surface.get_capabilities(&adapter);
+        // An sRGB target if one exists, so the same theme constants produce the
+        // same colours as the offscreen path. If none does, the first format is
+        // taken and the frame is a shade off rather than absent — reported
+        // through `Present::format_is_srgb` rather than silently.
+        let format = caps
+            .formats
+            .iter()
+            .copied()
+            .find(|f| f.is_srgb())
+            .unwrap_or_else(|| caps.formats[0]);
+        let config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format,
+            width: width.max(1),
+            height: height.max(1),
+            // Fifo is vsync and is the only mode guaranteed present everywhere.
+            // docs/31's budget is a *frame* budget, not a frame *rate* target:
+            // a grid that redraws only when something changed has no reason to
+            // spin the GPU faster than the display.
+            present_mode: wgpu::PresentMode::Fifo,
+            alpha_mode: caps.alpha_modes[0],
+            view_formats: Vec::new(),
+            desired_maximum_frame_latency: 2,
+        };
+        surface.configure(&device, &config);
+
+        let renderer = Self::with_device(device, queue, format);
+        Ok((
+            renderer,
+            Present {
+                surface,
+                config,
+                scale,
+            },
+        ))
+    }
+
+    pub fn with_device(
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+        format: wgpu::TextureFormat,
+    ) -> Renderer {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("grid"),
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(SHADER)),
@@ -189,7 +328,7 @@ impl Renderer {
                 entry_point: Some("fs"),
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                    format,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -215,7 +354,19 @@ impl Renderer {
             bind_group_layout,
             sampler,
             atlas: None,
+            format,
         }
+    }
+
+    pub fn format(&self) -> wgpu::TextureFormat {
+        self.format
+    }
+
+    /// Whether the presented format encodes sRGB in hardware. `false` means the
+    /// theme's colours are being written to a linear target and will look
+    /// washed out — a fact worth surfacing rather than shipping quietly.
+    pub fn format_is_srgb(&self) -> bool {
+        self.format.is_srgb()
     }
 
     /// Uploads the glyph atlas. Called once; the atlas grows by rasterising
@@ -255,25 +406,65 @@ impl Renderer {
         self.atlas = Some((texture.create_view(&Default::default()), size));
     }
 
-    /// Renders a scene to an RGBA8 buffer of `width * height * 4` bytes.
-    pub fn render_to_rgba(&self, width: u32, height: u32, quads: &[Quad]) -> Vec<u8> {
-        let size = wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        };
-        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("target"),
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        let view = texture.create_view(&Default::default());
+    /// Resizes the surface. A zero dimension is ignored: Windows reports one
+    /// when the window is minimised, and configuring a zero-sized surface is a
+    /// validation error rather than a no-op.
+    pub fn reconfigure(&self, present: &mut Present, width: u32, height: u32, scale: f32) {
+        if width == 0 || height == 0 {
+            return;
+        }
+        present.config.width = width;
+        present.config.height = height;
+        present.scale = scale;
+        present.surface.configure(&self.device, &present.config);
+    }
 
+    /// Draws a scene and hands the frame to the compositor.
+    ///
+    /// `Lost`/`Outdated` are recovered by reconfiguring, because they are what
+    /// a resize or a monitor change looks like from here and neither is an
+    /// error the caller can do anything else about.
+    pub fn present(
+        &self,
+        present: &mut Present,
+        quads: &[Quad],
+    ) -> Result<FrameTiming, wgpu::SurfaceError> {
+        let acquire = std::time::Instant::now();
+        let frame = match present.surface.get_current_texture() {
+            Ok(frame) => frame,
+            Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                present.surface.configure(&self.device, &present.config);
+                present.surface.get_current_texture()?
+            }
+            Err(other) => return Err(other),
+        };
+        let acquire_ms = acquire.elapsed().as_secs_f64() * 1000.0;
+
+        let work = std::time::Instant::now();
+        let view = frame.texture.create_view(&Default::default());
+        // Logical, not physical: the projection maps the logical box onto the
+        // whole surface, so every coordinate in the scene stays DPI-independent
+        // and there is exactly one place the scale factor is applied.
+        let (lw, lh) = present.logical_size();
+        let encoder = self.encode_scene(&view, lw, lh, quads);
+        self.queue.submit(Some(encoder.finish()));
+        frame.present();
+        Ok(FrameTiming {
+            acquire_ms,
+            submit_ms: work.elapsed().as_secs_f64() * 1000.0,
+        })
+    }
+
+    /// Builds the command buffer for one frame. The **only** place a scene
+    /// becomes GPU commands; both the presented and the read-back paths go
+    /// through it, so a frame on screen and a frame in a PNG cannot differ.
+    fn encode_scene(
+        &self,
+        view: &wgpu::TextureView,
+        width: f32,
+        height: f32,
+        quads: &[Quad],
+    ) -> wgpu::CommandEncoder {
         // A 1x1 opaque stand-in, so a scene rendered before any atlas exists
         // draws solid quads correctly instead of failing to bind.
         let blank = self.device.create_texture(&wgpu::TextureDescriptor {
@@ -318,7 +509,7 @@ impl Renderer {
             mapped_at_creation: false,
         });
         let atlas_size = self.atlas.as_ref().map_or(1.0, |(_, n)| *n as f32);
-        let dims = [width as f32, height as f32, atlas_size, atlas_size];
+        let dims = [width, height, atlas_size, atlas_size];
         self.queue
             .write_buffer(&uniform, 0, quads_as_bytes_f32(&dims));
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -353,23 +544,12 @@ impl Renderer {
                 .write_buffer(&instances, 0, quads_as_bytes(quads));
         }
 
-        // Readback rows must be aligned to 256 bytes, so the buffer is padded
-        // and the padding stripped after mapping.
-        let unpadded = width as usize * 4;
-        let padded = unpadded.div_ceil(256) * 256;
-        let readback = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("readback"),
-            size: (padded * height as usize) as u64,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
-
         let mut encoder = self.device.create_command_encoder(&Default::default());
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("grid"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
+                    view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
@@ -386,6 +566,43 @@ impl Renderer {
             // One draw call for the whole grid.
             pass.draw(0..6, 0..quads.len() as u32);
         }
+        encoder
+    }
+
+    /// Renders a scene to an RGBA8 buffer of `width * height * 4` bytes.
+    ///
+    /// Device pixels: this path has no display and so no scale factor, and the
+    /// caller that wants a 2× frame asks for a 2× buffer.
+    pub fn render_to_rgba(&self, width: u32, height: u32, quads: &[Quad]) -> Vec<u8> {
+        let size = wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        };
+        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("target"),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: self.format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&Default::default());
+
+        // Readback rows must be aligned to 256 bytes, so the buffer is padded
+        // and the padding stripped after mapping.
+        let unpadded = width as usize * 4;
+        let padded = unpadded.div_ceil(256) * 256;
+        let readback = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("readback"),
+            size: (padded * height as usize) as u64,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        let mut encoder = self.encode_scene(&view, width as f32, height as f32, quads);
         encoder.copy_texture_to_buffer(
             wgpu::ImageCopyTexture {
                 texture: &texture,

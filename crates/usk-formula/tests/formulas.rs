@@ -1318,6 +1318,60 @@ fn ranges_and_scalars_interoperate() {
     }
 }
 
+/// TD-68: the lexer classifies a name shaped like a reference — letters then
+/// digits — as `CellRef`, so `LOG10`, `ATAN2` and `SUMXMY2` all arrive at the
+/// parser wearing the wrong hat. A reference followed by `(` is a call.
+///
+/// Latent when it was found: no function in the v0.1 set is spelled with a
+/// trailing digit. The value of fixing it now is that the first one added would
+/// have failed in a way that looked like a bug in that function.
+#[test]
+fn a_function_name_shaped_like_a_reference_is_still_a_call() {
+    for src in ["=LOG10(100)", "=ATAN2(1,1)", "=SUMXMY2(1,2)"] {
+        match &parse(src).ast {
+            Ast::Call { name, .. } => {
+                assert!(!name.is_empty(), "{src} produced an unnamed call");
+            }
+            other => panic!("{src} parsed as {other:?}, not a call"),
+        }
+    }
+    // And a real reference is still a reference.
+    assert!(matches!(parse("=A1").ast, Ast::Reference(_)));
+    assert!(matches!(
+        parse("=$A$1").ast,
+        Ast::Range(..) | Ast::Reference(_)
+    ));
+}
+
+/// The user-visible outcome: an unimplemented function reports `#NAME?`.
+///
+/// Stated plainly — **this one is not a regression test for TD-68**. It passed
+/// before the fix too, because a trailing-garbage parse also yields
+/// `Invalid(Name)` and so also renders `#NAME?`. It is here to pin the outcome
+/// a user sees, not to discriminate the bug; the two tests either side of it do
+/// that, and both were confirmed to fail with the fix removed.
+#[test]
+fn an_unimplemented_function_with_a_digit_reports_name_and_not_a_reference_error() {
+    assert_eq!(
+        kind_of(&ev("=LOG10(100)", Profile::Compat)),
+        Some(ErrorKind::Name)
+    );
+}
+
+/// The argument list of such a call is parsed, not swallowed — so the day
+/// `LOG10` is implemented, its arguments are already reaching it.
+#[test]
+fn the_arguments_of_a_reference_shaped_call_are_parsed() {
+    match &parse("=ATAN2(A1,B2)").ast {
+        Ast::Call { args, .. } => {
+            assert_eq!(args.len(), 2, "both arguments must survive");
+            assert!(matches!(args[0], Ast::Reference(_)));
+            assert!(matches!(args[1], Ast::Reference(_)));
+        }
+        other => panic!("parsed as {other:?}"),
+    }
+}
+
 fn alloc_cells(values: &[Value]) -> Vec<Value> {
     values.to_vec()
 }

@@ -456,6 +456,24 @@ impl<'a> Parser<'a> {
                 )
             }
             TokenKind::CellRef => {
+                // A reference followed by `(` is a **function call** (TD-68).
+                //
+                // The lexer's `looks_like_cell_ref` is a *shape* test — letters,
+                // an optional `$`, then digits — so `LOG10`, `ATAN2` and
+                // `SUMXMY2` all lex as `CellRef`. Without this, `=LOG10(100)`
+                // parsed as a reference to a cell in column `LOG` and the
+                // `(100)` after it became trailing garbage.
+                //
+                // Latent until it would not have been: no function in the v0.1
+                // set is spelled with a trailing digit, so nothing misbehaved —
+                // and the first one added would have looked like a bug in
+                // *that* function rather than in the lexer. The `Ident` arm
+                // below has always made this check; it belongs here as well,
+                // and in the parser rather than in each caller, because it is a
+                // question about the grammar and not about any one consumer.
+                if self.peek_kind() == Some(TokenKind::LParen) {
+                    return self.call(children, tok.text(self.source));
+                }
                 let ast = match parse_a1(tok.text(self.source)) {
                     Some(r) => Ast::Reference(r),
                     None => Ast::Invalid(ErrorKind::Ref),

@@ -27,7 +27,8 @@
 //!
 //! # Format
 //! Little-endian, length-prefixed, no padding. Sections in a fixed order:
-//! magic · version · rows axis · cols axis · slot maps · tiles · formulas.
+//! magic · version · rows axis · cols axis · slot maps · tiles · formulas ·
+//! styles · stamp sidecar.
 //! Every count is bounded on read, because an image is an untrusted input the
 //! moment a container is a file somebody can hand you (docs/37).
 //!
@@ -74,13 +75,22 @@ const MAGIC: &[u8; 8] = b"EHKIMG\0\0";
 /// **2** adds the winner-stamp sidecar (ADR-036). Version 1 was never the
 /// snapshot body and so was never written to any container, which is why the
 /// bump needs no migration.
-pub const IMAGE_VERSION: u16 = 2;
+///
+/// **3** adds the styles section (ADR-041). Styles are hashed state, so an
+/// image that omitted them would rebuild a state whose `state_hash` disagrees
+/// with what the snapshot recorded — `Snapshot::verify` would refuse it, which
+/// is the safe failure but the wrong one. A version-2 image is now refused and
+/// the caller replays ops instead: recoverable by construction, and it costs
+/// no data.
+pub const IMAGE_VERSION: u16 = 3;
 
 /// Bounds on an untrusted image (docs/37). Each is above anything a real
 /// workbook produces and below anything that could exhaust memory.
 pub(crate) const MAX_AXIS_ENTRIES: usize = 1 << 26;
 pub(crate) const MAX_TILES: usize = 1 << 22;
 const MAX_FORMULAS: usize = 1 << 24;
+const MAX_STYLE_VALUES: usize = 1 << 20;
+const MAX_STYLE_RULES: usize = 1 << 22;
 const MAX_LOSERS: usize = 1 << 16;
 const MAX_TEXT_BYTES: usize = 1 << 26;
 
@@ -195,6 +205,7 @@ impl State {
         write_axis(&mut w, &self.cols);
         self.cells.write_image(&mut w);
         write_formulas(&mut w, &self.formulas);
+        write_styles(&mut w, &self.styles);
         write_stamps(&mut w, &self.cells, stamps);
 
         let tiles = core::mem::take(&mut w.tiles);
@@ -220,6 +231,7 @@ impl State {
         let cols = read_axis(&mut r)?;
         let cells = TileStore::read_image(&mut r)?;
         let formulas = read_formulas(&mut r)?;
+        let styles = read_styles(&mut r)?;
         let stamps = read_stamps(&mut r, &cells)?;
         if r.at != bytes.len() {
             return Err(ImageError::Malformed("trailing bytes after the image"));
@@ -230,6 +242,12 @@ impl State {
                 cols,
                 cells,
                 formulas,
+                styles,
+                // An image is not a fold over a whole log, so the tip fast path
+                // is unavailable by construction: what an adopted state has
+                // instead is `apply_tail`, which carries the winner stamps this
+                // one cannot reconstruct (ADR-036).
+                ..Default::default()
             },
             stamps,
         ))
@@ -356,6 +374,80 @@ fn read_axis(r: &mut Reader) -> Result<AxisSeq, ImageError> {
         axis.tombstones.insert(id, ());
     }
     Ok(axis)
+}
+
+/// The styles section (`IMAGE_VERSION` 3, ADR-041): the interner, then the
+/// rules.
+///
+/// The interner is written as **values**, not as anything derived from them,
+/// and each rule refers to one by index — so a restored registry has the
+/// identical id for the identical value and the state hash (which folds values,
+/// never ids) comes out the same either way. Facets and targets are written
+/// through their own canonical encoders rather than field by field, because a
+/// second spelling of a facet is exactly what DP-A4 forbids and a second
+/// *encoder* is how one gets written.
+fn write_styles(w: &mut Writer, registry: &crate::style::StyleRegistry) {
+    let table = registry.table();
+    w.len(table.len());
+    for value in table.values() {
+        let bytes = value.encode();
+        w.len(bytes.len());
+        w.out.extend_from_slice(&bytes);
+    }
+    w.len(registry.rules().len());
+    for rule in registry.rules() {
+        w.u64(rule.stamp.0);
+        w.opid(&rule.stamp.1);
+        let target = rule.target.encode();
+        w.len(target.len());
+        w.out.extend_from_slice(&target);
+        w.u8(rule.slot);
+        match rule.value {
+            crate::style::RuleValue::Clear => w.u8(0),
+            crate::style::RuleValue::Set(id) => {
+                w.u8(1);
+                w.u32(id);
+            }
+        }
+    }
+}
+
+fn read_styles(r: &mut Reader) -> Result<crate::style::StyleRegistry, ImageError> {
+    let values = r.count(MAX_STYLE_VALUES, "style values")?;
+    let mut table = Vec::with_capacity(values.min(1024));
+    for _ in 0..values {
+        let len = r.count(MAX_TEXT_BYTES, "style value bytes")?;
+        let bytes = r.take(len)?;
+        table.push(
+            usk_oplog::StyleFacet::decode(bytes)
+                .map_err(|_| ImageError::Malformed("style value"))?,
+        );
+    }
+    let count = r.count(MAX_STYLE_RULES, "style rules")?;
+    let mut rules = Vec::with_capacity(count.min(4096));
+    for _ in 0..count {
+        let lamport = r.u64()?;
+        let id = r.opid()?;
+        let len = r.count(MAX_TEXT_BYTES, "style target bytes")?;
+        let bytes = r.take(len)?;
+        let target = usk_oplog::StyleTarget::decode(bytes)
+            .map_err(|_| ImageError::Malformed("style target"))?;
+        let slot = r.u8()?;
+        let value = match r.u8()? {
+            0 => crate::style::RuleValue::Clear,
+            1 => crate::style::RuleValue::Set(r.u32()?),
+            _ => return Err(ImageError::Malformed("style rule value tag")),
+        };
+        rules.push(crate::style::Rule {
+            stamp: (lamport, id),
+            target,
+            slot,
+            value,
+        });
+    }
+    crate::style::StyleRegistry::from_image(table, rules).ok_or(ImageError::Malformed(
+        "style rule names a value that is not in the table",
+    ))
 }
 
 fn write_formulas(w: &mut Writer, registry: &FormulaRegistry) {
