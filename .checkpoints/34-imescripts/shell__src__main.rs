@@ -10,9 +10,6 @@
 //! * `--script <path> [rows]` drives a scripted keyboard/mouse session through
 //!   the **same** [`app::App`] the window drives and writes the resulting
 //!   frame. Editing is inspectable as an image without a person at a keyboard.
-//! * `--ime <dir> [rows]` replays the JP, CN and KR composition sequences
-//!   docs/48 names, checking every step and writing one frame per script
-//!   (W-IME-SCRIPTS, D-127). Exits non-zero on the first divergence.
 //! * `--bench [rows]` — W-SCROLL, an offscreen scroll frame.
 //! * `--present [frames]` — W-PRESENT, a **presented** scroll frame, which the
 //!   offscreen path cannot measure because it pays for a readback instead.
@@ -29,7 +26,6 @@ mod app;
 mod clipboard;
 mod fill;
 mod gpu;
-mod ime;
 mod input;
 mod png;
 mod scene;
@@ -62,15 +58,6 @@ fn main() {
             let rows = parse_rows(args.next(), 200);
             script::run(&path, rows)
         }
-        // W-IME-SCRIPTS (D-127): the JP/CN/KR composition sequences docs/48
-        // names, replayed through the real `App` with every step checked. A
-        // *check*, not a report — a divergence exits non-zero rather than
-        // printing itself into a wall of text nobody re-reads.
-        Some("--ime") => {
-            let dir = args.next().unwrap_or_else(|| "demo".into());
-            let rows = parse_rows(args.next(), 200);
-            ime::run(&dir, rows)
-        }
         Some("--bench") => bench(parse_rows(args.next(), 1_000_000)),
         // W-KEYSTROKE (docs/31): keystroke -> paint. The budget the editing
         // surface has to meet, and the one an offscreen scroll bench says
@@ -102,8 +89,8 @@ fn main() {
         // between two machines that agree on which face it was (D-125).
         Some("--fonts") => fonts(),
         Some(other) => Err(format!(
-            "unknown argument {other:?}; try --render <path>, --script <path>, --ime <dir>, \
-             --bench, --present, --fonts, or no arguments to open a window"
+            "unknown argument {other:?}; try --render <path>, --script <path>, --bench, \
+             --present, --fonts, or no arguments to open a window"
         )),
         None => open_window(WINDOW_ROWS, None),
     };

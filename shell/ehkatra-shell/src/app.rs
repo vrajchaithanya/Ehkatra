@@ -1441,6 +1441,25 @@ impl App {
     pub fn resolved_faces(&self) -> Vec<&str> {
         self.text.face_names()
     }
+
+    /// The faces *one string* resolves to on this host, and how many of its
+    /// characters no face could draw.
+    ///
+    /// [`App::resolved_faces`] answers for the whole session, which cannot
+    /// attribute a face to a script: once `Yu Gothic` is loaded for kana it is
+    /// in the session's list whether or not it is what drew `中文`. This lays
+    /// the string out and reports the faces *that* run used, which is the record
+    /// D-125 asks for at the granularity D-127 needs it — and the granularity at
+    /// which TD-83 is visible at all.
+    pub fn faces_for(&mut self, text: &str) -> (Vec<String>, u32) {
+        let run = self.text.layout(text, crate::text::CELL_PX, self.scale);
+        let names = run
+            .faces
+            .iter()
+            .filter_map(|slot| self.text.face_name(*slot).map(String::from))
+            .collect();
+        (names, run.unresolved)
+    }
 }
 
 /// An ordinal rectangle as A1 text: `B4`, or `B4:D9` for a range.

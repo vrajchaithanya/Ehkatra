@@ -1995,5 +1995,108 @@ named: `pick` parses a candidate face to test coverage and `resolve` then reads
 and parses the same face again, and rustybuzz's parse of a multi-megabyte CJK
 face may simply cost this. Profile the split before choosing.
 
+## W-IME-SCRIPTS (D-127, docs/48) — the three scripts, replayed and checked · session 34 · M1
+
+`ehkatra-shell --ime demo`, release. Not a latency number. This is the half of
+docs/48's *"IME validated by native JP/CN/KR typists"* that can be closed
+**without a typist**, and the section is written so the other half is impossible
+to mistake for closed.
+
+### What was replayed, and what "pass" means
+
+Three input-method **event sequences** through the real `App`, delivered exactly
+as `window.rs` forwards winit's `Ime::Preedit` / `Ime::Commit`. A step passes
+only if all four of the things a user can see are right: the display string, the
+caret's byte offset inside it, the underline span, and **that the cell is still
+blank**. The last one is the one no screenshot shows and the one that matters
+most — a document that acquired text from an unconfirmed composition is wrong in
+a way nobody notices until it ships.
+
+| Script | Sequence | Steps | Result | Cell after Enter | Face resolved | Unresolved |
+|---|---|---:|---|---|---|---:|
+| **JP** | kana per keystroke → two-clause conversion → commit | 10 | **pass** | `今日は晴れ` | `Yu Gothic` | 0 |
+| **CN** | Microsoft Pinyin, ASCII → partial conversion → commit | 9 | **pass** | `中文` | **`Yu Gothic`** | 0 |
+| **KR** | per-syllable, mid-word commit, decomposing Backspace | 10 | **pass** | `한글` | `Malgun Gothic` | 0 |
+
+**29/29 steps, 3/3 cells.** Frames: `demo/ime-jp.png` (conversion in flight,
+focus on the second clause), `demo/ime-cn.png` (`中wen` — one composition across
+a face seam, caret on the seam), `demo/ime-kr.png` (`한글` with only the second
+syllable underlined, after the mid-word commit put the first in the buffer).
+
+The three scripts are here because their event *shapes* differ, not because
+three is a nicer number than one. JP replaces the whole composition at
+conversion and reports its focused clause as a **selection range**; CN's
+composition is **ASCII for six of its nine steps** and becomes Han only at
+partial conversion; KR commits a finished syllable **on the keystroke that
+begins the next one**, so `Commit` and `Preedit` interleave inside a single
+word. A suite that composed kana three times would have proved one shape thrice
+— which is roughly what the 13 tests from session 31 did.
+
+### The two defects this found, and the one it ruled out
+
+**TD-83 — Chinese is drawn by a Japanese face.** `中文` resolves to `Yu Gothic`,
+which is `PREFERRED`'s 7th entry; `Microsoft YaHei` is the 10th and is never
+reached, because the list is ordered by coverage breadth and Yu Gothic covers
+these codepoints. Han unification means the characters are *correct* and the
+**shapes** are not, which to a native reader is the difference between their
+language and a foreign font.
+
+*The alternative cause was measured and ruled out rather than argued away.*
+`TextEngine::resolve` reuses an already-loaded face before consulting the
+database, so in a session that composed Japanese first, `中` could have inherited
+the kana's face for a reason that has nothing to do with `PREFERRED`. So the
+driver reports **both**: the face the running session used, and the face a
+**completely fresh engine** picks with no history in front of it.
+
+| Script | In session | Fresh engine, alone |
+|---|---|---|
+| JP `今日は晴れ` | `Yu Gothic` | `Yu Gothic` |
+| CN `中文` | `Yu Gothic` | `Yu Gothic` |
+| KR `한글` | `Malgun Gothic` | `Malgun Gothic` |
+
+Identical, so the cause is the preference order and not the loaded-face
+shortcut. Korean reaching `Malgun Gothic` at position **12** is the control that
+makes this reading safe: the list *is* walked that far when it has to be, so
+nothing is truncating the search — Korean is simply right by accident, because
+no Japanese face covers Hangul.
+
+**TD-84 — the focused clause is invisible.** Steps 6–9 of the JP script are a
+two-clause conversion. Steps 7 and 9 carry the *same text* and produce the *same
+underline span* `(0, 15)`; they differ only in the caret, because
+`Editor::display` keeps the start of the preedit cursor **range** and discards
+its end. A typist arrow-keying between clauses therefore sees the caret hop and
+no clause highlight. `demo/ime-jp.png` is the picture of it.
+
+### What this does NOT establish — the residue, published rather than absorbed
+
+docs/48 asks for validation **by native typists**. It has not happened, and
+D-123's rule applies to this exactly as it applies to XLSX: a native typist is
+the oracle here, and a number our own code produced cannot stand in for one.
+Two limits and then the list.
+
+1. **The sequences are authored, not captured.** No TSF trace was recorded. They
+   are modelled from documented input-method behaviour. Where they can be wrong
+   they are wrong about *content* — whether Microsoft Pinyin displays
+   `zhong'wen` or `zhong wen` — never about shape.
+2. **One host, one font set.** Every face above is what M1 happens to have
+   installed. A host without `Malgun Gothic` is a different measurement.
+
+**What a native typist must still check, and a script cannot** — the docs/48
+item stays open on precisely these, and each is a specific question rather than
+"try it and see":
+
+| # | Question only a person can answer | Why a script cannot |
+|---|---|---|
+| 1 | Are the **glyph forms** the ones your language uses? | This is TD-83, and the script can only report *which face*; whether `直` looks Chinese or Japanese to you is the whole question |
+| 2 | Does the **candidate window** land under the composing text, and stay there as the composition grows? | `App::ime_area` returns a rectangle and `window.rs` hands it to the platform; whether the OS then puts the list somewhere sensible is observable only on screen |
+| 3 | Does **conversion feel responsive** — is the first character of a session noticeably slower? | This is TD-82's 1.05–1.33× of a frame, on one keystroke. A stopwatch says "yes, measurably"; only a person says "yes, annoyingly" |
+| 4 | Does the **underline read as "unconfirmed"** in your writing system's conventions? | Ours is one weight for the whole composition. JP and CN IMEs distinguish the focused clause (TD-84); whether the rest of the convention matters is a cultural question |
+| 5 | Are these the **sequences your IME actually sends**? | Limit 1 above, stated as a question. A typist with a debug build settles it in a minute |
+| 6 | Does **Backspace mid-composition** do what you expect at every point? | The KR script models one decomposition; the real matrix is per-IME and per-position |
+| 7 | Do **half-width/full-width and IME-mode toggles** behave? | Never exercised at all. Not modelled here, and named so it is not mistaken for covered |
+
+Item 3's answer is what decides whether TD-82 is worth paying, which is why the
+handoff put the typist pass *before* it.
+
 ## Not yet measured (targets remain targets — docs/42)
 A-001 memory/10M cells · A-002 promotion rate · A-003 recalc 100k · A-005 wasm32 **in a real browser / Safari** (WASI-under-Node is not a browser and must not be reported as one) · all docs/31 budget rows.

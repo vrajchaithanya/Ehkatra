@@ -55,6 +55,66 @@ pub struct Editor {
     /// `String` insertion and shaping clusters both index by; every mutation
     /// below keeps it on a character boundary.
     pub caret: usize,
+    /// An input method's composition, when one is in flight (docs/33 §IME).
+    pub preedit: Option<Preedit>,
+}
+
+/// An in-flight IME composition (docs/33 §IME, ADR-039's named absence).
+///
+/// Held **apart from** [`Editor::text`] because a composition is a *proposal by
+/// the input method*, not an edit: nothing in here reaches the cell, `Escape`
+/// drops it without disturbing the buffer under it, and a commit writes the
+/// buffer exactly as if the composition had never been shown. The composition's
+/// contents are the platform's — docs/33 says composition is "never
+/// reimplemented", and winit's `Ime` events *are* TSF on Windows and
+/// NSTextInputClient on macOS, so this type carries what the platform decided
+/// and never decides anything itself.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Preedit {
+    /// What the input method is currently showing.
+    pub text: String,
+    /// The input method's own caret or selection inside `text`, as byte
+    /// offsets. `None` when the platform declines to place one, in which case
+    /// the caret belongs after the composition — the convention every IME
+    /// expects when it says nothing.
+    pub cursor: Option<(usize, usize)>,
+}
+
+impl Editor {
+    /// Whether an input method is composing into this editor.
+    pub fn composing(&self) -> bool {
+        self.preedit.is_some()
+    }
+
+    /// The buffer as it should be **shown**: the committed text with the
+    /// composition spliced in at the caret.
+    ///
+    /// Returns the display string, the caret's byte offset within it, and the
+    /// byte span the composition occupies (which the scene underlines). The
+    /// cell never sees this string — [`App::commit`] writes `text`, which is
+    /// the whole reason the two are separate fields.
+    pub fn display(&self) -> (String, usize, Option<(usize, usize)>) {
+        let Some(pre) = &self.preedit else {
+            return (self.text.clone(), self.caret, None);
+        };
+        let mut shown = String::with_capacity(self.text.len() + pre.text.len());
+        shown.push_str(&self.text[..self.caret]);
+        shown.push_str(&pre.text);
+        shown.push_str(&self.text[self.caret..]);
+        // Clamped rather than trusted: the offsets come from a platform IME,
+        // and a caret past the end of the composition would be a panic in the
+        // shaper's cluster search rather than a cosmetic error.
+        let within = pre
+            .cursor
+            .map(|(start, _)| start)
+            .unwrap_or(pre.text.len())
+            .min(pre.text.len());
+        (
+            shown,
+            self.caret + within,
+            Some((self.caret, self.caret + pre.text.len())),
+        )
+    }
 }
 
 /// What one intent did, for a caller that needs to know whether to redraw.
@@ -93,6 +153,12 @@ pub struct App {
     pending_cut: Option<(usize, usize, usize, usize)>,
     /// What the pointer is currently doing, if anything.
     drag: Option<Drag>,
+    /// The caret's rectangle in logical pixels as of the last [`App::frame`],
+    /// which is what the platform needs to place an IME candidate window
+    /// (docs/33 §IME). Cached here rather than recomputed on demand because the
+    /// caret's x is a *shaped-text* answer and the scene is where text is
+    /// shaped; a second implementation would be free to disagree with the first.
+    ime_area: Option<[f32; 4]>,
 }
 
 /// A pointer gesture in progress.
@@ -119,7 +185,29 @@ impl App {
     /// `None` when the sheet has no rows or no columns: there is no cell to put
     /// a cursor on, and every operation below would have to carry an "or maybe
     /// there is nothing" case for a document the product cannot produce.
-    pub fn open(mut session: Session, width: f32, height: f32, scale: f32) -> Option<App> {
+    pub fn open(session: Session, width: f32, height: f32, scale: f32) -> Option<App> {
+        let mut app = App::open_cold(session, width, height, scale)?;
+        // **TD-80.** Building the system font database costs 203–321 ms of the
+        // 238–412 ms first non-Latin keystroke (W-FALLBACK, profiled before this
+        // was written), against docs/31's 16 ms keystroke→paint. Started here —
+        // the one place a *real* session begins — it overlaps the seconds
+        // between launch and that keystroke instead of landing on it.
+        //
+        // Here and not in `TextEngine::new`: 114 tests and every benchmark
+        // construct an engine, and warming there would have all of them spawn a
+        // file scan they never use. `open_cold` below is the constructor that
+        // does not, and it is what the suite goes through.
+        app.text.warm();
+        Some(app)
+    }
+
+    /// `open` without the font warm-up — the constructor for callers that are
+    /// not a session (TD-80).
+    ///
+    /// Split out rather than parameterised because the difference is one line
+    /// and a `bool` argument at every call site would be worse documentation
+    /// than two named functions.
+    fn open_cold(mut session: Session, width: f32, height: f32, scale: f32) -> Option<App> {
         let text = TextEngine::new()?;
         let theme = Theme::default();
         let metrics = Metrics::default();
@@ -143,6 +231,7 @@ impl App {
             clipboard: Clipboard::new(),
             pending_cut: None,
             drag: None,
+            ime_area: None,
         };
         if let Some(why) = app.clipboard.unavailable() {
             app.status = String::from(why);
@@ -153,9 +242,15 @@ impl App {
 
     /// Opens with an in-process clipboard that never touches the OS — what
     /// tests use, so the suite needs no display.
+    ///
+    /// Goes through [`App::open_cold`], so the suite also spawns **no** font
+    /// warm-up: 114 tests each starting a background scan of several hundred
+    /// font files is a real cost for a fallback almost none of them exercise
+    /// (TD-80). The tests that do care about warming call `TextEngine::warm`
+    /// directly, in `text.rs`.
     #[cfg(test)]
     pub fn open_detached(session: Session, width: f32, height: f32, scale: f32) -> Option<App> {
-        let mut app = App::open(session, width, height, scale)?;
+        let mut app = App::open_cold(session, width, height, scale)?;
         app.clipboard = Clipboard::detached();
         app.status.clear();
         Some(app)
@@ -182,6 +277,81 @@ impl App {
     /// holds (TD-61).
     pub fn value(&mut self, row: RowId, col: ColId) -> Option<Value> {
         self.session.value(row, col)
+    }
+
+    /// Whether an input method is composing (docs/33 §IME).
+    pub fn composing(&self) -> bool {
+        self.editor.as_ref().is_some_and(Editor::composing)
+    }
+
+    /// Where the caret was on screen at the last [`App::frame`], in logical
+    /// pixels, so the platform can put the IME candidate list under the text
+    /// being composed rather than in the window's corner (docs/33 §IME).
+    ///
+    /// `None` when no editor is open, or when its cell has been scrolled out of
+    /// view — in which case there is no honest place to put the candidates.
+    pub fn ime_area(&self) -> Option<[f32; 4]> {
+        self.ime_area
+    }
+
+    /// An input method updated its composition (winit `Ime::Preedit`).
+    ///
+    /// **Opening the editor here is not a convenience.** On Windows and macOS
+    /// the keystrokes that begin a composition are swallowed by the input
+    /// method, so no key event ever reaches [`App::handle`] — an implementation
+    /// that only updated an already-open editor would drop a CJK user's first
+    /// word on the floor and look, from the outside, exactly like a dead
+    /// keyboard. The seed is empty for the same reason typing a character over
+    /// a cell replaces it.
+    ///
+    /// An empty composition is how every backend says *withdrawn*, and it is
+    /// not the same thing as a commit: the buffer underneath is left alone.
+    pub fn ime_preedit(&mut self, text: &str, cursor: Option<(usize, usize)>) -> Outcome {
+        if text.is_empty() {
+            let dropped = self
+                .editor
+                .as_mut()
+                .and_then(|ed| ed.preedit.take())
+                .is_some();
+            return Outcome { redraw: dropped };
+        }
+        if self.editor.is_none() {
+            self.begin_edit(Seed::Empty);
+        }
+        let Some(ed) = self.editor.as_mut() else {
+            return Outcome::default();
+        };
+        ed.preedit = Some(Preedit {
+            text: String::from(text),
+            cursor,
+        });
+        Outcome { redraw: true }
+    }
+
+    /// An input method finalised its composition (winit `Ime::Commit`).
+    ///
+    /// The finalised text is inserted at the caret **as a unit**, not character
+    /// by character: an IME commits a word, and splitting it into inserts would
+    /// invent an edit history the user never performed. Some backends deliver
+    /// ordinary typing this way too when IME is enabled, which is why this path
+    /// also opens the editor.
+    pub fn ime_commit(&mut self, text: &str) -> Outcome {
+        if self.editor.is_none() {
+            if text.is_empty() {
+                return Outcome::default();
+            }
+            self.begin_edit(Seed::Empty);
+        }
+        let Some(ed) = self.editor.as_mut() else {
+            return Outcome::default();
+        };
+        let dropped = ed.preedit.take().is_some();
+        if text.is_empty() {
+            return Outcome { redraw: dropped };
+        }
+        ed.text.insert_str(ed.caret, text);
+        ed.caret += text.len();
+        Outcome { redraw: true }
     }
 
     /// Whether the editor is open — the one bit the keymap needs.
@@ -403,6 +573,21 @@ impl App {
     // ----------------------------------------------------------------- intent
 
     pub fn handle(&mut self, intent: Intent) -> Outcome {
+        // While an input method is composing, the keyboard belongs to it
+        // (docs/33: composition is the platform's, "never reimplemented"). Any
+        // key that reaches a composing editor either leaked past the IME or was
+        // declined by it, and acting on one would fight the composition: a
+        // `Backspace` would delete a *committed* character the user cannot see
+        // the caret in front of, and on backends that still deliver
+        // `KeyboardInput` during composition an `Insert` would type every
+        // keystroke twice — once here and once again in the commit.
+        //
+        // `Cancel` is the single exception, because a composition is the
+        // innermost thing Escape can close and closing the outer edit first
+        // would be Escape skipping a layer.
+        if self.composing() && !matches!(intent, Intent::Cancel) {
+            return Outcome::default();
+        }
         match intent {
             Intent::Move { step, extend } => self.move_cursor(step, extend),
             Intent::BeginEdit(seed) => self.begin_edit(seed),
@@ -647,6 +832,7 @@ impl App {
             col,
             caret: text.len(),
             text,
+            preedit: None,
         });
         self.status.clear();
         Outcome { redraw: true }
@@ -730,6 +916,15 @@ impl App {
     }
 
     fn cancel(&mut self) -> Outcome {
+        // A composition is the innermost thing Escape closes: the first Escape
+        // abandons what the input method is proposing, the second abandons the
+        // edit. Collapsing the two would make one keypress throw away text the
+        // user had already committed into the cell editor.
+        if let Some(ed) = self.editor.as_mut() {
+            if ed.preedit.take().is_some() {
+                return Outcome { redraw: true };
+            }
+        }
         if self.editor.take().is_some() {
             self.status.clear();
             return Outcome { redraw: true };
@@ -1179,19 +1374,29 @@ impl App {
             fill_handle: self.fill_handle(),
         };
         let reference = label_of(range);
-        let bar_content = match &self.editor {
+        // The composition is spliced in **once**, here, and both the cell
+        // overlay and the formula bar are drawn from the same string. Two
+        // splices would be two chances for the bar and the cell to disagree
+        // about what the user is currently typing.
+        let display = self.editor.as_ref().map(Editor::display);
+        let bar_content = match &display {
             // While editing, the bar mirrors the editor: they are two views of
             // one buffer, and letting them disagree is how a user loses track
             // of which one they are typing into.
-            Some(ed) => ed.text.clone(),
+            Some((shown, _, _)) => shown.clone(),
             None => self.source_at(self.active.0, self.active.1),
         };
-        let editor = self.editor.as_ref().map(|ed| EditView {
-            row: ed.row,
-            col: ed.col,
-            text: &ed.text,
-            caret: ed.caret,
-        });
+        let editor =
+            self.editor
+                .as_ref()
+                .zip(display.as_ref())
+                .map(|(ed, (shown, caret, preedit))| EditView {
+                    row: ed.row,
+                    col: ed.col,
+                    text: shown,
+                    caret: *caret,
+                    preedit: *preedit,
+                });
         let (state, engine) = self.session.view();
         let frame = scene::Frame {
             state,
@@ -1207,7 +1412,9 @@ impl App {
             size: self.size,
             scale: self.scale,
         };
-        scene::build(&frame, &self.theme, &mut self.text)
+        let scene = scene::build(&frame, &self.theme, &mut self.text);
+        self.ime_area = scene.caret;
+        scene.quads
     }
 
     /// The glyph atlas, when it has changed since the last upload. `None` is
@@ -1223,6 +1430,16 @@ impl App {
 
     pub fn atlas_overflowed(&self) -> bool {
         self.text.overflowed
+    }
+
+    /// Every face this session has drawn with, slot 0 (the bundled one) first.
+    ///
+    /// The record D-125 requires: fallback means a non-Latin run's metrics can
+    /// come from a face that differs between hosts, so *which* face is a fact
+    /// the shell can state rather than one a user has to guess at from the
+    /// pixels. `--script` prints it; a font-shortfall report would read it too.
+    pub fn resolved_faces(&self) -> Vec<&str> {
+        self.text.face_names()
     }
 }
 
@@ -2245,6 +2462,247 @@ mod tests {
         assert!(
             (b.size[0] - a.size[0]).abs() <= 1.0,
             "but the quad it fills must be the same size in logical pixels"
+        );
+    }
+
+    // ------------------------------------------------------------------- IME
+    //
+    // docs/33: *"native composition via the in-cell editor overlay (TSF on
+    // Windows, NSTextInputClient on macOS) — never reimplemented"*. winit runs
+    // the platform half; what is asserted below is the half this shell owns —
+    // when a composition opens an edit, what it may and may not write, and who
+    // owns the keyboard while it is in flight. None of it needs a window, which
+    // is the point: the alternative is a Japanese keyboard and a person.
+    //
+    // The strings are real: `にほん` composed from `nihon`, which is the
+    // shape every Windows and macOS IME produces — a preedit per keystroke,
+    // then one commit.
+
+    /// The composing text most of these use, and its intermediate forms.
+    const KANA: [&str; 3] = ["に", "にほ", "にほん"];
+
+    #[test]
+    fn a_composition_opens_the_editor_because_no_key_event_ever_arrives() {
+        let mut app = app(20, 10);
+        // The keystrokes that begin a composition are consumed by the input
+        // method: `handle` is never called, so if the preedit did not open the
+        // editor the user's first word would go nowhere.
+        assert_eq!(app.mode(), crate::input::Mode::Grid);
+        app.ime_preedit(KANA[0], Some((3, 3)));
+        assert_eq!(app.mode(), crate::input::Mode::Editing);
+        assert!(app.composing());
+    }
+
+    #[test]
+    fn a_composition_is_shown_but_is_not_in_the_cell_until_it_is_committed() {
+        let mut app = app(20, 10);
+        for step in KANA {
+            app.ime_preedit(step, None);
+        }
+        let editor = app.editor().expect("composing implies an open editor");
+        // The buffer the cell would receive is still empty — a composition is
+        // the input method's proposal, not the user's text.
+        assert_eq!(editor.text, "");
+        assert_eq!(editor.display().0, "にほん");
+        assert_eq!(shown(&mut app, 0, 0), None);
+
+        app.ime_commit(KANA[2]);
+        assert!(!app.composing());
+        assert_eq!(app.editor().unwrap().text, "にほん");
+        // And still not in the cell: committing a *composition* is not
+        // committing an *edit*.
+        assert_eq!(shown(&mut app, 0, 0), None);
+
+        press(&mut app, crate::input::Key::Enter, Mods::NONE);
+        assert_eq!(shown(&mut app, 0, 0).as_deref(), Some("にほん"));
+    }
+
+    #[test]
+    fn a_commit_lands_at_the_caret_and_not_at_the_end() {
+        let mut app = app(20, 10);
+        type_text(&mut app, "ab");
+        press(&mut app, crate::input::Key::Left, Mods::NONE);
+        assert_eq!(app.editor().unwrap().caret, 1);
+        app.ime_preedit(KANA[0], None);
+        app.ime_commit(KANA[2]);
+        let editor = app.editor().unwrap();
+        assert_eq!(editor.text, "aにほんb");
+        // Three characters of three bytes each, after the `a`.
+        assert_eq!(editor.caret, 1 + 9);
+    }
+
+    #[test]
+    fn escape_drops_the_composition_and_a_second_escape_drops_the_edit() {
+        let mut app = app(20, 10);
+        type_text(&mut app, "abc");
+        app.ime_preedit(KANA[1], None);
+
+        press(&mut app, crate::input::Key::Escape, Mods::NONE);
+        // The composition went; the text the user had already typed did not.
+        // Collapsing these two into one Escape would throw away committed work.
+        assert!(!app.composing());
+        assert_eq!(app.editor().expect("the edit survives").text, "abc");
+
+        press(&mut app, crate::input::Key::Escape, Mods::NONE);
+        assert!(app.editor().is_none());
+    }
+
+    #[test]
+    fn a_withdrawn_composition_leaves_the_buffer_underneath_alone() {
+        let mut app = app(20, 10);
+        type_text(&mut app, "abc");
+        app.ime_preedit(KANA[1], None);
+        // Every backend says "withdrawn" with an empty preedit, and it is not
+        // the same event as a commit.
+        let outcome = app.ime_preedit("", None);
+        assert!(outcome.redraw);
+        assert!(!app.composing());
+        assert_eq!(app.editor().unwrap().text, "abc");
+        // A second one changes nothing and must not ask for a repaint.
+        assert!(!app.ime_preedit("", None).redraw);
+    }
+
+    #[test]
+    fn a_key_that_leaks_past_a_composing_input_method_is_ignored() {
+        let mut app = app(20, 10);
+        type_text(&mut app, "abc");
+        app.ime_preedit(KANA[1], None);
+        // The failure this prevents is real and platform-specific: a backend
+        // that keeps delivering `KeyboardInput` during composition would type
+        // every keystroke twice — once as an insert here and once inside the
+        // commit — and a Backspace would eat a committed character the user
+        // cannot see the caret in front of.
+        for key in [
+            crate::input::Key::Character('x'),
+            crate::input::Key::Backspace,
+            crate::input::Key::Delete,
+            crate::input::Key::Left,
+            crate::input::Key::Home,
+        ] {
+            press(&mut app, key, Mods::NONE);
+        }
+        let editor = app.editor().unwrap();
+        assert_eq!(editor.text, "abc");
+        assert_eq!(editor.caret, 3);
+        assert!(app.composing());
+    }
+
+    #[test]
+    fn enter_during_a_composition_does_not_write_a_half_composed_cell() {
+        let mut app = app(20, 10);
+        type_text(&mut app, "abc");
+        app.ime_preedit(KANA[1], None);
+        press(&mut app, crate::input::Key::Enter, Mods::NONE);
+        // Finalising is the input method's decision, not ours: an Enter that
+        // reached us was declined by it, and writing `abcにほ` would put text
+        // in the cell that the user never confirmed.
+        assert_eq!(shown(&mut app, 0, 0), None);
+        assert!(app.composing());
+    }
+
+    #[test]
+    fn the_caret_sits_where_the_input_method_put_it_inside_the_composition() {
+        let mut app = app(20, 10);
+        type_text(&mut app, "ab");
+        // The IME's cursor is a byte offset *within the composition*.
+        app.ime_preedit("にほん", Some((3, 3)));
+        let (shown, caret, span) = app.editor().unwrap().display();
+        assert_eq!(shown, "abにほん");
+        assert_eq!(caret, 2 + 3);
+        assert_eq!(span, Some((2, 2 + 9)));
+
+        // No cursor from the platform means "after the composition".
+        app.ime_preedit("にほん", None);
+        assert_eq!(app.editor().unwrap().display().1, 2 + 9);
+    }
+
+    #[test]
+    fn a_composition_cursor_past_the_end_is_clamped_and_not_trusted() {
+        let mut app = app(20, 10);
+        // The offsets come from a platform IME. A caret past the end of the
+        // composition must be a clamped caret, not a panic in the shaper.
+        app.ime_preedit("にほ", Some((99, 99)));
+        let (shown, caret, _) = app.editor().unwrap().display();
+        assert_eq!(caret, shown.len());
+    }
+
+    #[test]
+    fn clicking_away_mid_composition_writes_the_buffer_and_never_the_composition() {
+        let mut app = app(20, 10);
+        type_text(&mut app, "abc");
+        app.ime_preedit(KANA[2], None);
+        let (ox, oy) = app.theme().grid_origin();
+        app.pointer_down(ox + 4.0, oy + 4.0 + 20.0 * 3.0, false);
+        // The cell got what the user had confirmed. The composition was never
+        // theirs to keep — the platform withdraws it on focus change, and
+        // writing it here would put unconfirmed text in a document.
+        assert_eq!(shown(&mut app, 0, 0).as_deref(), Some("abc"));
+        assert!(!app.composing());
+    }
+
+    #[test]
+    fn the_ime_cursor_area_follows_the_caret_so_candidates_appear_under_it() {
+        let mut app = app(20, 10);
+        // Nothing to place a candidate list against when nothing is being
+        // edited, and saying `None` beats offering the window's corner.
+        app.frame();
+        assert_eq!(app.ime_area(), None);
+
+        type_text(&mut app, "abc");
+        app.frame();
+        let first = app.ime_area().expect("an open editor has a caret");
+        app.ime_preedit("にほん", Some((9, 9)));
+        app.frame();
+        let composing = app.ime_area().expect("still open");
+        assert!(
+            composing[0] > first[0],
+            "the candidate window must follow the composing text: {} then {}",
+            first[0],
+            composing[0]
+        );
+        assert!(composing[3] > 0.0, "a zero-height caret places nothing");
+    }
+
+    /// **TD-80's wiring**, which is the part of it a `text.rs` test cannot see:
+    /// a real open starts the font warm-up and a test open does not.
+    ///
+    /// Both halves matter and the second is the one that would rot silently.
+    /// `warm` in the shared constructor would be invisible — every test would
+    /// still pass, each just quietly spawning a scan of several hundred files
+    /// for a fallback it never uses, and the suite would get slower for a
+    /// reason nothing named. So the suite's own constructor asserts it stays
+    /// cold.
+    #[test]
+    fn a_real_open_warms_the_font_database_and_the_suite_s_open_does_not() {
+        let quiet = App::open_detached(
+            Session::from_log(usk_types::ActorId(1), empty_log(8, 4)),
+            800.0,
+            400.0,
+            1.0,
+        )
+        .expect("the bundled font must load");
+        assert!(
+            !quiet.text.enumerated(),
+            "the constructor the suite uses must not touch the host's fonts"
+        );
+
+        let real = App::open(
+            Session::from_log(usk_types::ActorId(1), empty_log(8, 4)),
+            800.0,
+            400.0,
+            1.0,
+        )
+        .expect("the bundled font must load");
+        assert!(
+            real.text.enumerated(),
+            "a real session must have the enumeration already under way before \
+             the first keystroke arrives (TD-80)"
+        );
+        assert_eq!(
+            real.text.lazy_builds(),
+            0,
+            "and it must be under way *elsewhere* — nothing was built on this \
+             thread"
         );
     }
 }

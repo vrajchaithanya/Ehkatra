@@ -19,6 +19,75 @@ tagged, W-ORACLE is 90.4%. **And it exports:** session 29 adds XLSX *write*
 with a published round-trip fidelity number — 100.0% of the modelled surface
 over the whole corpus, verified against real Excel (W-XLSX-WRITE).
 
+**Session 34 in one paragraph.** **docs/48's IME item is half closed, and the
+half that closed found two defects.** No native typist exists here and one is
+not coming, so the first thing written was the *judgement* rather than the code
+(**D-127**): a native typist is the oracle for this item exactly as Excel is the
+oracle for conformance (D-123), so the box **cannot be ticked** — what is
+available is to make the un-ticked part small, specific and named. The item
+splits. The mechanical half — *do we handle the event shape each script's input
+method actually produces* — is a property of our code alone and is now closed:
+`--ime` (**W-IME-SCRIPTS**) replays JP, CN and KR composition sequences through
+the real `App` and checks **29/29 steps**, each against the four things a user
+can see. The perceptual half is published as a **7-item checklist** in
+MEASUREMENTS.md rather than absorbed. Tests 556 → **560** (kernel 438 unchanged,
+shell 118 → 122). Gates green; replay hashes unmoved — shell-only, no encoding.
+
+**Three scripts, because three *shapes*.** A fourth kana test would have proved
+one shape a fourth time; these three are chosen for how they differ. **JP** types
+kana per keystroke and then *converts*, replacing the whole composition with
+kanji and reporting the focused clause as a **selection range**. **CN**
+(Microsoft Pinyin) is **ASCII for six of its nine steps** and becomes Han only at
+partial conversion, so a face seam opens *inside* a live composition with the
+caret sitting on it. **KR** composes **one syllable at a time**, so the keystroke
+that starts the next syllable *commits* the previous one and `Commit` interleaves
+with `Preedit` inside a single word — the shape most likely to break an editor,
+and the one nothing in this repo had ever exercised. All three pass, all three
+commit their cell, all three have a frame: `demo/ime-{jp,cn,kr}.png`.
+
+**The step check is what makes it evidence rather than a demo.** Each step
+asserts the display string, the caret's byte offset in it, the underline span,
+and **that the cell is still blank** — the last being the invariant no screenshot
+shows and the one that matters most, since a document that acquired text from an
+unconfirmed composition is wrong in a way nobody notices until it ships. The
+same tables run in the suite through `App::open_detached` with no GPU and no
+assertion about a glyph, a face or a pixel, so a host with no CJK font installed
+still proves the semantics; the driver adds only what a headless suite cannot
+have — the frames and the resolved face. A fourth test abandons **every script at
+every one of its steps** and asserts the cell stayed blank, because "run it to
+the end" is not what a user who changes their mind does.
+
+**Defect 1 — TD-83: Chinese is drawn by a Japanese face.** `中文` resolves to
+`Yu Gothic`. `PREFERRED` is ordered by *coverage breadth*, Yu Gothic is 7th and
+covers these codepoints, so `Microsoft YaHei` at 10th is never reached. Han
+unification means the characters are correct and the **shapes** are not — to a
+native reader that is the difference between their language and a foreign font.
+**The alternative cause was measured and ruled out, not argued away**:
+`TextEngine::resolve` reuses an already-loaded face before consulting the
+database, so `中` could have inherited the kana's face for a reason having
+nothing to do with `PREFERRED`. So the driver reports the face **in session** and
+the face a **completely fresh engine** picks alone — they are identical for all
+three scripts, so it is the preference order. `한글` reaching `Malgun Gothic` at
+position **12** is the control that makes the reading safe: the list *is* walked
+that far when it must be, so nothing is truncating the search. Korean is right by
+accident, because no Japanese face covers Hangul.
+
+**Defect 2 — TD-84: in a multi-clause conversion the focused clause is
+invisible.** A converting IME reports the clause the arrow keys are on as a byte
+**range**; `Editor::display` keeps the range's start and discards its end, so
+`今日は晴れ` focused on `今日は` and the same string focused on `晴れ` draw
+identically apart from the caret. Session 31 built this surface against `にほん`,
+where a range and a caret are indistinguishable — which is why 13 IME tests and a
+session of fallback work never saw it, and why the *second clause* was worth
+scripting. Not fixed here: the session that found it had already landed the
+driver that found it, and a scene change stacked on top would be the second
+unverified layer (DP-C4). `demo/ime-jp.png` is the picture of the defect.
+
+**Both defects are the argument for the shape of D-127.** Neither is reachable
+by a stopwatch or by another kana test, and both were found *without* a typist —
+which is the evidence that closing half the item on its own was worth doing
+rather than waiting for a person who may never arrive.
+
 **Session 33 in one paragraph.** **TD-80 is paid: a CJK user's first keystroke
 no longer stalls the grid for a third of a second.** The enumeration is off the
 frame — `App::open` starts a background thread that builds the
@@ -417,9 +486,9 @@ is not a regression test.
   Shell compat · fmt · clippy `-D warnings` · tests · no_std wasm32 kernel build
   · dep budget · **shell fmt + clippy + tests** (new) · supply chain · differential
   replay native == wasm32 · purity/host-isolation greps.
-- **Tests: 556** — 438 kernel + 118 shell. All passing.
+- **Tests: 560** — 438 kernel + 122 shell. All passing.
 - **Replay hashes:** oplog `a1b35c1ac5afa7b5…` · state `b95f16327e2e9e88…` —
-  **unmoved in sessions 31, 32 and 33** (a shell-only change touches no encoding), and
+  **unmoved in sessions 31, 32, 33 and 34** (a shell-only change touches no encoding), and
   **MOVED in session 30, legitimately and for the second time in the project's
   life.** ADR-041 added the first new op types since the taxonomy was sealed,
   and docs/29 requires a new op type to join replay-check's generator or the
@@ -440,7 +509,19 @@ is not a regression test.
   file-dialog and menu adapters, so that trio no longer fits at its estimate and
   should be budgeted together rather than first-come.
 - **W-ORACLE:** 90.4% (1,235 / 1,366).
+- **docs/48 §Desktop quality, IME item: ◑ half closed** (D-127). The mechanical
+  half is proven — W-IME-SCRIPTS, 29/29 steps over 3 scripts. The item **stays
+  open**: a native typist is the oracle and has not run it, and the residue is a
+  7-item checklist in MEASUREMENTS.md §W-IME-SCRIPTS, not a vague "needs
+  testing".
 - **The numbers that are new** (MEASUREMENTS.md):
+  · **W-IME-SCRIPTS (session 34, new workload — docs/38)** — the JP, CN and KR
+    composition sequences replayed through the real `App`: **29/29 steps, 3/3
+    cells**, 0 unresolved characters. Faces resolved on M1: JP `今日は晴れ` →
+    `Yu Gothic`, CN `中文` → **`Yu Gothic`** (that is TD-83, not a typo), KR
+    `한글` → `Malgun Gothic` — and the same three from a **fresh engine with no
+    session history**, which is what rules out the loaded-face shortcut as the
+    cause. Frames `demo/ime-{jp,cn,kr}.png`. Re-run: `ehkatra-shell --ime demo`.
   · **W-FALLBACK (session 33, TD-80 paid)** — the first codepoint the bundled
     face cannot draw now costs **16.8–21.3 ms**, down from **244–887 ms**: the
     enumeration (222–283 ms, 379 faces on M1) runs on a background thread that
@@ -504,14 +585,18 @@ is not a regression test.
 
 **The editing surface works and is not finished. In order:**
 
-1. **Attempt docs/48's *"IME validated by native JP/CN/KR typists"*.** **TD-79
-   unblocked it and TD-80 is now paid** (session 33, D-126), so a native
-   typist's first keystroke costs 16.8–21.3 ms rather than a third of a second.
-   That is the last structural thing that stood in front of this item.
-   **TD-82 does not block it** — 1.05–1.33× the frame budget on one keystroke is
-   a thing a human might not notice, and finding out whether they do is *itself*
-   the useful signal. Take the validation first and let it tell you whether
-   TD-82 is real to a user or only real to a stopwatch.
+1. **Pay TD-84** — the focused clause in a multi-clause conversion. Session 34
+   found it, measured it and deliberately did not fix it (DP-C4: the session
+   that found it had already landed the driver that found it). It is small and
+   self-contained, the failing evidence already exists, and it is the first
+   thing a JP or CN typist will report. **Then TD-83**, which is *not* small —
+   it needs a language signal per run and wants a D entry before code; do not
+   "just reorder `PREFERRED`", which only moves the harm to Japanese readers.
+   Both are in docs/44 with the measurement that found them.
+   *(docs/48's IME item itself is as closed as it gets without a person —
+   D-127. Do not re-attempt the mechanical half; extend W-IME-SCRIPTS if a new
+   shape appears, and read the 7-item checklist in MEASUREMENTS.md before
+   claiming any part of the perceptual half.)*
 2. Then **accesskit tree v1** and the platform adapters (menus, dialogs, file
    association). **Read the headroom note in CURRENT STATE first**: fallback
    spent 3 of the 34 crates, leaving 31, and ADR-037's earmark was ~50 for
@@ -555,7 +640,10 @@ reads still pay `locate`'s three lookups by design; that is a new register row
 if a single-cell-heavy workload ever approaches a budget, not a reopening. In
 the shell, **TD-65** (frame cost grows with the document, unattributed) and
 **TD-62** (no shaped-run cache) remain the filed performance rows, both below
-their triggers.
+their triggers. The shell's *non*-performance rows are now **TD-83** (Chinese
+drawn by a Japanese face) and **TD-84** (the focused clause is invisible), both
+filed in session 34 with the measurement that found them; TD-84 is the next
+action and TD-83 needs a decision before code.
 
 **Four sessions of performance work, and the lesson held even when the register
 was right:** TD-19 said parsing; it was `extent_of` (TD-66). TD-23 said the
@@ -579,6 +667,16 @@ one `warm()` line measured 51.1–65.2 ms on the same host. The regression was n
 there; the 39.8 ms was one sample. **Compare against a control run in the same
 conditions, not against a recorded number** — a corollary the register did not
 have before, and the reason W-PRESENT now says ~50–70 ms.
+**Session 34 is the seventh, and it is the first time the rule applied to
+something that is not a performance number at all.** TD-83's obvious cause is
+`PREFERRED`'s order; its *other* cause — `resolve` reusing an already-loaded
+face before it consults the database, so `中` inherits whatever the kana loaded —
+is equally visible in the code and has a completely different fix. So the driver
+reports the face **in session** and the face a **fresh engine** picks alone, and
+the two being identical is what makes "it is the preference order" a measurement
+instead of a reading. **The rule generalises: when a defect has two visible
+causes, measure which one before naming it in the register**, whether or not
+the defect is about time.
 
 **Gated and should stay closed** (D-112): TD-17 and TD-44 have triggers that
 measurement shows are not live; TD-37 is blocked on packaging rather than
@@ -602,65 +700,68 @@ without the ADR — it retires a frozen ADR's central claim.
 
 ### THE EXACT NEXT ACTION
 
-**Attempt docs/48's *"IME validated by native JP/CN/KR typists"*. TD-79 and
-TD-80 are both paid, so nothing structural is in front of it any more. Do not
-re-open D-125 or D-126, and do not start on TD-82 first — see step 5.**
+**Pay TD-84: carry the focused clause's *end* through `Editor::display` and draw
+it. Do not re-open D-127, do not re-attempt the mechanical half of the docs/48
+item, and do not start on TD-83 or TD-82 first — see steps 4 and 5.**
 
-0. **Build note, because it cost this session ten minutes.** A release build of
-   the shell needs the in-repo MinGW on PATH or `libsqlite3-sys` fails with
-   *"failed to find tool gcc.exe"*. `tools\gates.ps1` does this for you; a bare
-   `cargo build --release` does not. From bash:
+0. **Build note, unchanged and still true.** A release build of the shell needs
+   the in-repo MinGW on PATH or `libsqlite3-sys` fails with *"failed to find
+   tool gcc.exe"*. `tools\gates.ps1` does this for you; a bare `cargo build
+   --release` does not. From bash:
    `export PATH="/c/Users/velag/Desktop/Ehkatra/.toolchain/mingw64/bin:$PATH"`.
    Nothing is wrong when you see that error — the toolchain is just not on PATH.
-1. Read **docs/48**, **D-125** and **D-126** — in that order. D-126 is new and
-   describes the warm-up you will be typing into: `App::open` starts it,
-   `App::open_cold` (what the suite uses) does not, and `TextEngine::warm` is
-   idempotent.
-2. **The thing to produce is a judgement, not a number.** docs/48's item asks
-   for *validated by native typists*, and the honest constraint is that this
-   session had no native typist. Decide up front what "validated" can mean
-   without one and write that decision down before doing the work, because the
-   temptation is to substitute more of our own tests and call it validation —
-   which D-123's rule ("never claim a fidelity number our own code alone
-   produced where a real oracle is available") is the same shape of mistake.
-   A defensible reading: a scripted end-to-end pass per script (JP kana→kanji,
-   CN pinyin, KR hangul composition) through `--script`, each producing a frame
-   in `demo/`, plus a written list of what a native typist would still have to
-   check that a script cannot. Then the docs/48 item is *partly* closed, and
-   says which part.
-3. **Where the surface already is**, so you do not go looking: `App::ime_preedit`
-   / `ime_commit` in `app.rs`, `Editor::preedit` and `Editor::display`, the
-   candidate-window rectangle in `App::ime_area`, and `script.rs` for the
-   scripted driver that produced `demo/editing-ime.png`. `--script` prints the
-   resolved faces, which is what tells you a CJK frame is real rather than
-   `.notdef` boxes.
-4. **One thing this will probably surface, named now so it is not a surprise.**
-   CN and KR have never been exercised. `text::PREFERRED` lists `Microsoft
-   YaHei`, `SimSun` and `Malgun Gothic`, and nothing in this repo has ever
-   resolved through any of them — every CJK frame we have is JP, and on M1 it
-   resolves to `Yu Gothic`, the 7th entry. A Simplified-Chinese or Korean run is
-   the first real exercise of the preference list past that point. (`--script`
-   itself is fine: it goes through `App::open`, so it is warmed like the window.
-   The per-process caveat in TD-82 is that each *process* warms its own — the
-   resolution is not shared across them.)
-5. **TD-82 is the follow-up, and it is deliberately *after* this.** The residual
-   first-miss cost is 16.8–21.3 ms against a 16 ms budget — 1.05–1.33×, on one
-   keystroke per process. Whether that is perceptible is exactly the kind of
-   thing step 2's validation answers and a stopwatch does not. If you do take it
-   on: **profile the split inside `pick` before writing anything** (`covers` /
-   `with_face_data` / `rustybuzz::Face::from_slice`, and the fact that `resolve`
-   re-reads the same face `pick` just parsed). The register is five-for-five on
-   the named cause not being the measured one, and TD-82 names two candidates
-   precisely so the next session does not pick one by feel.
+1. Read **TD-84** in docs/44 and **D-127** in docs/43, then look at
+   `demo/ime-jp.png`. The defect is a picture: five characters under one
+   undifferentiated underline, where MS-IME shades the clause the arrow keys are
+   on. The failing evidence already exists, so no investigation is needed.
+2. **The change, which is small and entirely in the shell.** `Preedit::cursor`
+   already carries `(start, end)`; `Editor::display` (app.rs, ~line 96) keeps
+   only `start` and returns one underline span. Widen its third return value so
+   the *focused* sub-span travels with the whole-composition span, then give
+   `scene.rs` a second emphasis for it — the underline stays and the focused
+   clause gains a fill, which is what the platform IMEs draw. Everything that
+   consumes `display()` is in `scene.rs` and `app.rs`; there is no kernel
+   surface and no op encoding, so replay hashes must not move.
+3. **How to prove it, and the trap.** `ime.rs`'s
+   `a_multi_clause_conversion_moves_the_caret_but_cannot_show_the_focus` is
+   written *against today's behaviour on purpose* and asserts the underline is
+   `(0, 15)` in both states — **it must fail when you fix this**, and rewriting
+   it to pass both ways would be exactly session 28's lesson repeated. Change
+   that assertion to the new shape and add a `scene.rs` test that the two states
+   produce different quads. Then re-run `ehkatra-shell --ime demo` and look at
+   `demo/ime-jp.png`: the frame is the acceptance criterion, and the JP script's
+   `frame_at: 7` already photographs the exact state.
+4. **TD-83 is next and is *not* the same size.** Reordering `PREFERRED` is the
+   obvious move and it is wrong — it only moves the harm from Chinese readers to
+   Japanese ones. It needs a **language/script signal per run**, Unicode script
+   property is not enough (Han is Han), and DP-D5 says locale never enters
+   storage — so the signal is a display-layer input and the shape of it wants a
+   D entry before any code. The measurement that pins the cause is already done
+   (MEASUREMENTS.md §W-IME-SCRIPTS, the *in session* vs *alone* table); do not
+   redo it, and do not accept the loaded-face shortcut as the cause, because it
+   was measured and ruled out.
+5. **TD-82 is still deliberately after both.** 16.8–21.3 ms against a 16 ms
+   budget on one keystroke per process. Item 3 of the typist checklist is what
+   answers whether it is perceptible, and that answer has not arrived. If you do
+   take it on: **profile the split inside `pick` before writing anything**
+   (`covers` / `with_face_data` / `rustybuzz::Face::from_slice`, and the fact
+   that `resolve` re-reads the same face `pick` just parsed).
+6. **What not to redo.** W-IME-SCRIPTS covers three event shapes; adding a
+   fourth kana variant proves nothing. Extend it only if a genuinely new *shape*
+   appears (a Vietnamese Telex or a Thai reordering IME would be one). And
+   nothing in this repo may report docs/48's IME item as closed — D-127 fixes
+   exactly what "half closed" means and MEASUREMENTS.md lists the seven
+   questions that are still open.
+
+Baseline to return to if anything goes wrong: `.checkpoints\34-imescripts\`
+holds `main.rs`, `app.rs`, `text.rs`, `docs/43` and `docs/44` as they were
+**before** this session's IME-script work. (`ime.rs` is new in session 34;
+deleting it and its `mod ime;` line in `main.rs` reverts the whole change.)
 
 Baseline to return to if anything goes wrong: `.checkpoints\33-warmfonts\` holds
-`text.rs`, `app.rs` and `main.rs` as they were **before** this session's
+`text.rs`, `app.rs` and `main.rs` as they were **before** session 33's
 warm-up work.
 
 Baseline to return to if anything goes wrong: `.checkpoints\32-fallback\` holds
 `text.rs`, `scene.rs`, `app.rs`, `script.rs`, `Cargo.toml` and the shell
 `Cargo.lock` as they were **before** session 32's fallback work.
-
-Baseline to return to if anything goes wrong: `.checkpoints\31-ime\` holds
-`app.rs`, `scene.rs`, `window.rs`, `input.rs`, `script.rs` and `text.rs` as they
-were **before** session 31's IME work.
