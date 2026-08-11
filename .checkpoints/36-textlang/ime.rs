@@ -44,7 +44,6 @@ use crate::app::{App, Composition};
 use crate::gpu::{self, Quad};
 use crate::input::{self, Key, Mods};
 use crate::png;
-use crate::text::TextLang;
 
 const WIDTH: u32 = 1280;
 const HEIGHT: u32 = 800;
@@ -98,16 +97,6 @@ pub struct Step {
 pub struct Script {
     pub id: &'static str,
     pub language: &'static str,
-    /// The display-layer language signal this script's typist would be under
-    /// (D-129) — what a host that knows its user writes Chinese would tell the
-    /// font search.
-    ///
-    /// Its own field rather than something parsed out of `language`, because
-    /// `language` is a sentence for a human reading the report and this is an
-    /// input to the code being tested. The driver reports each script's face
-    /// under **both** this and [`TextLang::Und`], so TD-83's defect and its fix
-    /// stand side by side in one table.
-    pub lang: TextLang,
     /// What a person actually pressed. This is the line a native typist reads
     /// first, and the one they would reject if the sequence below is not what
     /// their input method does.
@@ -209,7 +198,6 @@ pub const SCRIPTS: &[Script] = &[
     Script {
         id: "jp",
         language: "Japanese",
-        lang: TextLang::Ja,
         keys: "k y o u h a h a r e, Space, Right, Space, Space, Enter",
         row: 0,
         steps: JP,
@@ -223,7 +211,6 @@ pub const SCRIPTS: &[Script] = &[
     Script {
         id: "cn",
         language: "Chinese (Simplified)",
-        lang: TextLang::ZhHans,
         keys: "z h o n g w e n, Space, Enter",
         row: 2,
         steps: CN,
@@ -236,7 +223,6 @@ pub const SCRIPTS: &[Script] = &[
     Script {
         id: "kr",
         language: "Korean",
-        lang: TextLang::Ko,
         keys: "h a n g e u l, Backspace, l, Enter",
         row: 4,
         steps: KR,
@@ -276,8 +262,8 @@ fn cell(app: &mut App, row: usize, col: usize) -> Option<String> {
     }
 }
 
-/// Which face a **fresh** engine picks for `text` under `lang`, with no session
-/// history in front of it.
+/// Which face a **fresh** engine picks for `text` — `PREFERRED`'s answer alone,
+/// with no session history in front of it.
 ///
 /// Reported beside the session's answer because the two can differ and the
 /// difference names the cause. `TextEngine::resolve` reuses an **already
@@ -287,17 +273,10 @@ fn cell(app: &mut App, row: usize, col: usize) -> Option<String> {
 /// defect from a preference list in the wrong order, and guessing which of the
 /// two is in play is exactly the mistake this project keeps a rule about. Costs
 /// one system-font enumeration per call, which is why only the driver does it.
-///
-/// Called twice per script since D-129 — once under the script's own language
-/// and once under [`TextLang::Und`] — because the `Und` answer *is* TD-83: it is
-/// what this host drew before the fix and what it still draws for any run with
-/// no language signal. A fix reported without the thing it fixed beside it is a
-/// claim rather than a measurement.
-fn isolated_faces(text: &str, lang: TextLang) -> (Vec<String>, u32) {
+fn isolated_faces(text: &str) -> (Vec<String>, u32) {
     let Some(mut engine) = crate::text::TextEngine::new() else {
         return (Vec::new(), 0);
     };
-    engine.set_lang(lang);
     let run = engine.layout(text, crate::text::CELL_PX, 1.0);
     let names = run
         .faces
@@ -334,11 +313,6 @@ pub fn replay(
     script: &Script,
     mut shot: Option<&mut Option<Vec<Quad>>>,
 ) -> Result<Vec<String>, String> {
-    // Here rather than in the driver, so the suite and the driver cannot drift:
-    // a language set only on the driver's path would be a signal the tests
-    // never see. Before the first event, so the composition's own frames are
-    // shaped under the same language as the committed cell (D-129).
-    app.set_text_lang(script.lang);
     let mut log = Vec::with_capacity(script.steps.len() + 1);
     for (n, step) in script.steps.iter().enumerate() {
         deliver(app, step.event);
@@ -442,25 +416,17 @@ pub fn run(dir: &str, rows: usize) -> Result<String, String> {
         // is the face that actually drew this script's characters rather than
         // every face the session has ever loaded (TD-83 is only visible here).
         let (faces, unresolved) = app.faces_for(script.committed);
-        let (alone, _) = isolated_faces(script.committed, script.lang);
-        // The control, and the reason this line exists: `und` is what this host
-        // drew before D-129 and what it still draws for an unsignalled run. For
-        // CN the two columns differ, and that difference is TD-83 being paid.
-        let (und, _) = isolated_faces(script.committed, TextLang::Und);
+        let (alone, _) = isolated_faces(script.committed);
         let path = format!("{dir}/ime-{}.png", script.id);
         report.push(format!(
             "  {}  {} — {}\n      keys        {}\n{}\n      faces       \
              in session {faces:?}, alone {alone:?}, {unresolved} unresolved\
-             \n      language    {} — under und this host draws {und:?}\
              \n      frame       {path}  (at step {})",
             script.id.to_uppercase(),
             script.language,
             script.note,
             script.keys,
             log.join("\n"),
-            // Read back out of the app, not out of the table: the report says
-            // what the engine is serving rather than what it was asked for.
-            app.text_lang().tag(),
             script.frame_at,
         ));
         match shot {
@@ -627,40 +593,6 @@ mod tests {
             (Some((0, 9)), Some((9, 15))),
             "and the focused clause is what tells the two states apart (TD-84)"
         );
-    }
-
-    /// Replaying a script tells the font search what language it is (D-129).
-    ///
-    /// The assertion is on the **app** and not on the table, because the table
-    /// is what a reader of the report sees and the app is what draws. Before
-    /// D-129 moved `set_text_lang` into `replay`, the driver set it and the
-    /// suite did not, which is a signal a hundred test runs would never
-    /// exercise — the same drift `replay` being shared exists to prevent.
-    ///
-    /// Every script also has to carry a real language: a script left at `Und`
-    /// would pass every other test in this file while proving nothing about the
-    /// defect all three of them were written to find.
-    #[test]
-    fn replaying_a_script_puts_the_font_search_into_that_scripts_language() {
-        for script in SCRIPTS {
-            assert_ne!(
-                script.lang,
-                TextLang::Und,
-                "{}: a CJK script with no language signal cannot show TD-83",
-                script.id
-            );
-            let mut app = app();
-            assert_eq!(app.text_lang(), TextLang::Und, "a fresh app has no signal");
-            select(&mut app, script.row, SCRATCH).expect("the scratch column is on screen");
-            replay(&mut app, script, None).unwrap_or_else(|why| panic!("{why}"));
-            assert_eq!(
-                app.text_lang(),
-                script.lang,
-                "{}: the replay must leave the engine serving this script's \
-                 language, or the driver's face record is of the wrong search",
-                script.id
-            );
-        }
     }
 
     /// The tables themselves are well-formed: a focused clause is always a

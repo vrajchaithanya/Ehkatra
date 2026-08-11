@@ -19,6 +19,102 @@ tagged, W-ORACLE is 90.4%. **And it exports:** session 29 adds XLSX *write*
 with a published round-trip fidelity number — 100.0% of the modelled surface
 over the whole corpus, verified against real Excel (W-XLSX-WRITE).
 
+**Session 36 in one paragraph.** **TD-83 is paid: a Chinese reader is drawn by a
+Chinese face.** The display layer now carries a **language** — `TextLang { Und,
+Ja, ZhHans, ZhHant, Ko }` — and a language **prefixes its own font families onto
+`PREFERRED` rather than reordering it** (**D-129**). On M1, `中文` resolves to
+**`Microsoft YaHei`** where it resolved to `Yu Gothic`, `zh-Hant` reaches
+`Microsoft JhengHei`, `ko` reaches `Malgun Gothic` — and **`ja` still gets
+`Yu Gothic`**, which is the assertion that matters most, because the obvious fix
+would have changed that too. Cost: **zero crates, zero op tags, no kernel
+surface**; replay hashes unmoved (`a1b35c1a…` / `b95f1632…`), which for this
+change is a requirement rather than an observation (DP-D5: locale is display
+state and must never reach an op or a hash). Tests 563 → **571** (kernel 438
+unchanged, shell 125 → 133). Gates green. **The window still supplies no
+language** — where the signal comes from is D-129 decision 6 and is deliberately
+the next step, so what landed is a proven mechanism, not yet a fixed user
+experience, and the entry below says so rather than rounding up.
+
+**The whole row was a decision, and writing it first is what stopped the wrong
+fix.** TD-83's cause was already measured: `PREFERRED` is ordered by *coverage
+breadth*, `Yu Gothic` sits 7th, it covers the Han a Chinese user types, so
+`Microsoft YaHei` at 10th is never reached. The one-line repair is to move YaHei
+up. That repair is wrong, and it would have passed every test in this repo,
+because no test has a Japanese reader in it: promoting YaHei gives *every*
+Japanese reader Chinese glyph forms. **The list cannot be ordered correctly
+because nothing in it knows what language the text is in** — and that is not a
+local shortcoming. Han unification means the codepoints are shared and the shapes
+are not, which is why Noto Sans CJK, the most pan-Unicode face there is, ships as
+**four language variants**. Bundling a bigger font would not have dodged the
+question; it would have re-asked it.
+
+**The design decision, in one line each.** The signal is a **language, not a
+script** (`Han` is `Han`, so the script property answers nothing). It is a
+**closed enum, not a BCP-47 string**, because the only thing this layer does with
+it is order a font list and a string would drag tag canonicalisation and locale
+matching into the shell for a switch with five arms. A language **prefixes**
+rather than replaces, so **no host loses coverage** and `preferred_for(Und)` is
+`PREFERRED` element for element — the identity that every assertion here is
+checked against. And it lives on the `TextEngine`, never in storage: DP-D5
+verbatim.
+
+**The part that would have re-created the defect by another route.** `resolve`
+reuses an already-loaded face before it consults the database — the reason the
+second kana in `にほん` costs a `glyph_index` call and not a file read. Under a
+language that shortcut becomes a second way to be wrong: in a document holding
+both scripts, whichever language was typed *first* loads its face and the other
+inherits it. So the reuse is now conditional — an already-loaded face may answer
+only after the families ahead of it **in the language's own prefix** have been
+re-asked. Bounded by the prefix and not by the whole order, deliberately: under
+`Und` the bound is zero and the shortcut is byte-for-byte what it was, and once
+the language's best present family is loaded what remains ahead of it are
+families the host does not have, which cost a name filter and parse nothing.
+Bounding by the whole order instead would have cost **TD-82's 16.8–21.3 ms per
+distinct character, forever**. The driver proves the fix on real data rather than
+in the arithmetic: `--ime` replays JP *before* CN through one `App`, so
+`Yu Gothic` is loaded and covers `中` by the time Chinese composes — and CN
+reports the same face **in session** as it does **alone**.
+
+**Four controls were run before any of it was believed, and all four failed as
+designed.** A test written after the fix passes by construction, so each was
+checked with the fix removed: dropping `Microsoft YaHei` from the Chinese prefix
+breaks the ordering test *and* the re-check arithmetic (`left: 5, right: 13`);
+removing the prefix bound breaks the `Und` identity (`left: 6, right: 0`) —
+precisely the regression the bound exists to prevent; not clearing the coverage
+cache on a language change leaves the old answer alive (`left: 1, right: 0`); and
+removing `set_text_lang` from `replay` leaves the engine on `Und` (`left: Und,
+right: Ja`). That last one is why the call lives in `replay` and not in the
+driver: a signal the suite never sees is a signal a hundred test runs never
+exercise.
+
+**A fifth control failed for a reason it was not written to find, and that is
+the session's real finding.** `--fonts` walks all five languages on one engine
+forward and again reversed, and asserts the two agree — a language must not
+inherit the face an earlier one loaded. The four *signalled* languages agree
+family for family. **`und` does not**: `Yu Gothic` forward, `Malgun Gothic`
+reversed. That is not a bug D-129 introduced; it is the loaded-face shortcut
+exactly as it always behaved, and with no language there is nothing to rank
+against, so whichever CJK face loaded first wins. It matters because **the window
+is all-`und` today** — so in a real session the first CJK script typed decides the
+face for every other one. Filed as **TD-86**, with the number beside it, because
+a known property that has been measured is a different artifact from one that has
+been assumed. It also sharpens what is left: the host locale (D-129 decision 6)
+removes `und` for the common case and **TD-85** (per-run language, facet-shaped)
+removes it entirely.
+
+**What was deliberately not built, and why it is not timidity.** Per-run language
+is the correct end state — XLSX carries it inside rich text, and a workbook with a
+Japanese column beside a Chinese one needs it. It is facet-shaped, and the shell
+does not read style facets at all yet (ADR-041 built them in the kernel). Building
+a per-run language channel for fonts alone would be a second unproven layer on top
+of the one that just landed, which is DP-C4's exact prohibition. What it will cost
+is written into TD-85 so it is not rediscovered: `layout` gains a parameter,
+`coverage`'s key widens to `(TextLang, char)`, `set_lang` becomes the default
+rather than the only answer, and nothing else moves. The same reasoning defers the
+*sharpest* signal available — `GetKeyboardLayout` says which language a person is
+typing right now, even on an English-locale host — because committed text has
+nowhere to record what it observed until that facet exists.
+
 **Session 35 in one paragraph.** **TD-84 is paid: a JP or CN typist can see
 which clause they are converting.** `Editor::display` now returns a
 **`Composition`** — the whole composition's span *and* the focused clause's
@@ -556,9 +652,12 @@ is not a regression test.
   Shell compat · fmt · clippy `-D warnings` · tests · no_std wasm32 kernel build
   · dep budget · **shell fmt + clippy + tests** (new) · supply chain · differential
   replay native == wasm32 · purity/host-isolation greps.
-- **Tests: 563** — 438 kernel + 125 shell. All passing.
+- **Tests: 571** — 438 kernel + 133 shell. All passing.
 - **Replay hashes:** oplog `a1b35c1ac5afa7b5…` · state `b95f16327e2e9e88…` —
-  **unmoved in sessions 31, 32, 33, 34 and 35** (a shell-only change touches no encoding), and
+  **unmoved in sessions 31 through 36** (a shell-only change touches no encoding; in
+  session 36 that is not an observation but a requirement — D-129 decision 5 says a
+  `TextLang` is display state that never reaches an op, a snapshot or a hash, so a
+  moved hash would have meant DP-D5 was breached), and
   **MOVED in session 30, legitimately and for the second time in the project's
   life.** ADR-041 added the first new op types since the taxonomy was sealed,
   and docs/29 requires a new op type to join replay-check's generator or the
@@ -668,12 +767,12 @@ is not a regression test.
 
 **The editing surface works and is not finished. In order:**
 
-1. **TD-84 is paid (session 35, D-128)** — the focused clause is drawn.
-   **TD-83 is now the head of this list, and it is *not* small.** It needs a
-   language signal per run and **wants a D entry before any code**; do not "just
-   reorder `PREFERRED`", which only moves the harm from Chinese readers to
-   Japanese ones. It is in docs/44 with the measurement that found it, and that
-   measurement is already done — do not redo it.
+1. **TD-83 and TD-84 are both paid (sessions 35 and 36, D-128 and D-129).** The
+   focused clause is drawn and the font search understands a language.
+   **What is left of TD-83 is one small, sharply-scoped step: nothing tells the
+   window what language it is in** — D-129 decision 6, spelled out in THE EXACT
+   NEXT ACTION below. Until it lands the mechanism is proven and the user
+   experience is not fixed; do not report TD-83's user-visible half as closed.
    *(docs/48's IME item itself is as closed as it gets without a person —
    D-127. Do not re-attempt the mechanical half; extend W-IME-SCRIPTS if a new
    shape appears, and read the 7-item checklist in MEASUREMENTS.md before
@@ -725,6 +824,18 @@ their triggers. The shell's *non*-performance rows are now **TD-83** (Chinese
 drawn by a Japanese face) and **TD-84** (the focused clause is invisible), both
 filed in session 34 with the measurement that found them; TD-84 is the next
 action and TD-83 needs a decision before code.
+
+**Session 36 is the eighth application of the rule, and the first time a control
+that was expected to *pass* is what produced the register row.** The ordering
+tests could all have been written to pass by construction; four of them were run
+with the fix removed first, and each failed with a number. The fifth — the
+forward/reversed walk in `--fonts` — was written as a routine confirmation that a
+language supersedes an earlier language's loaded face. It confirmed that for all
+four signalled languages **and disagreed on `und`**, which is TD-86: a fact about
+every run the window lays out today, arrived at by measurement rather than by
+reading the code and reasoning about it. **A control is not overhead even when
+you are confident** — this one cost a `--fonts` line and produced the session's
+only new understanding.
 
 **Four sessions of performance work, and the lesson held even when the register
 was right:** TD-19 said parsing; it was `extent_of` (TD-66). TD-23 said the
@@ -781,64 +892,70 @@ without the ADR — it retires a frozen ADR's central claim.
 
 ### THE EXACT NEXT ACTION
 
-**Write the D entry for TD-83 — how the display layer learns what language a run
-is in — and only then change anything. Do not "just move `Microsoft YaHei` up
-`PREFERRED`": that is the whole trap, and it is why this row is a decision before
-it is a fix.**
+**Give the window a language. D-129 decision 6 is written and the mechanism
+under it is proven and green — what is missing is the one call that supplies the
+value, and until it lands a Chinese user opening the window still sees
+`Yu Gothic`. This is deliberately small. Do not enlarge it.**
 
-0. **Build note, unchanged and still true.** A release build of the shell needs
+0. **Build notes, unchanged and still true.** A release build of the shell needs
    the in-repo MinGW on PATH or `libsqlite3-sys` fails with *"failed to find
    tool gcc.exe"*. `tools\gates.ps1` does this for you; a bare `cargo build
    --release` does not. From bash:
    `export PATH="/c/Users/velag/Desktop/Ehkatra/.toolchain/mingw64/bin:$PATH"`.
-   Nothing is wrong when you see that error — the toolchain is just not on PATH.
-   **Second note, learned in session 35:** the `--ime` driver writes into
-   `demo/`, so run the built binary **from the repo root**
-   (`./shell/target/release/ehkatra-shell.exe --ime demo`). `cargo run` from
-   inside `shell/` fails with *"The system cannot find the path specified"* —
-   that is the working directory, not a defect.
-1. **Read TD-83 in docs/44 and MEASUREMENTS.md §W-IME-SCRIPTS first.** The cause
-   is **already measured and the alternative already ruled out**: `中文` resolves
-   to `Yu Gothic` both inside a Japanese session *and* on a completely fresh
-   engine, so it is `PREFERRED`'s order and **not** `resolve`'s
-   already-loaded-face shortcut. Do not re-measure this, and do not accept the
-   shortcut as the cause.
-2. **Why reordering is wrong, written down so it is not rediscovered.**
-   `PREFERRED` is ordered by *coverage breadth*, which was the right question for
-   TD-79 (draw something instead of a box) and is the wrong question now that the
-   character is drawn. Yu Gothic (7th) covers the Han a Chinese user types, so
-   YaHei (10th) is never reached. Putting YaHei first makes every Japanese reader
-   see Chinese glyph forms instead. The list cannot be ordered correctly because
-   **nothing in it knows what language the text is in** — that is the actual
-   defect, and a reorder only picks a different victim.
-3. **The decision the D entry has to make, and the constraint on it.** A
-   **script/language signal per run**. Unicode script property is *not* enough
-   (Han is Han). **DP-D5 says locale never enters storage**, so the signal is a
-   display-layer input: the candidates on record in TD-83 are the document's or
-   the user's locale as a display-layer input, or per-cell language tagging as
-   XLSX itself carries. Whichever is chosen it is facet-shaped, and the entry
-   should also say what happens to a run with **no** signal — today's `PREFERRED`
-   walk is the obvious default, and saying so explicitly is part of the decision
-   rather than a detail left to the code.
-4. **Follow D-128's shape if the fix reaches `scene.rs` or `text.rs`.** What
-   worked in session 35: decide what the new input *means* before plumbing it,
-   name the thing rather than adding another same-typed field to a tuple, and
-   **check every new test against a control** — a test written after the fix
-   passes by construction. Both of session 35's controls earned their keep: one
-   caught a wrong-field substitution, one caught draw order.
-5. **TD-82 is still deliberately after TD-83.** 16.8–21.3 ms against a 16 ms
-   budget on one keystroke per process. Item 3 of the typist checklist is what
-   answers whether it is perceptible, and that answer has not arrived. If you do
-   take it on: **profile the split inside `pick` before writing anything**
-   (`covers` / `with_face_data` / `rustybuzz::Face::from_slice`, and the fact
-   that `resolve` re-reads the same face `pick` just parsed).
-6. **What not to redo.** W-IME-SCRIPTS covers three event shapes; adding a
-   fourth kana variant proves nothing. Extend it only if a genuinely new *shape*
-   appears (a Vietnamese Telex or a Thai reordering IME would be one). And
-   nothing in this repo may report docs/48's IME item as closed — **paying TD-84
-   did not close it.** D-127 fixes what "half closed" means, and MEASUREMENTS.md
-   lists the seven questions still open, of which session 35 narrowed one and
-   closed none.
+   And the `--ime` driver writes into `demo/`, so run the built binary **from
+   the repo root** (`./shell/target/release/ehkatra-shell.exe --ime demo`);
+   `cargo run` from inside `shell/` fails with *"The system cannot find the path
+   specified"* — that is the working directory, not a defect.
+1. **Read D-129 decision 6 in docs/43 first.** The decision is already made and
+   does not want relitigating: the source is the **host user locale**, read once
+   at `App::open`, mapped to a `TextLang`. `GetUserDefaultLocaleName` on Windows
+   returns `zh-CN` / `ja-JP` / `ko-KR` / `zh-TW`. The parse — tag string →
+   `TextLang` — is pure, is where every interesting case lives (`zh-Hans`,
+   `zh-CN`, `zh-SG`, `zh-Hant`, `zh-TW`, `zh-HK`, an unknown tag → `Und`), and
+   is testable on any host. **Write and test the parse before touching FFI.**
+2. **The dependency question, and it is the only real one.** There is no
+   `sys-locale` in the tree and `GetUserDefaultLocaleName` needs one FFI call.
+   `windows-sys` is **already in `shell/Cargo.lock` at 0.52, 0.59 and 0.61.2**
+   (winit pulls it), so taking it as a *direct* dependency with the
+   `Win32_Globalization` feature should add **zero crates to the closure** —
+   feature unification on a crate that is already there. **Measure it, do not
+   assume it**: shell closure is 249/280 today, and session 24 and session 32
+   both had this measurement change the answer. If the closure moves, say by how
+   much in MEASUREMENTS.md before deciding. The `unsafe` block is one call and
+   needs its justification comment (DP-C1); `cfg(target_os)` is legal in
+   `shell/` and nowhere else (DP-C2).
+3. **Where it is called, and the trap.** `App::open`, beside `TextEngine::warm`
+   — **not** `TextEngine::new`, for exactly D-126's reason: 133 tests and every
+   benchmark construct an engine, and none of them should acquire a host locale.
+   `App::open_cold` is the constructor the suite goes through; leave it on
+   `Und`. Then assert it: a test that `open_cold` yields `TextLang::Und` is what
+   keeps the suite host-independent, and it is a real assertion because it would
+   fail if the call were put one level too deep.
+4. **What to prove, and against what control.** Session 36's discipline earned
+   its keep five times over, so keep it: the parse table with an unknown tag in
+   it; `open_cold` still `Und`; and re-run `--fonts` and `--ime` on M1. **The
+   host locale here is English**, so on this machine the window will resolve to
+   `Und` and *nothing visible will change* — that is the expected result, not a
+   failure, and it must be stated that way in MEASUREMENTS.md. What M1 can prove
+   is the parse and the plumbing; what it cannot prove is the experience of a
+   `zh-CN` host, and claiming otherwise would be exactly the overreach D-127
+   exists to prevent.
+5. **What not to do.** Do not widen `TextLang` into a locale library. Do not
+   start TD-85 (per-run language) in the same session — it is facet-shaped, the
+   shell reads no facets, and stacking it on this would be the second unverified
+   layer DP-C4 forbids. Do not try to close **TD-86** by making `Und` re-walk
+   the whole order: that is TD-82's per-character cost, and TD-86's row already
+   says the honest fix is to stop being `Und`, which is what this step does.
+6. **After it, the list resumes at accesskit** (item 2 of NEXT ACTION), and the
+   dependency headroom note there should be read together with whatever step 2
+   measures — both draw on the same 280-crate ceiling.
+
+Baseline to return to if anything goes wrong: `.checkpoints\36-textlang\` holds
+`text.rs`, `app.rs`, `ime.rs`, `Cargo.toml`, `docs/43` and `docs/44` as they
+were **before** this session's TD-83 work. (`main.rs` is not in it — session
+36's change to `main.rs` is additive: `LANGS`, `han_by_language`, `han_faces`
+and the one `--fonts` line that calls them.)
+
 
 Baseline to return to if anything goes wrong: `.checkpoints\35-imefocus\` holds
 `app.rs`, `scene.rs`, `ime.rs`, `docs/43` and `docs/44` as they were **before**
@@ -849,6 +966,6 @@ holds `main.rs`, `app.rs`, `text.rs`, `docs/43` and `docs/44` as they were
 **before** session 34's IME-script work. (`ime.rs` is new in session 34;
 deleting it and its `mod ime;` line in `main.rs` reverts the whole change.)
 
-Baseline to return to if anything goes wrong: `.checkpoints\33-warmfonts\` holds
-`text.rs`, `app.rs` and `main.rs` as they were **before** session 33's
-warm-up work.
+(`.checkpoints\33-warmfonts\` was deleted in session 36 under the
+keep-the-last-three rule. What exists is `34-imescripts`, `35-imefocus` and
+`36-textlang`.)

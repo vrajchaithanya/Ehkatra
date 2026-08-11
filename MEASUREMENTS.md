@@ -1995,7 +1995,7 @@ named: `pick` parses a candidate face to test coverage and `resolve` then reads
 and parses the same face again, and rustybuzz's parse of a multi-megabyte CJK
 face may simply cost this. Profile the split before choosing.
 
-## W-IME-SCRIPTS (D-127, docs/48) — the three scripts, replayed and checked · session 34, re-run session 35 · M1
+## W-IME-SCRIPTS (D-127, docs/48) — the three scripts, replayed and checked · session 34, re-run sessions 35 and 36 · M1
 
 `ehkatra-shell --ime demo`, release. Not a latency number. This is the half of
 docs/48's *"IME validated by native JP/CN/KR typists"* that can be closed
@@ -2016,7 +2016,7 @@ nobody notices until it ships.
 | Script | Sequence | Steps | Result | Cell after Enter | Face resolved | Unresolved |
 |---|---|---:|---|---|---|---:|
 | **JP** | kana per keystroke → two-clause conversion → commit | 10 | **pass** | `今日は晴れ` | `Yu Gothic` | 0 |
-| **CN** | Microsoft Pinyin, ASCII → partial conversion → commit | 9 | **pass** | `中文` | **`Yu Gothic`** | 0 |
+| **CN** | Microsoft Pinyin, ASCII → partial conversion → commit | 9 | **pass** | `中文` | **`Microsoft YaHei`** (was `Yu Gothic` — TD-83, paid session 36) | 0 |
 | **KR** | per-syllable, mid-word commit, decomposing Backspace | 10 | **pass** | `한글` | `Malgun Gothic` | 0 |
 
 **29/29 steps, 3/3 cells** — unchanged in session 35, which added the focus
@@ -2042,7 +2042,65 @@ word. A suite that composed kana three times would have proved one shape thrice
 
 ### The two defects this found, and the one it ruled out
 
-**TD-83 — Chinese is drawn by a Japanese face.** `中文` resolves to `Yu Gothic`,
+**TD-83 — Chinese is drawn by a Japanese face. PAID in session 36 (D-129).**
+The face column above is session 34's and is kept as the record of the defect;
+the table below is what the same driver reports now. Everything else in this
+section is unchanged.
+
+### The font half, re-run under a language · session 36 · M1
+
+`ehkatra-shell --ime demo` and `--fonts`, release. Not a latency number either.
+
+| Script | Language told to the display layer | Face, **in session** | Face, **fresh engine alone** | Face under **`und`** |
+|---|---|---|---|---|
+| **JP** `今日は晴れ` | `ja` | `Yu Gothic` | `Yu Gothic` | `Yu Gothic` |
+| **CN** `中文` | `zh-Hans` | **`Microsoft YaHei`** | **`Microsoft YaHei`** | `Yu Gothic` |
+| **KR** `한글` | `ko` | `Malgun Gothic` | `Malgun Gothic` | `Malgun Gothic` |
+
+The `und` column is the control and it is also the defect: it is what this host
+drew before D-129 and what it still draws for any run carrying no language,
+which today is every run the window lays out. **The CN row is TD-83 paid** — and
+the JP row is why the fix is a language and not a reordering, because a reorder
+that put YaHei first would have changed that row too.
+
+*The in-session column is the second control, and it is the one that could have
+failed.* `--ime` replays JP **before** CN through the same `App`, so `Yu Gothic`
+is already loaded and covers `中` by the time Chinese is composed. `resolve`
+reuses a loaded face before consulting the database, so this is precisely where
+TD-83 would have re-appeared by a second route. In session and alone agree, so
+the language-bounded re-check (D-129 decision 3) is doing its job on real data
+and not only in the ordering tests.
+
+### The control that failed, and the row it produced
+
+Two walks over all five languages on two independent engines, forward and
+reversed, asking which face draws `U+4E2D` (`--fonts`):
+
+| | `und` | `ja` | `zh-Hans` | `zh-Hant` | `ko` |
+|---|---|---|---|---|---|
+| **forward** | `Yu Gothic` | `Yu Gothic` | `Microsoft YaHei` | `Microsoft JhengHei` | `Malgun Gothic` |
+| **reversed** | **`Malgun Gothic`** | `Yu Gothic` | `Microsoft YaHei` | `Microsoft JhengHei` | `Malgun Gothic` |
+
+The four **signalled** languages agree family for family in both directions,
+which is the property being tested: a language must not inherit the face an
+earlier language loaded. `und` does not agree, and that is **TD-86** — with no
+language there is nothing to rank a loaded face against, so the shortcut keeps
+whatever is in hand. It is pre-D-129 behaviour, unchanged, and it was *measured*
+here rather than reasoned about, which is the only reason it is a register row
+with a number in it instead of an assumption.
+
+`zh-Hant` is asserted, not validated: M1 has `Microsoft JhengHei`, so the search
+demonstrably reaches it, but nobody here can say whether a Traditional reader
+would accept it as the right first choice.
+
+**What this does not establish.** The window sets no language. The mechanism is
+proven; the *user experience* is fixed only once something supplies the signal,
+which is D-129 decision 6 and is deliberately the next step rather than this
+one. Until then a Chinese user opening the window still sees `Yu Gothic`.
+
+### The defect as session 34 found it (kept as the record)
+
+`中文` resolves to `Yu Gothic`,
 which is `PREFERRED`'s 7th entry; `Microsoft YaHei` is the 10th and is never
 reached, because the list is ordered by coverage breadth and Yu Gothic covers
 these codepoints. Han unification means the characters are *correct* and the

@@ -77,7 +77,36 @@ pub struct Preedit {
     /// offsets. `None` when the platform declines to place one, in which case
     /// the caret belongs after the composition — the convention every IME
     /// expects when it says nothing.
+    ///
+    /// When `start != end` this is **not** a caret: a converting IME reports the
+    /// clause the arrow keys are on as a range, and that range is the only thing
+    /// distinguishing two otherwise-identical conversion states (TD-84).
     pub cursor: Option<(usize, usize)>,
+}
+
+/// Where a composition sits in the display string, and which part of it the
+/// input method has the focus on (TD-84, docs/33 §IME).
+///
+/// Two spans and not one because a converting IME draws two things: the whole
+/// composition is underlined ("this is a proposal"), and the clause under
+/// conversion is shaded ("this is the one the arrow keys and the candidate list
+/// are working on"). Session 31 built the surface against a single-clause
+/// example, where the two are the same span and the distinction is invisible;
+/// `今日は晴れ` with the focus on `今日は` versus on `晴れ` is the case that
+/// proves they are different, and drawing only the first is what TD-84 recorded.
+///
+/// A named struct rather than a second `Option<(usize, usize)>` in the tuple,
+/// because two same-typed span options side by side are exactly where the wrong
+/// two get swapped.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Composition {
+    /// The whole composition's byte span in the display string — underlined.
+    pub span: (usize, usize),
+    /// The focused clause's byte span, a sub-range of `span`. `None` when the
+    /// input method reported a bare caret rather than a range, which is every
+    /// pre-conversion keystroke and every non-converting IME (Korean composes
+    /// this way throughout).
+    pub focus: Option<(usize, usize)>,
 }
 
 impl Editor {
@@ -90,10 +119,10 @@ impl Editor {
     /// composition spliced in at the caret.
     ///
     /// Returns the display string, the caret's byte offset within it, and the
-    /// byte span the composition occupies (which the scene underlines). The
-    /// cell never sees this string — [`App::commit`] writes `text`, which is
-    /// the whole reason the two are separate fields.
-    pub fn display(&self) -> (String, usize, Option<(usize, usize)>) {
+    /// [`Composition`] the scene draws. The cell never sees this string —
+    /// [`App::commit`] writes `text`, which is the whole reason the two are
+    /// separate fields.
+    pub fn display(&self) -> (String, usize, Option<Composition>) {
         let Some(pre) = &self.preedit else {
             return (self.text.clone(), self.caret, None);
         };
@@ -104,15 +133,22 @@ impl Editor {
         // Clamped rather than trusted: the offsets come from a platform IME,
         // and a caret past the end of the composition would be a panic in the
         // shaper's cluster search rather than a cosmetic error.
-        let within = pre
-            .cursor
-            .map(|(start, _)| start)
-            .unwrap_or(pre.text.len())
-            .min(pre.text.len());
+        let clamp = |at: usize| at.min(pre.text.len());
+        let within = clamp(pre.cursor.map(|(start, _)| start).unwrap_or(pre.text.len()));
+        // Normalised, again because the offsets are the platform's: a range
+        // reported end-first is a focused clause, not an empty one, and
+        // `right > left` in the scene would silently drop it.
+        let focus = pre.cursor.and_then(|(start, end)| {
+            let (lo, hi) = (clamp(start.min(end)), clamp(start.max(end)));
+            (hi > lo).then_some((self.caret + lo, self.caret + hi))
+        });
         (
             shown,
             self.caret + within,
-            Some((self.caret, self.caret + pre.text.len())),
+            Some(Composition {
+                span: (self.caret, self.caret + pre.text.len()),
+                focus,
+            }),
         )
     }
 }
@@ -185,7 +221,29 @@ impl App {
     /// `None` when the sheet has no rows or no columns: there is no cell to put
     /// a cursor on, and every operation below would have to carry an "or maybe
     /// there is nothing" case for a document the product cannot produce.
-    pub fn open(mut session: Session, width: f32, height: f32, scale: f32) -> Option<App> {
+    pub fn open(session: Session, width: f32, height: f32, scale: f32) -> Option<App> {
+        let mut app = App::open_cold(session, width, height, scale)?;
+        // **TD-80.** Building the system font database costs 203–321 ms of the
+        // 238–412 ms first non-Latin keystroke (W-FALLBACK, profiled before this
+        // was written), against docs/31's 16 ms keystroke→paint. Started here —
+        // the one place a *real* session begins — it overlaps the seconds
+        // between launch and that keystroke instead of landing on it.
+        //
+        // Here and not in `TextEngine::new`: 114 tests and every benchmark
+        // construct an engine, and warming there would have all of them spawn a
+        // file scan they never use. `open_cold` below is the constructor that
+        // does not, and it is what the suite goes through.
+        app.text.warm();
+        Some(app)
+    }
+
+    /// `open` without the font warm-up — the constructor for callers that are
+    /// not a session (TD-80).
+    ///
+    /// Split out rather than parameterised because the difference is one line
+    /// and a `bool` argument at every call site would be worse documentation
+    /// than two named functions.
+    fn open_cold(mut session: Session, width: f32, height: f32, scale: f32) -> Option<App> {
         let text = TextEngine::new()?;
         let theme = Theme::default();
         let metrics = Metrics::default();
@@ -220,9 +278,15 @@ impl App {
 
     /// Opens with an in-process clipboard that never touches the OS — what
     /// tests use, so the suite needs no display.
+    ///
+    /// Goes through [`App::open_cold`], so the suite also spawns **no** font
+    /// warm-up: 114 tests each starting a background scan of several hundred
+    /// font files is a real cost for a fallback almost none of them exercise
+    /// (TD-80). The tests that do care about warming call `TextEngine::warm`
+    /// directly, in `text.rs`.
     #[cfg(test)]
     pub fn open_detached(session: Session, width: f32, height: f32, scale: f32) -> Option<App> {
-        let mut app = App::open(session, width, height, scale)?;
+        let mut app = App::open_cold(session, width, height, scale)?;
         app.clipboard = Clipboard::detached();
         app.status.clear();
         Some(app)
@@ -1362,12 +1426,12 @@ impl App {
             self.editor
                 .as_ref()
                 .zip(display.as_ref())
-                .map(|(ed, (shown, caret, preedit))| EditView {
+                .map(|(ed, (shown, caret, composition))| EditView {
                     row: ed.row,
                     col: ed.col,
                     text: shown,
                     caret: *caret,
-                    preedit: *preedit,
+                    preedit: *composition,
                 });
         let (state, engine) = self.session.view();
         let frame = scene::Frame {
@@ -1412,6 +1476,25 @@ impl App {
     /// pixels. `--script` prints it; a font-shortfall report would read it too.
     pub fn resolved_faces(&self) -> Vec<&str> {
         self.text.face_names()
+    }
+
+    /// The faces *one string* resolves to on this host, and how many of its
+    /// characters no face could draw.
+    ///
+    /// [`App::resolved_faces`] answers for the whole session, which cannot
+    /// attribute a face to a script: once `Yu Gothic` is loaded for kana it is
+    /// in the session's list whether or not it is what drew `中文`. This lays
+    /// the string out and reports the faces *that* run used, which is the record
+    /// D-125 asks for at the granularity D-127 needs it — and the granularity at
+    /// which TD-83 is visible at all.
+    pub fn faces_for(&mut self, text: &str) -> (Vec<String>, u32) {
+        let run = self.text.layout(text, crate::text::CELL_PX, self.scale);
+        let names = run
+            .faces
+            .iter()
+            .filter_map(|slot| self.text.face_name(*slot).map(String::from))
+            .collect();
+        (names, run.unresolved)
     }
 }
 
@@ -2578,10 +2661,19 @@ mod tests {
         type_text(&mut app, "ab");
         // The IME's cursor is a byte offset *within the composition*.
         app.ime_preedit("にほん", Some((3, 3)));
-        let (shown, caret, span) = app.editor().unwrap().display();
+        let (shown, caret, composition) = app.editor().unwrap().display();
         assert_eq!(shown, "abにほん");
         assert_eq!(caret, 2 + 3);
-        assert_eq!(span, Some((2, 2 + 9)));
+        // A caret and not a range, so there is no focused clause to shade — the
+        // distinction TD-84 turns on, asserted on the side of it that is *not*
+        // a conversion.
+        assert_eq!(
+            composition,
+            Some(Composition {
+                span: (2, 2 + 9),
+                focus: None
+            })
+        );
 
         // No cursor from the platform means "after the composition".
         app.ime_preedit("にほん", None);
@@ -2596,6 +2688,37 @@ mod tests {
         app.ime_preedit("にほ", Some((99, 99)));
         let (shown, caret, _) = app.editor().unwrap().display();
         assert_eq!(caret, shown.len());
+    }
+
+    /// The focused clause is the platform's number too, so it gets the same
+    /// distrust the caret does (TD-84).
+    ///
+    /// Three ways a range can be wrong and one way it can be absent, all of
+    /// which must produce a drawable span or none — never an inverted rect, and
+    /// never an offset the shaper's cluster search would walk off the end of.
+    #[test]
+    fn a_focused_clause_is_clamped_and_normalised_before_it_is_ever_drawn() {
+        let mut app = app(20, 10);
+        let focus = |app: &App| {
+            app.editor()
+                .and_then(|e| e.display().2)
+                .and_then(|c| c.focus)
+        };
+
+        // Past the end: clamped to the composition, not trusted.
+        app.ime_preedit("にほ", Some((3, 99)));
+        assert_eq!(focus(&app), Some((3, 6)));
+        // Reported end-first. This is a focused clause, not an empty one, and a
+        // scene that only checked `right > left` would silently drop it.
+        app.ime_preedit("にほ", Some((6, 3)));
+        assert_eq!(focus(&app), Some((3, 6)));
+        // Both offsets past the end collapse to a caret at the end, which is no
+        // focus at all rather than a zero-width highlight.
+        app.ime_preedit("にほ", Some((99, 99)));
+        assert_eq!(focus(&app), None);
+        // And the platform declining to say anything is not a focus either.
+        app.ime_preedit("にほ", None);
+        assert_eq!(focus(&app), None);
     }
 
     #[test]
@@ -2633,5 +2756,48 @@ mod tests {
             composing[0]
         );
         assert!(composing[3] > 0.0, "a zero-height caret places nothing");
+    }
+
+    /// **TD-80's wiring**, which is the part of it a `text.rs` test cannot see:
+    /// a real open starts the font warm-up and a test open does not.
+    ///
+    /// Both halves matter and the second is the one that would rot silently.
+    /// `warm` in the shared constructor would be invisible — every test would
+    /// still pass, each just quietly spawning a scan of several hundred files
+    /// for a fallback it never uses, and the suite would get slower for a
+    /// reason nothing named. So the suite's own constructor asserts it stays
+    /// cold.
+    #[test]
+    fn a_real_open_warms_the_font_database_and_the_suite_s_open_does_not() {
+        let quiet = App::open_detached(
+            Session::from_log(usk_types::ActorId(1), empty_log(8, 4)),
+            800.0,
+            400.0,
+            1.0,
+        )
+        .expect("the bundled font must load");
+        assert!(
+            !quiet.text.enumerated(),
+            "the constructor the suite uses must not touch the host's fonts"
+        );
+
+        let real = App::open(
+            Session::from_log(usk_types::ActorId(1), empty_log(8, 4)),
+            800.0,
+            400.0,
+            1.0,
+        )
+        .expect("the bundled font must load");
+        assert!(
+            real.text.enumerated(),
+            "a real session must have the enumeration already under way before \
+             the first keystroke arrives (TD-80)"
+        );
+        assert_eq!(
+            real.text.lazy_builds(),
+            0,
+            "and it must be under way *elsewhere* — nothing was built on this \
+             thread"
+        );
     }
 }

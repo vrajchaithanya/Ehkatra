@@ -1,0 +1,53 @@
+[package]
+name = "ehkatra-shell"
+version = "0.1.0"
+edition = "2021"
+
+# Everything platform-specific lives here or in the PAL. DP-C2's gate makes
+# `cfg(target_os)` anywhere else a build failure, which is what keeps the kernel
+# portable while this crate deliberately is not.
+[dependencies]
+winit = "0.30"
+wgpu = "23"
+# Blocks on wgpu's async setup. One crate, no runtime: the shell is not an
+# async program and adding an executor to await three futures would be the
+# larger dependency by far.
+pollster = "0.4"
+# Text (TD-59, docs/31): shaping by rustybuzz, rasterisation by ab_glyph,
+# metrics from a bundled font. `dejavu` ships the font as a versioned,
+# licence-checked dependency rather than an unversioned blob in the repo.
+rustybuzz = "0.20"
+ab_glyph = "0.2"
+dejavu = "2.37"
+# The system clipboard (TD-64, ADR-040). winit carries none, and a clipboard is
+# three platform APIs — Win32, NSPasteboard, and X11/Wayland — behind one
+# interface, which is precisely the "one hard thing bought whole from upstream"
+# DP-S2 permits.
+#
+# `default-features = false` is load-bearing and is the whole of the
+# measurement: the default `image-data` feature pulls an entire image codec
+# stack (`image`, `png`, `tiff`, `zune-jpeg`, `weezl`, `flate2`, `miniz_oxide`,
+# `moxcms`, `half`) for a clipboard flavour a spreadsheet never writes.
+# Measured: **28 crates with it, 7 without** — shell closure 239 -> 267 against
+# 239 -> 246 of a 280 ceiling. Do not drop the flag.
+arboard = { version = "3", default-features = false }
+
+# The kernel, by path. It is a *dependency* of the shell and not a co-member:
+# the arrow points one way, and the shell's dependency choices cannot reach
+# back into the kernel's lockfile (D-116).
+usk-state = { path = "../../crates/usk-state" }
+usk-oplog = { path = "../../crates/usk-oplog" }
+usk-types = { path = "../../crates/usk-types" }
+usk-view = { path = "../../crates/usk-view" }
+# For CRC-32 and, in tests, the inflater that proves the PNG writer's DEFLATE
+# stream is one a real decoder accepts. Zero registry crates: usk-zip has none.
+usk-zip = { path = "../../crates/usk-zip" }
+usk-calc = { path = "../../crates/usk-calc" }
+# For `translate::translate` — moving a formula's relative references is a
+# question about the formula language, so the answer lives in the kernel and
+# copy/paste, fill-drag and the future `fill_range` verb all ask the same one.
+usk-formula = { path = "../../crates/usk-formula" }
+usk-reduce = { path = "../../crates/usk-reduce" }
+ehkatra-store = { path = "../../ehkatra-store" }
+
+fontdb = { version = "0.23", default-features = false, features = ["fs"] }

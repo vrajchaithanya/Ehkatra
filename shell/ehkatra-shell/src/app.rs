@@ -1487,6 +1487,28 @@ impl App {
     /// the string out and reports the faces *that* run used, which is the record
     /// D-125 asks for at the granularity D-127 needs it — and the granularity at
     /// which TD-83 is visible at all.
+    /// Tells the text engine what language this document is in (D-129, TD-83).
+    ///
+    /// The display-layer signal the font search needs and that a `String` in a
+    /// cell cannot carry: Han unification means the codepoints of `中文` are the
+    /// same whether a Japanese or a Chinese reader typed them, and only a
+    /// language says which tradition's glyph forms they expect. DP-D5 is why it
+    /// arrives here rather than in storage — this never reaches an op, a hash or
+    /// a snapshot.
+    ///
+    /// Nothing calls this in the window yet; the source of the value is the
+    /// deliberately separate next step (D-129 decision 6), and until it lands
+    /// the window's runs are `Und` — which is byte-for-byte the behaviour that
+    /// shipped before this existed.
+    pub fn set_text_lang(&mut self, lang: text::TextLang) {
+        self.text.set_lang(lang);
+    }
+
+    /// The language the text engine is serving.
+    pub fn text_lang(&self) -> text::TextLang {
+        self.text.lang()
+    }
+
     pub fn faces_for(&mut self, text: &str) -> (Vec<String>, u32) {
         let run = self.text.layout(text, crate::text::CELL_PX, self.scale);
         let names = run

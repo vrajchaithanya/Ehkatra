@@ -84,6 +84,13 @@ use std::sync::mpsc;
 /// which is also the most reproducible outcome), then the platform's own CJK
 /// families, then broad Latin-plus faces for scripts like Greek extended or
 /// Arabic that the platform UI font usually carries.
+///
+/// **Coverage breadth is the wrong question once the character is drawn**, which
+/// is TD-83 and why [`TextLang`] exists: this list stops at `Yu Gothic` for
+/// Chinese text because Yu Gothic *covers* it, and a Chinese reader is shown
+/// Japanese glyph forms. This list is not reordered to fix that (D-129) — a
+/// language prefixes its own families onto it, and this order remains exactly
+/// what an unsignalled run gets.
 const PREFERRED: &[&str] = &[
     "Noto Sans",
     "Noto Sans CJK JP",
@@ -105,6 +112,165 @@ const PREFERRED: &[&str] = &[
     "Tahoma",
     "Arial",
 ];
+
+/// The language the display layer believes it is drawing (D-129, TD-83).
+///
+/// # Why a language and not a script
+/// Han unification: `中` is Unicode script `Han` in Japanese, in both Chinese
+/// traditions and in Korean, so the codepoint cannot say which glyph forms a
+/// reader expects. 直, 骨 and the 门-class characters are drawn visibly
+/// differently by the Japanese and Simplified-Chinese traditions, and to a
+/// native reader the wrong one looks like a foreign font rather than like their
+/// language. Nothing short of a language answers this — which is also why Noto
+/// Sans CJK, the most pan-Unicode face there is, ships as four language
+/// variants.
+///
+/// # Why a closed enum and not a BCP-47 string
+/// The only thing this layer *does* with the value is order a list of font
+/// families ([`preferred_for`]). A string would invite tag canonicalisation,
+/// locale matching and a fallback chain — a second locale library — for a switch
+/// with five arms. Adding an arm is an ordinary code change: this is display
+/// state, so DP-A5's "op semantics are permanent" does not reach it.
+///
+/// # Where it may and may not live (DP-D5)
+/// *"Locale never enters storage or evaluation."* A `TextLang` is set on a
+/// [`TextEngine`], read only by the font search, and is never encoded, hashed,
+/// carried in an op or written to a snapshot.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum TextLang {
+    /// No signal. The answer for every run the window lays out today, and the
+    /// case [`preferred_for`] must leave **exactly** as it was (D-129).
+    #[default]
+    Und,
+    Ja,
+    /// Simplified Chinese — the tradition TD-83 was found against.
+    ZhHans,
+    /// Traditional Chinese. Included because omitting it would be a known gap
+    /// rather than an unknown one; **untested on M1**, which has no Traditional
+    /// face, so its list is asserted and not measured.
+    ZhHant,
+    Ko,
+}
+
+impl TextLang {
+    /// The families asked for **before** [`PREFERRED`], in this language's own
+    /// order of preference.
+    ///
+    /// A prefix and not a replacement (D-129): everything in `PREFERRED` is
+    /// still asked for afterwards, so a host whose only CJK face is one this
+    /// list never names resolves exactly as it does today. The only thing a
+    /// language changes is the order in which families are tried.
+    ///
+    /// Each list is that language's own tradition: the platform's native UI
+    /// face for the script, the Noto variant for it, and the older bundled
+    /// families that predate them — because a host that has none of the first
+    /// two very often has the third.
+    fn prefix(self) -> &'static [&'static str] {
+        match self {
+            TextLang::Und => &[],
+            TextLang::Ja => &[
+                "Noto Sans CJK JP",
+                "Noto Sans JP",
+                "Yu Gothic",
+                "Meiryo",
+                "MS Gothic",
+                "Hiragino Sans",
+            ],
+            TextLang::ZhHans => &[
+                "Noto Sans CJK SC",
+                "Noto Sans SC",
+                "Microsoft YaHei",
+                "SimSun",
+                "SimHei",
+                "PingFang SC",
+            ],
+            TextLang::ZhHant => &[
+                "Noto Sans CJK TC",
+                "Noto Sans TC",
+                "Microsoft JhengHei",
+                "PMingLiU",
+                "MingLiU",
+                "PingFang TC",
+            ],
+            TextLang::Ko => &[
+                "Noto Sans CJK KR",
+                "Noto Sans KR",
+                "Malgun Gothic",
+                "Batang",
+                "Gulim",
+                "Apple SD Gothic Neo",
+            ],
+        }
+    }
+
+    /// The BCP-47-ish tag this language reports itself as, for driver output and
+    /// for the font record. Display only — nothing parses it back.
+    pub fn tag(self) -> &'static str {
+        match self {
+            TextLang::Und => "und",
+            TextLang::Ja => "ja",
+            TextLang::ZhHans => "zh-Hans",
+            TextLang::ZhHant => "zh-Hant",
+            TextLang::Ko => "ko",
+        }
+    }
+}
+
+/// The whole family search order for `lang`: its own families, then
+/// [`PREFERRED`], with any family named twice kept at its **first** position.
+///
+/// `preferred_for(TextLang::Und)` is `PREFERRED` element for element, and that
+/// identity is the control every assertion about this change is checked against
+/// (D-129 decision 2). Built rather than stored because it is consulted once per
+/// codepoint the bundled face misses — at most a few dozen strings, against a
+/// file read.
+pub fn preferred_for(lang: TextLang) -> Vec<&'static str> {
+    let prefix = lang.prefix();
+    let mut order: Vec<&'static str> = Vec::with_capacity(prefix.len() + PREFERRED.len());
+    for want in prefix.iter().chain(PREFERRED.iter()) {
+        if !order.iter().any(|have| have.eq_ignore_ascii_case(want)) {
+            order.push(want);
+        }
+    }
+    order
+}
+
+/// Where `name` sits in `order`, or `order.len()` for a family it does not name.
+///
+/// Case-insensitively, because a font family's name is compared that way
+/// everywhere else in this file and a host that spells it `MS Gothic` where the
+/// list says `Ms Gothic` is not a different host.
+fn rank_in(order: &[&str], name: &str) -> usize {
+    order
+        .iter()
+        .position(|want| want.eq_ignore_ascii_case(name))
+        .unwrap_or(order.len())
+}
+
+/// How many families must be re-asked before an **already loaded** face called
+/// `name` is allowed to answer for a new codepoint (D-129 decision 3).
+///
+/// [`TextEngine::resolve`] reuses a loaded face before it consults the database,
+/// which is what keeps the second kana in `にほん` from costing a file read. Under
+/// a language that shortcut acquires a second way to produce TD-83: in a
+/// document holding both scripts, whichever language was typed first loads its
+/// face and the other inherits it. So the reuse is allowed only after the
+/// families ahead of it **in this language's own prefix** have been asked.
+///
+/// Bounded by the prefix rather than by the whole order, deliberately:
+///
+/// * Under [`TextLang::Und`] the prefix is empty, so this is `0` and the
+///   shortcut behaves exactly as it did before this existed — the control.
+/// * Once the language's best *present* family is loaded, what remains ahead of
+///   it are families the host does not have, which cost a name filter over
+///   metadata `fontdb` already holds and parse no faces at all.
+/// * Bounding by the whole order would re-walk up to nineteen families for every
+///   distinct new character, parsing each present one to test coverage — TD-82's
+///   16.8–21.3 ms per character, forever, to serve a host nobody's preference
+///   list anticipated.
+fn recheck_before_reuse(lang: TextLang, order: &[&str], name: &str) -> usize {
+    rank_in(order, name).min(lang.prefix().len())
+}
 
 /// The grid's text size in logical pixels. One size for now; the atlas is
 /// keyed by size already, so styles are an addition rather than a rewrite.
@@ -220,8 +386,9 @@ fn load_system() -> fontdb::Database {
 /// One loaded face: what shapes with it, what rasterises from it, and what it
 /// is called.
 ///
-/// The name exists for the record ([`Run::faces`]) and for nothing else — no
-/// decision is made from it after loading.
+/// The name is the record ([`Run::faces`]) **and, since D-129, an input**: it is
+/// what [`recheck_before_reuse`] ranks to decide whether an already-loaded face
+/// may answer for a new codepoint under the current language.
 struct Face {
     name: String,
     face: rustybuzz::Face<'static>,
@@ -233,9 +400,21 @@ pub struct TextEngine {
     /// resolved from the host, in the order they were first needed.
     faces: Vec<Face>,
     /// `char` → the slot that draws it, or `None` when nothing on this host
-    /// can. Memoised because resolving costs file reads and a codepoint's
-    /// answer cannot change while the process runs.
+    /// can. Memoised because resolving costs file reads.
+    ///
+    /// Keyed by the codepoint alone and **not** by `(lang, char)`, because
+    /// [`TextEngine::lang`] is one document-wide value (D-129 decision 4): there
+    /// is never more than one language's answers in here at a time, because
+    /// [`TextEngine::set_lang`] empties it. A `(lang, char)` key is what per-run
+    /// language would need, and is written down in TD-85 rather than built
+    /// speculatively now.
     coverage: HashMap<char, Option<usize>>,
+    /// The language the font search believes it is serving (D-129).
+    ///
+    /// [`TextLang::Und`] until something says otherwise, which is what the
+    /// window does today — so the shipped default is the pre-D-129 behaviour
+    /// exactly, and the machinery is inert until a signal arrives.
+    lang: TextLang,
     /// The system font database: absent, arriving on a thread, or here.
     ///
     /// Never built by [`TextEngine::new`]. `load_system_fonts` reads several
@@ -292,6 +471,7 @@ impl TextEngine {
                 font: FontRef::try_from_slice(bytes).ok()?,
             }],
             coverage: HashMap::new(),
+            lang: TextLang::Und,
             system: SystemFonts::Cold,
             lazy_builds: 0,
             warm_spawns: 0,
@@ -373,6 +553,41 @@ impl TextEngine {
     /// **0**, and an unwarmed one reaches 1 and stays there.
     pub fn lazy_builds(&self) -> u32 {
         self.lazy_builds
+    }
+
+    /// The language the font search is serving (D-129).
+    pub fn lang(&self) -> TextLang {
+        self.lang
+    }
+
+    /// Tells the font search what language it is drawing (D-129, TD-83).
+    ///
+    /// **Forgets every resolution made under the previous language**, because
+    /// that is exactly what changed: `中` answered `Yu Gothic` under
+    /// [`TextLang::Und`] and must be free to answer `Microsoft YaHei` under
+    /// [`TextLang::ZhHans`]. Loaded faces are *not* discarded — a slot is only a
+    /// loaded file, and re-reading one the search may well choose again would
+    /// pay TD-80's price for nothing.
+    ///
+    /// A no-op when the language is unchanged, so a caller that sets it every
+    /// frame does not throw the cache away every frame.
+    pub fn set_lang(&mut self, lang: TextLang) {
+        if self.lang == lang {
+            return;
+        }
+        self.lang = lang;
+        self.coverage.clear();
+    }
+
+    /// How many codepoints the coverage cache currently answers for.
+    ///
+    /// Exists so that *"a language change forgets what the last one resolved"*
+    /// is observable at all — the same reason [`TextEngine::lazy_builds`] and
+    /// [`TextEngine::warm_spawns`] are counters rather than private state. Not
+    /// `cfg(test)`: a field the shipped build does not maintain is a field the
+    /// tests prove nothing about.
+    pub fn cached_resolutions(&self) -> usize {
+        self.coverage.len()
     }
 
     /// How many warm-up threads this engine has started.
@@ -486,22 +701,57 @@ impl TextEngine {
 
     /// Finds and loads a face for `ch`, appending it as a new slot.
     ///
-    /// A face already loaded is reused before anything is read: the second
-    /// kana in `にほん` costs a `glyph_index` call, not a file.
+    /// A face already loaded is reused before anything is read: the second kana
+    /// in `にほん` costs a `glyph_index` call, not a file. Under a language that
+    /// reuse is **conditional** (D-129 decision 3) — the families ahead of the
+    /// loaded one in the language's own prefix are asked first, so a session
+    /// that loaded `Yu Gothic` for kana does not go on to answer Chinese with
+    /// it. Under [`TextLang::Und`] the condition is empty and this is the same
+    /// function it was before.
     fn resolve(&mut self, ch: char) -> Option<usize> {
-        if let Some(slot) = self
+        let order = preferred_for(self.lang);
+        // The best-ranked loaded face that can draw `ch` at all, and how much of
+        // the language's prefix still outranks it. `min` over `(rank, slot)`
+        // rather than the first hit: two loaded faces may both cover `ch`, and
+        // the language's opinion of them is the whole point.
+        let loaded = self
             .faces
             .iter()
-            .position(|f| f.face.glyph_index(ch).is_some())
-        {
+            .enumerate()
+            .filter(|(_, f)| f.face.glyph_index(ch).is_some())
+            .map(|(slot, f)| (recheck_before_reuse(self.lang, &order, &f.name), slot))
+            .min();
+        if let Some((0, slot)) = loaded {
             return Some(slot);
         }
         // The borrow of `system` is closed before `faces` grows: the bytes are
         // copied out here and everything after this block is owned.
         let picked = {
-            let db = self.system_db()?;
-            let id = pick(db, ch)?;
+            // A host whose database cannot be built keeps whatever is already
+            // loaded rather than losing a glyph it can currently draw: the
+            // language is a *preference*, and failing to improve on a face is
+            // not a reason to stop having one (DP-A10).
+            let Some(db) = self.system_db() else {
+                return loaded.map(|(_, slot)| slot);
+            };
+            let found = match loaded {
+                // Something already loaded can draw it, so only a family the
+                // language ranks *ahead* of that one is worth a file read, and
+                // the exhaustive last-resort pass is not run at all — there is
+                // nothing left for it to rescue.
+                Some((limit, slot)) => match pick_in(db, ch, &order[..limit]) {
+                    Some(id) => id,
+                    None => return Some(slot),
+                },
+                // Nothing loaded covers it: the full search, exactly as before.
+                None => pick(db, ch, &order)?,
+            };
+            let id = found;
             let info = db.faces().find(|f| f.id == id)?;
+            // `pick_in` only ever returns a face that *covers* `ch`, and any
+            // loaded face covering `ch` is already in `loaded` — so a face
+            // returned here outranks all of them and cannot be one of them. No
+            // slot is ever loaded twice.
             let name = info
                 .families
                 .first()
@@ -707,23 +957,24 @@ impl TextEngine {
     }
 }
 
-/// Picks the face that should draw `ch`, preferring [`PREFERRED`]'s order.
-///
-/// Two passes, and the split is the determinism argument (D-125):
-///
-/// 1. **The bundled preference list, in its order.** Every host that has the
-///    same families installed reaches the same answer regardless of how its
-///    font directory happens to be enumerated.
-/// 2. Only if none of them covers `ch`, **every face on the host, in name
-///    order** — sorted rather than in enumeration order, so even the fallback's
-///    fallback is reproducible on a given machine. A host that lands here is
-///    one nobody's preference list anticipated, and it gets a glyph instead of
-///    a box.
-///
 /// Regular weight and upright style only: the grid has one style today
 /// (`CELL_PX` is a single size for the same reason), and picking a bold face
 /// for a codepoint because it happened to sort first would be visibly wrong.
-fn pick(db: &fontdb::Database, ch: char) -> Option<fontdb::ID> {
+fn plain(f: &&fontdb::FaceInfo) -> bool {
+    f.style == fontdb::Style::Normal && f.weight == fontdb::Weight::NORMAL
+}
+
+/// The first face in `families`' order that can draw `ch`, or `None`.
+///
+/// Split out of [`pick`] because D-129 needs the *bounded* half on its own: an
+/// already-loaded face may be superseded only by a family the language ranks
+/// ahead of it, and running the exhaustive pass in that case would be reaching
+/// past the answer we already have.
+///
+/// Within one family, faces are taken in **PostScript-name order** rather than
+/// enumeration order, so a host with several cuts of a family reaches the same
+/// one on every run.
+fn pick_in(db: &fontdb::Database, ch: char, families: &[&str]) -> Option<fontdb::ID> {
     let covers = |id: fontdb::ID| -> bool {
         db.with_face_data(id, |bytes, index| {
             rustybuzz::Face::from_slice(bytes, index)
@@ -732,10 +983,7 @@ fn pick(db: &fontdb::Database, ch: char) -> Option<fontdb::ID> {
         })
         .unwrap_or(false)
     };
-    let plain = |f: &&fontdb::FaceInfo| {
-        f.style == fontdb::Style::Normal && f.weight == fontdb::Weight::NORMAL
-    };
-    for want in PREFERRED {
+    for want in families {
         let mut named: Vec<&fontdb::FaceInfo> = db
             .faces()
             .filter(plain)
@@ -750,6 +998,34 @@ fn pick(db: &fontdb::Database, ch: char) -> Option<fontdb::ID> {
             return Some(hit.id);
         }
     }
+    None
+}
+
+/// Picks the face that should draw `ch`, preferring `order`'s order.
+///
+/// Two passes, and the split is the determinism argument (D-125):
+///
+/// 1. **The bundled preference list, in its order** — [`preferred_for`] of the
+///    current language, which for [`TextLang::Und`] is [`PREFERRED`] itself.
+///    Every host that has the same families installed reaches the same answer
+///    regardless of how its font directory happens to be enumerated.
+/// 2. Only if none of them covers `ch`, **every face on the host, in name
+///    order** — sorted rather than in enumeration order, so even the fallback's
+///    fallback is reproducible on a given machine. A host that lands here is
+///    one nobody's preference list anticipated, and it gets a glyph instead of
+///    a box.
+fn pick(db: &fontdb::Database, ch: char, order: &[&str]) -> Option<fontdb::ID> {
+    if let Some(hit) = pick_in(db, ch, order) {
+        return Some(hit);
+    }
+    let covers = |id: fontdb::ID| -> bool {
+        db.with_face_data(id, |bytes, index| {
+            rustybuzz::Face::from_slice(bytes, index)
+                .and_then(|f| f.glyph_index(ch))
+                .is_some()
+        })
+        .unwrap_or(false)
+    };
     let mut all: Vec<&fontdb::FaceInfo> = db.faces().filter(plain).collect();
     all.sort_by(|a, b| a.post_script_name.cmp(&b.post_script_name));
     all.into_iter().find(|f| covers(f.id)).map(|f| f.id)
@@ -1064,5 +1340,226 @@ mod tests {
         );
         let _ = engine.layout("にほん", CELL_PX, 1.0);
         assert_eq!(engine.lazy_builds(), 0);
+    }
+
+    /// Every language this shell knows about, so a new arm cannot be added
+    /// without the properties below being asserted of it.
+    const EVERY: &[TextLang] = &[
+        TextLang::Und,
+        TextLang::Ja,
+        TextLang::ZhHans,
+        TextLang::ZhHant,
+        TextLang::Ko,
+    ];
+
+    /// An unsignalled run asks for **exactly** the families it always did
+    /// (D-129 decision 2).
+    ///
+    /// The control the whole change is checked against. Every run the window
+    /// lays out today is `Und`, so if this drifts, D-129 stopped being a
+    /// language feature and became a font-list rewrite.
+    #[test]
+    fn a_run_with_no_language_asks_for_exactly_the_families_it_always_did() {
+        assert_eq!(
+            preferred_for(TextLang::Und),
+            PREFERRED.to_vec(),
+            "Und must be PREFERRED element for element"
+        );
+    }
+
+    /// A language reorders the search and never shortens it (D-129 decision 2).
+    ///
+    /// Two halves, and the second is the one that would catch a careless edit:
+    /// no family is *lost* (a host whose only CJK face is one the prefix never
+    /// names must still resolve), and the families a language did not promote
+    /// keep `PREFERRED`'s relative order among themselves.
+    #[test]
+    fn a_language_prefix_reorders_the_search_without_removing_anything_from_it() {
+        for lang in EVERY {
+            let order = preferred_for(*lang);
+            for want in PREFERRED {
+                assert!(
+                    order.iter().any(|have| have.eq_ignore_ascii_case(want)),
+                    "{}: {want} fell out of the search entirely",
+                    lang.tag()
+                );
+            }
+            let promoted = lang.prefix();
+            let kept: Vec<&str> = order
+                .iter()
+                .copied()
+                .filter(|f| !promoted.iter().any(|p| p.eq_ignore_ascii_case(f)))
+                .collect();
+            let expected: Vec<&str> = PREFERRED
+                .iter()
+                .copied()
+                .filter(|f| !promoted.iter().any(|p| p.eq_ignore_ascii_case(f)))
+                .collect();
+            assert_eq!(
+                kept,
+                expected,
+                "{}: the families it did not promote changed order among \
+                 themselves",
+                lang.tag()
+            );
+        }
+    }
+
+    /// No family is asked for twice, however many lists name it.
+    ///
+    /// A duplicate is not a correctness bug — the second ask can only repeat the
+    /// first — but it is a *parsed face* per repeat on a host that has it, which
+    /// is TD-82's 16.8–21.3 ms spent to learn nothing.
+    #[test]
+    fn no_family_is_asked_for_twice_in_any_languages_search() {
+        for lang in EVERY {
+            let order = preferred_for(*lang);
+            for (n, family) in order.iter().enumerate() {
+                assert!(
+                    !order[..n]
+                        .iter()
+                        .any(|seen| seen.eq_ignore_ascii_case(family)),
+                    "{}: {family} is asked for twice",
+                    lang.tag()
+                );
+            }
+        }
+    }
+
+    /// The defect and the thing that must not become the defect, in one test
+    /// (TD-83, D-129).
+    ///
+    /// A Simplified-Chinese reader must reach a Chinese face before a Japanese
+    /// one — **and** a Japanese reader must still reach the Japanese one first,
+    /// which is precisely what reordering `PREFERRED` would have destroyed. The
+    /// third assertion is the honest one: under `Und` the old order survives
+    /// unchanged, defect and all, because a run with no signal has given us
+    /// nothing to prefer with.
+    #[test]
+    fn chinese_outranks_japanese_for_a_chinese_reader_and_the_reverse_still_holds() {
+        let rank = |lang: TextLang, family: &str| rank_in(&preferred_for(lang), family);
+
+        assert!(
+            rank(TextLang::ZhHans, "Microsoft YaHei") < rank(TextLang::ZhHans, "Yu Gothic"),
+            "a Chinese reader must not be served Japanese glyph forms"
+        );
+        assert!(
+            rank(TextLang::Ja, "Yu Gothic") < rank(TextLang::Ja, "Microsoft YaHei"),
+            "and the fix must not simply choose a different victim"
+        );
+        assert!(
+            rank(TextLang::Und, "Yu Gothic") < rank(TextLang::Und, "Microsoft YaHei"),
+            "an unsignalled run keeps the coverage-breadth order it always had"
+        );
+        assert!(
+            rank(TextLang::Ko, "Malgun Gothic") < rank(TextLang::Ko, "Yu Gothic"),
+            "Korean was right by accident before; it must be right on purpose now"
+        );
+    }
+
+    /// An already-loaded face is reconsidered against its language's own prefix
+    /// and never against the generic list (D-129 decision 3).
+    ///
+    /// This is the arithmetic that decides whether a session which loaded
+    /// `Yu Gothic` for kana goes on to answer Chinese with it, and it is also
+    /// the arithmetic that decides whether every distinct character costs a
+    /// re-walk. Three cases, and each is a different consequence:
+    #[test]
+    fn an_already_loaded_face_is_reconsidered_only_against_its_own_language() {
+        let und = preferred_for(TextLang::Und);
+        assert_eq!(
+            recheck_before_reuse(TextLang::Und, &und, "Yu Gothic"),
+            0,
+            "with no language there is nothing to prefer, so the shortcut must \
+             behave exactly as it did before D-129 — the control"
+        );
+
+        let sc = preferred_for(TextLang::ZhHans);
+        assert_eq!(
+            recheck_before_reuse(TextLang::ZhHans, &sc, "Yu Gothic"),
+            TextLang::ZhHans.prefix().len(),
+            "a Japanese face loaded in a Chinese document must be re-checked \
+             against the whole Chinese prefix — this is TD-83's second route"
+        );
+        assert_eq!(
+            recheck_before_reuse(TextLang::ZhHans, &sc, "Microsoft YaHei"),
+            rank_in(&sc, "Microsoft YaHei"),
+            "and once the language's own face is loaded only the families \
+             ahead of it are re-asked, which on any host are the ones it does \
+             not have"
+        );
+        assert!(
+            recheck_before_reuse(TextLang::ZhHans, &sc, "Microsoft YaHei")
+                < TextLang::ZhHans.prefix().len(),
+            "so the steady state is strictly cheaper than the first miss"
+        );
+    }
+
+    /// Changing the language forgets what the previous one resolved (D-129).
+    ///
+    /// Host-independent: on a machine with no CJK face at all `中` resolves to
+    /// `None`, and *that* answer is cached too — which is the point. A cache
+    /// that survived the language change would keep answering `Yu Gothic` for a
+    /// document that has just said it is Chinese, and no amount of correct
+    /// ordering downstream would ever be consulted.
+    #[test]
+    fn changing_the_language_forgets_what_the_previous_one_resolved() {
+        let mut engine = TextEngine::new().expect("the bundled font must load");
+        assert_eq!(engine.lang(), TextLang::Und, "the default is no signal");
+        assert_eq!(engine.cached_resolutions(), 0);
+
+        let _ = engine.face_for('中');
+        assert_eq!(
+            engine.cached_resolutions(),
+            1,
+            "a resolution — hit or miss — is memoised, or every character pays \
+             a file read"
+        );
+
+        engine.set_lang(TextLang::ZhHans);
+        assert_eq!(engine.lang(), TextLang::ZhHans);
+        assert_eq!(
+            engine.cached_resolutions(),
+            0,
+            "the previous language's answers must not outlive it"
+        );
+
+        // Idempotent: a caller that sets the language every frame must not throw
+        // the cache away every frame.
+        let _ = engine.face_for('中');
+        let before = engine.cached_resolutions();
+        engine.set_lang(TextLang::ZhHans);
+        assert_eq!(
+            engine.cached_resolutions(),
+            before,
+            "setting the language it already has must cost nothing"
+        );
+    }
+
+    /// Latin is untouched by any of this (D-129 decision 2).
+    ///
+    /// The regression that would matter most and be noticed least: the language
+    /// machinery sits in `resolve`, and `resolve` is only reached for a
+    /// codepoint the bundled face misses. A Latin run must still be slot 0
+    /// alone, and must still enumerate nothing, under every language.
+    #[test]
+    fn a_latin_run_is_bundled_and_enumerates_nothing_under_every_language() {
+        for lang in EVERY {
+            let mut engine = TextEngine::new().expect("the bundled font must load");
+            engine.set_lang(*lang);
+            let run = engine.layout("Revenue 1,234.56", CELL_PX, 1.0);
+            assert_eq!(
+                run.faces,
+                vec![0],
+                "{}: Latin left the bundled face",
+                lang.tag()
+            );
+            assert_eq!(run.unresolved, 0, "{}", lang.tag());
+            assert!(
+                !engine.enumerated(),
+                "{}: a Latin-only session read the host's fonts",
+                lang.tag()
+            );
+        }
     }
 }

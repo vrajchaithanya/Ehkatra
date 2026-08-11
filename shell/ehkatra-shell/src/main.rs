@@ -100,7 +100,10 @@ fn main() {
         // hundred files and must never sit on the launch path; the *name*,
         // because a layout that came from a system face is only reproducible
         // between two machines that agree on which face it was (D-125).
-        Some("--fonts") => fonts(),
+        // Since D-129 it also answers *which* face each language reaches for the
+        // same Han codepoint, which is TD-83's whole subject and a fact only
+        // this host can supply.
+        Some("--fonts") => fonts().map(|report| format!("{report}\n\n           {}", han_faces())),
         Some(other) => Err(format!(
             "unknown argument {other:?}; try --render <path>, --script <path>, --ime <dir>, \
              --bench, --present, --fonts, or no arguments to open a window"
@@ -235,6 +238,102 @@ fn fonts() -> Result<String, String> {
         warm.warm_spawns(),
         engine.face_names(),
     ))
+}
+
+/// Every language the display layer can be told about (D-129), in list order.
+const LANGS: &[text::TextLang] = &[
+    text::TextLang::Und,
+    text::TextLang::Ja,
+    text::TextLang::ZhHans,
+    text::TextLang::ZhHant,
+    text::TextLang::Ko,
+];
+
+/// Which face **one** engine resolves `中` to as it is told each language in
+/// `order`, and how many resolutions it still has cached at the end.
+///
+/// One engine walked across the languages rather than a fresh one per language,
+/// deliberately: that is the mixed-document path D-129 decision 3 is about. The
+/// first language to run loads a face, and every language after it has an
+/// already-loaded face covering `中` sitting in front of it — which is exactly
+/// the shortcut that had to be made language-aware. A fresh engine per language
+/// would answer the easy question and skip this one.
+///
+/// The language is read back out of the engine rather than taken from the loop
+/// variable, so the label says what the engine is *serving* and not what it was
+/// *asked for*.
+fn han_by_language(order: &[text::TextLang]) -> (Vec<String>, usize) {
+    let Some(mut engine) = text::TextEngine::new() else {
+        return (Vec::new(), 0);
+    };
+    let mut out = Vec::with_capacity(order.len());
+    for lang in order {
+        engine.set_lang(*lang);
+        let run = engine.layout("中", text::CELL_PX, 1.0);
+        let face = run
+            .faces
+            .first()
+            .and_then(|slot| engine.face_name(*slot))
+            .unwrap_or("(nothing on this host)")
+            .to_string();
+        out.push(format!("{}={face}", engine.lang().tag()));
+    }
+    (out, engine.cached_resolutions())
+}
+
+/// W-IME-SCRIPTS' font half (TD-83, D-129): which face each language reaches for
+/// the same Han codepoint on this host, and the control that says a **signalled**
+/// language's answer does not depend on which language the session saw first.
+///
+/// Two walks over the five languages, forward and reversed, on two independent
+/// engines. The four signalled languages must agree family for family: if they
+/// do not, an already-loaded face is still answering for a language that should
+/// have superseded it, which is TD-83 arriving by the second route D-129
+/// decision 3 exists to close.
+///
+/// **`Und` is compared separately and is expected to disagree**, which this
+/// driver measured rather than assumed. With no language there is nothing to
+/// prefer, so the loaded-face shortcut reuses whatever is already in hand — the
+/// pre-D-129 behaviour exactly, order dependence and all. Reported on its own
+/// line rather than folded into a pass/fail, because it is a real property of
+/// every run the window lays out today (TD-86) and hiding it inside an
+/// aggregate is how a known gap becomes an unknown one.
+fn han_faces() -> String {
+    let (forward, cached) = han_by_language(LANGS);
+    let mut backward_order: Vec<text::TextLang> = LANGS.to_vec();
+    backward_order.reverse();
+    let (mut backward, _) = han_by_language(&backward_order);
+    backward.reverse();
+    let signalled = |v: &[String]| -> Vec<String> {
+        v.iter()
+            .filter(|entry| !entry.starts_with("und="))
+            .cloned()
+            .collect()
+    };
+    let und = |v: &[String]| -> String {
+        v.iter()
+            .find(|entry| entry.starts_with("und="))
+            .cloned()
+            .unwrap_or_default()
+    };
+    let agree = signalled(&forward) == signalled(&backward);
+    format!(
+        "W-IME-SCRIPTS font half (TD-83, D-129) - which face draws U+4E2D by \
+         language\n           \
+         forward walk      {forward:?}\n           \
+         reversed walk     {backward:?}   (same engine order reversed, then \
+         re-sorted for comparison)\n           \
+         signalled agree   {}   (a language must not inherit the face an \
+         earlier language loaded)\n           \
+         unsignalled       forward {:?} / reversed {:?}   (TD-86: with no \
+         language the shortcut keeps whatever is loaded, which is the \
+         pre-D-129 behaviour and is what every window run does today)\n           \
+         cached after walk {cached}   (set_lang empties the coverage cache, so \
+         this is the last language's answers alone)",
+        if agree { "YES" } else { "**NO**" },
+        und(&forward),
+        und(&backward),
+    )
 }
 
 /// W-OPEN-SHELL (TD-66): the cost of opening a workbook, by phase.
