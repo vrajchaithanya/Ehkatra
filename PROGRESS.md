@@ -19,6 +19,77 @@ tagged, W-ORACLE is 90.4%. **And it exports:** session 29 adds XLSX *write*
 with a published round-trip fidelity number — 100.0% of the modelled surface
 over the whole corpus, verified against real Excel (W-XLSX-WRITE).
 
+**Session 33 in one paragraph.** **TD-80 is paid: a CJK user's first keystroke
+no longer stalls the grid for a third of a second.** The enumeration is off the
+frame — `App::open` starts a background thread that builds the
+`fontdb::Database` and hands it over an `mpsc` channel (**D-126**) — and the
+first non-Latin codepoint went **244–887 ms → 16.8–21.3 ms** on M1. The profile
+from session 32 was right and was not redone: the enumeration was 203–321 ms of
+the miss, so moving it was the whole fix, and the remainder is now the whole
+cost. Tests 552 → 556 (kernel 438 unchanged, shell 114 → 118). Gates green,
+replay hashes unmoved — a shell-only change touches no encoding.
+
+**The decision that mattered was not the threading.** It was *where the thread
+starts*, and PROGRESS.md had already named it: `App::open`, never
+`TextEngine::new`, because 118 shell tests and every benchmark construct an
+engine and would each have spawned a scan of several hundred font files for a
+fallback they never use. What that leaves out — and what the handoff did not
+say — is that `App::open_detached`, the constructor the *suite* uses, goes
+through `App::open`. So the split is one layer lower: `App::open_cold` builds
+the app, `App::open` is that plus one `warm()` line, and `open_detached` uses
+`open_cold`. **Both halves are asserted**, and the second is the one that would
+have rotted silently: `warm` in the shared constructor keeps every test passing
+while quietly making the suite slower for a reason nothing names.
+
+**`Option` was the wrong shape and that is the substance of D-126.**
+`system: Option<Database>` cannot tell *"not built yet"* from *"a thread is
+building it"* — the first must build inline, the second must wait — and
+collapsing them is exactly how a warmed engine enumerates twice. So
+`SystemFonts { Cold, Warming(Receiver), Ready(Database) }`. A miss arriving
+mid-scan `recv()`s, which blocks precisely as the old inline build did, so the
+path is **neutral or better and never worse**; a miss on a cold engine builds
+inline, so the lazy path survives for every caller that is not an `App`. Thread
+spawn failure and a dead thread both fall back to `Cold` rather than panic
+(DP-A10): a shell that cannot start a thread must still draw kana.
+
+**The tests are structural, and they were checked by being broken.** The
+tempting test — warm, sleep, assert the resolve was fast — is a race dressed as
+an assertion (DP-C5). Instead the engine ships two counters, `lazy_builds` and
+`warm_spawns`, and the claims become numbers: *"the enumeration happens
+elsewhere"* is `lazy_builds == 0`, *"warm is idempotent"* is `warm_spawns == 1`.
+The second counter exists because a `warm` that spawned a second scan and handed
+over the second database would look identical from outside and cost twice as
+much. All three warm tests were then **re-run with the fix disabled and all
+three fail** — session 28's lesson, that a test which passes both ways is not a
+regression test.
+
+**The measurement that would have been wrong, and the control that caught it.**
+TD-80 required cold launch to be re-checked, since a background file scan
+competing with startup is the failure mode it introduces. The warmed build
+opens to first frame in **52.5–69.3 ms** against session 32's recorded **39.8
+ms** — which reads as a regression caused by exactly the suspected thing. It is
+not. A **control binary was built with the single `warm()` line removed** and
+measured on the same host minutes later: **51.1–65.2 ms**. The distributions
+overlap; the warm-up's cost to launch is not distinguishable from run-to-run
+variance, and 39.8 ms was one sample from the low end of a distribution. Cold
+launch on M1 is **~50–70 ms**, warmed or not, against docs/31's 1.0 s. W-PRESENT
+and W-OPEN-SHELL are annotated so nothing still quotes 39.8 as *the* number.
+W-KEYSTROKE was re-measured and is unmoved: **1.73–2.62 ms p50 typing, 1.68–2.10
+ms composing** against 16 ms — the scan does not steal the frame beside it.
+
+**What is still owed is measured, not suspected — and no fix was built for it.**
+16.8–21.3 ms is still **1.05–1.33× docs/31's 16 ms**. That is `pick` itself, now
+that nothing stands in front of it: walking `PREFERRED` and loading the family
+that answers (`Yu Gothic`, the 7th entry, a large CJK face). The **split inside
+the pick is not measured**, and two different causes with two different fixes
+are visible in the code — `pick` parses a candidate face to test coverage and
+`resolve` then reads and parses the same face *again*, and rustybuzz's parse of
+a multi-megabyte CJK file may simply cost this. Choosing between them without
+profiling is how the last five performance rows went wrong. Filed as **TD-82**
+with both candidates named and neither chosen. `pick`'s exhaustive last-resort
+pass and the un-shared per-process resolution were carried into TD-82 rather
+than fixed, and that is stated rather than quietly dropped.
+
 **Session 32 in one paragraph.** **A CJK user can now *read* what they typed.**
 Session 31 delivered the composition and drew it as three identical boxes; this
 session paid **TD-79** with a font fallback chain (**D-125**), which is TD-79's
@@ -346,9 +417,9 @@ is not a regression test.
   Shell compat · fmt · clippy `-D warnings` · tests · no_std wasm32 kernel build
   · dep budget · **shell fmt + clippy + tests** (new) · supply chain · differential
   replay native == wasm32 · purity/host-isolation greps.
-- **Tests: 552** — 438 kernel + 114 shell. All passing.
+- **Tests: 556** — 438 kernel + 118 shell. All passing.
 - **Replay hashes:** oplog `a1b35c1ac5afa7b5…` · state `b95f16327e2e9e88…` —
-  **unmoved in sessions 31 and 32** (a shell-only change touches no encoding), and
+  **unmoved in sessions 31, 32 and 33** (a shell-only change touches no encoding), and
   **MOVED in session 30, legitimately and for the second time in the project's
   life.** ADR-041 added the first new op types since the taxonomy was sealed,
   and docs/29 requires a new op type to join replay-check's generator or the
@@ -370,12 +441,24 @@ is not a regression test.
   should be budgeted together rather than first-come.
 - **W-ORACLE:** 90.4% (1,235 / 1,366).
 - **The numbers that are new** (MEASUREMENTS.md):
-  · **W-FALLBACK (session 32, TD-79/TD-80)** — the first codepoint the bundled
-    face cannot draw costs **238–412 ms**, of which the system-font enumeration
-    is **203–321 ms** (379 faces on M1); every one after it costs **22–49 µs**,
-    and a Latin run costs 230–575 µs and enumerates nothing. Resolved face on
-    M1: **Yu Gothic**. The first figure is 15–25× docs/31's 16 ms keystroke
-    budget, once per process — **TD-80**, profiled before it was filed.
+  · **W-FALLBACK (session 33, TD-80 paid)** — the first codepoint the bundled
+    face cannot draw now costs **16.8–21.3 ms**, down from **244–887 ms**: the
+    enumeration (222–283 ms, 379 faces on M1) runs on a background thread that
+    `App::open` starts, and the warmed engine builds **0** databases inline
+    from **1** warm-up. What remains is the `pick` alone, still **1.05–1.33×**
+    docs/31's 16 ms — **TD-82**, filed with the split inside it deliberately
+    unmeasured and no fix built. Session 32's cold figures (238–412 ms, of
+    which 203–321 enumeration) still stand as the *unwarmed* path, which is
+    what a `TextEngine` without an `App` around it takes.
+  · **Cold launch, re-measured against a control (session 33)** — **52.5–69.3 ms
+    warmed vs 51.1–65.2 ms from a binary built without the warm call**, 5 runs
+    each, overlapping. The warm-up is not distinguishable from run-to-run
+    variance, and session 32's single **39.8 ms** was the low end of a
+    distribution rather than the value. Read cold launch as **~50–70 ms on M1**
+    against docs/31's 1.0 s. W-PRESENT and W-OPEN-SHELL carry the correction.
+  · **W-KEYSTROKE (re-run session 33)** — **1.73–2.62 ms p50 typing, 1.68–2.10
+    ms p50 composing**, against 16 ms. Unmoved with the font scan running
+    beside it.
   · **W-DEPS-FALLBACK (session 32)** — `fontdb` + `fs` **+3 crates** (249/280),
     `fontdb` default +5, `font-kit` **+19**. Measured before choosing, and the
     measurement is why the answer is `fontdb`.
@@ -421,32 +504,14 @@ is not a regression test.
 
 **The editing surface works and is not finished. In order:**
 
-1. **TD-80 — warm the font database off the frame.** This is the residual
-   TD-79's fix created and it is *measured, profiled and scoped* (W-FALLBACK,
-   D-125): the first codepoint the bundled face cannot draw costs **238–412 ms**
-   inside `TextEngine::layout`, against docs/31's 16 ms keystroke→paint. The
-   cause is not a guess — the enumeration is **203–321 ms** of it (379 face
-   files read and parsed to learn their names) and the pick is the remainder, so
-   the fix is to move the enumeration, not to make the search cleverer.
-
-   **The shape, so the next session does not rediscover it.** Build the
-   `fontdb::Database` on a background thread and hand it over a
-   `std::sync::mpsc` channel; `TextEngine::resolve` takes the receiver and
-   `recv()`s, which blocks exactly as today if the user is faster than the scan
-   and is free otherwise. **The decision that matters is *where the thread
-   starts*: `App::open`, not `TextEngine::new`** — 114 tests and every benchmark
-   construct a `TextEngine`, and starting it there would have all of them spawn
-   a 300 ms file scan they never use. Two numbers must be re-measured, not one:
-   W-KEYSTROKE **and cold launch** (39.8 ms against docs/31's 1.0 s), because a
-   background file scan competing with startup is the thing that could go wrong.
-   TD-80 also names two residuals to fix or re-file while there: `pick`'s
-   exhaustive last-resort pass re-reads every face on a host whose fonts are in
-   none of `PREFERRED` (seconds, untested — M1 never reaches it), and the
-   resolution is not shared between processes.
-
-   **Then, and only then, attempt docs/48's *"IME validated by native JP/CN/KR
-   typists"*** — TD-79 unblocked it, and a native typist's very first keystroke
-   is the one that pays TD-80.
+1. **Attempt docs/48's *"IME validated by native JP/CN/KR typists"*.** **TD-79
+   unblocked it and TD-80 is now paid** (session 33, D-126), so a native
+   typist's first keystroke costs 16.8–21.3 ms rather than a third of a second.
+   That is the last structural thing that stood in front of this item.
+   **TD-82 does not block it** — 1.05–1.33× the frame budget on one keystroke is
+   a thing a human might not notice, and finding out whether they do is *itself*
+   the useful signal. Take the validation first and let it tell you whether
+   TD-82 is real to a user or only real to a stopwatch.
 2. Then **accesskit tree v1** and the platform adapters (menus, dialogs, file
    association). **Read the headroom note in CURRENT STATE first**: fallback
    spent 3 of the 34 crates, leaving 31, and ADR-037's earmark was ~50 for
@@ -504,6 +569,16 @@ fifth application and the first where the profile ran *before the debt row was
 even written*: TD-80 was filed with `--fonts`'s split already in it, so the row
 says "the enumeration is 203–321 of 238–412 ms" instead of "the first miss is
 slow, probably the enumeration". That is the register entry the rule is for.
+**Session 33 is the sixth, and it is the first time the rule paid off on the
+way *out* rather than on the way in.** TD-80's fix went in exactly as the
+profile predicted — the enumeration was the miss, so moving it was the whole
+fix. The trap was in the *verification*: cold launch measured 52.5–69.3 ms
+against session 32's recorded 39.8 ms, which is a textbook "the background scan
+you just added is competing with startup". A control binary built without the
+one `warm()` line measured 51.1–65.2 ms on the same host. The regression was not
+there; the 39.8 ms was one sample. **Compare against a control run in the same
+conditions, not against a recorded number** — a corollary the register did not
+have before, and the reason W-PRESENT now says ~50–70 ms.
 
 **Gated and should stay closed** (D-112): TD-17 and TD-44 have triggers that
 measurement shows are not live; TD-37 is blocked on packaging rather than
@@ -527,51 +602,65 @@ without the ADR — it retires a frozen ADR's central claim.
 
 ### THE EXACT NEXT ACTION
 
-**Pay TD-80 — move the font enumeration off the frame. The profile is already
-done; do not redo it, and do not re-litigate the fallback design (D-125).**
+**Attempt docs/48's *"IME validated by native JP/CN/KR typists"*. TD-79 and
+TD-80 are both paid, so nothing structural is in front of it any more. Do not
+re-open D-125 or D-126, and do not start on TD-82 first — see step 5.**
 
-1. Read **docs/44 TD-80**, **D-125**, and **MEASUREMENTS.md §W-FALLBACK** — in
-   that order. W-FALLBACK already contains the split this work needs
-   (enumeration 203–321 ms of a 238–412 ms first miss, 379 faces on M1), so the
-   first thing to do is *not* another measurement. `--fonts` reproduces it in
-   two seconds if you want to see it.
-2. **The change, and its whole surface.** `TextEngine::resolve` in
-   `shell/ehkatra-shell/src/text.rs` currently does
-   `db.load_system_fonts()` inline the first time a codepoint misses. Replace
-   `system: Option<fontdb::Database>` with a warm-up: a `std::thread::spawn` that
-   builds the database and sends it down a `std::sync::mpsc` channel, and a
-   `resolve` that `recv()`s it once. Blocking on `recv()` is exactly today's
-   behaviour when the user is faster than the scan, so the change can only be
-   neutral-or-better, never worse.
-3. **The decision that matters, and it is not the threading.** The thread must
-   start in **`App::open`** (`app.rs`), *not* in `TextEngine::new` — 114 tests
-   and every benchmark construct a `TextEngine`, and starting it there makes all
-   of them spawn a 300 ms file scan they never use. So `TextEngine` needs a
-   `warm()` method the app calls, and the default must remain lazy.
-4. **Two numbers must move or be shown not to, not one.**
-   `ehkatra-shell --keystroke 10000` for W-KEYSTROKE, **and cold launch** from
-   `--present` (39.8 ms against docs/31's 1.0 s), because a background file scan
-   competing with startup is the failure mode this introduces. Also re-run
-   `--fonts` — its `first miss` line should drop to the pick alone once warmed,
-   and if it does not, the hand-off is wrong.
-5. **The test that closes it** must prove the *ordering*, not the speed: a test
-   asserting `App::open` leaves the engine warm — e.g. that a resolve after a
-   short settle does not block — is timing-dependent and therefore a flaky test
-   (DP-C5). Assert the structure instead: that `TextEngine::warm` is idempotent,
-   that a `resolve` before warming still succeeds (the lazy path must survive),
-   and that a warmed engine resolves without touching the lazy constructor.
-6. TD-80 names two residuals to fix or deliberately re-file while you are in
-   here: `pick`'s exhaustive last-resort pass re-reads every face on a host
-   whose fonts are in none of `text::PREFERRED` (seconds, and untested because
-   M1 never reaches it), and the resolution is not shared between processes.
-7. Only then attempt docs/48's *"IME validated by native JP/CN/KR typists"*.
-   TD-79 unblocked it — `demo/editing-ime.png` shows real kana now — and TD-80
-   is the last thing between it and a first keystroke that does not stall.
+0. **Build note, because it cost this session ten minutes.** A release build of
+   the shell needs the in-repo MinGW on PATH or `libsqlite3-sys` fails with
+   *"failed to find tool gcc.exe"*. `tools\gates.ps1` does this for you; a bare
+   `cargo build --release` does not. From bash:
+   `export PATH="/c/Users/velag/Desktop/Ehkatra/.toolchain/mingw64/bin:$PATH"`.
+   Nothing is wrong when you see that error — the toolchain is just not on PATH.
+1. Read **docs/48**, **D-125** and **D-126** — in that order. D-126 is new and
+   describes the warm-up you will be typing into: `App::open` starts it,
+   `App::open_cold` (what the suite uses) does not, and `TextEngine::warm` is
+   idempotent.
+2. **The thing to produce is a judgement, not a number.** docs/48's item asks
+   for *validated by native typists*, and the honest constraint is that this
+   session had no native typist. Decide up front what "validated" can mean
+   without one and write that decision down before doing the work, because the
+   temptation is to substitute more of our own tests and call it validation —
+   which D-123's rule ("never claim a fidelity number our own code alone
+   produced where a real oracle is available") is the same shape of mistake.
+   A defensible reading: a scripted end-to-end pass per script (JP kana→kanji,
+   CN pinyin, KR hangul composition) through `--script`, each producing a frame
+   in `demo/`, plus a written list of what a native typist would still have to
+   check that a script cannot. Then the docs/48 item is *partly* closed, and
+   says which part.
+3. **Where the surface already is**, so you do not go looking: `App::ime_preedit`
+   / `ime_commit` in `app.rs`, `Editor::preedit` and `Editor::display`, the
+   candidate-window rectangle in `App::ime_area`, and `script.rs` for the
+   scripted driver that produced `demo/editing-ime.png`. `--script` prints the
+   resolved faces, which is what tells you a CJK frame is real rather than
+   `.notdef` boxes.
+4. **One thing this will probably surface, named now so it is not a surprise.**
+   CN and KR have never been exercised. `text::PREFERRED` lists `Microsoft
+   YaHei`, `SimSun` and `Malgun Gothic`, and nothing in this repo has ever
+   resolved through any of them — every CJK frame we have is JP, and on M1 it
+   resolves to `Yu Gothic`, the 7th entry. A Simplified-Chinese or Korean run is
+   the first real exercise of the preference list past that point. (`--script`
+   itself is fine: it goes through `App::open`, so it is warmed like the window.
+   The per-process caveat in TD-82 is that each *process* warms its own — the
+   resolution is not shared across them.)
+5. **TD-82 is the follow-up, and it is deliberately *after* this.** The residual
+   first-miss cost is 16.8–21.3 ms against a 16 ms budget — 1.05–1.33×, on one
+   keystroke per process. Whether that is perceptible is exactly the kind of
+   thing step 2's validation answers and a stopwatch does not. If you do take it
+   on: **profile the split inside `pick` before writing anything** (`covers` /
+   `with_face_data` / `rustybuzz::Face::from_slice`, and the fact that `resolve`
+   re-reads the same face `pick` just parsed). The register is five-for-five on
+   the named cause not being the measured one, and TD-82 names two candidates
+   precisely so the next session does not pick one by feel.
+
+Baseline to return to if anything goes wrong: `.checkpoints\33-warmfonts\` holds
+`text.rs`, `app.rs` and `main.rs` as they were **before** this session's
+warm-up work.
 
 Baseline to return to if anything goes wrong: `.checkpoints\32-fallback\` holds
 `text.rs`, `scene.rs`, `app.rs`, `script.rs`, `Cargo.toml` and the shell
-`Cargo.lock` as they were **before** this session's fallback work.
+`Cargo.lock` as they were **before** session 32's fallback work.
 
 Baseline to return to if anything goes wrong: `.checkpoints\31-ime\` holds
 `app.rs`, `scene.rs`, `window.rs`, `input.rs`, `script.rs` and `text.rs` as they
-were **before** this session's IME work.
+were **before** session 31's IME work.

@@ -143,11 +143,6 @@ fn open_window(rows: usize, frames: Option<usize>) -> Result<String, String> {
 /// * **after** — the same script again, which must be back at the Latin cost,
 ///   because a resolved face is cached and a second kana is a `glyph_index`
 ///   call.
-///
-/// **TD-80 added a fourth and fifth**, and they are what says whether the fix
-/// worked: how long the background warm-up takes to finish, and what the first
-/// miss costs once it has. The second is the first miss *minus the enumeration*
-/// — the pick alone — and if it is not, the hand-over is not happening.
 fn fonts() -> Result<String, String> {
     use std::time::Instant;
     let mut engine = text::TextEngine::new().ok_or("the bundled font failed to load")?;
@@ -174,38 +169,13 @@ fn fonts() -> Result<String, String> {
     let enumerate = t.elapsed();
     let faces = db.faces().count();
 
-    // TD-80: the same first miss on an engine `App::open` warmed. A second
-    // engine rather than the one above, because the one above has already
-    // resolved and would answer from its cache — which measures nothing.
-    //
-    // `poll_warm` rather than a sleep: the wait is itself a number worth having
-    // (it is how much of the user's first seconds the scan actually needs), and
-    // a fixed sleep would either overstate it or measure a half-finished scan.
-    let mut warm = text::TextEngine::new().ok_or("the bundled font failed to load")?;
-    let t = Instant::now();
-    warm.warm();
-    while warm.enumerated() && !warm.poll_warm() {
-        std::thread::yield_now();
-    }
-    let warm_wait = t.elapsed();
-
-    let t = Instant::now();
-    let warm_first = warm.layout("にほん", text::CELL_PX, 1.0);
-    let warm_first_cost = t.elapsed();
-
     Ok(format!(
-        "W-FALLBACK (TD-79, D-125, TD-80) - font fallback on this host\n           \
+        "W-FALLBACK (TD-79, D-125) - font fallback on this host\n           \
          latin run         {latin_cost:?}   faces {:?}, {} unresolved\n           \
-         first miss COLD   {first_cost:?}   faces {:?}, {} unresolved  \
-         (system enumeration + pick, on the frame)\n           \
+         first miss        {first_cost:?}   faces {:?}, {} unresolved  \
+         (system enumeration + pick, once per process)\n           \
          same script again {again_cost:?}   faces {:?}, {} unresolved\n           \
            of which enum   {enumerate:?}   ({faces} faces on this host)\n           \
-         warm-up wait      {warm_wait:?}   (background thread, App::open starts it)\n           \
-         first miss WARM   {warm_first_cost:?}   faces {:?}, {} unresolved  \
-         (the pick alone - TD-80's whole claim is that this is the cold number \
-         minus the enumeration)\n           \
-         inline builds     cold {} / warm {}   (0 on the warm engine or the \
-         hand-over is not happening; {} warm-up thread started)\n           \
          loaded faces      {:?}\n           \
          preference order is a constant in text.rs; only which of them the host \
          has installed varies",
@@ -215,11 +185,6 @@ fn fonts() -> Result<String, String> {
         first.unresolved,
         again.faces,
         again.unresolved,
-        warm_first.faces,
-        warm_first.unresolved,
-        engine.lazy_builds(),
-        warm.lazy_builds(),
-        warm.warm_spawns(),
         engine.face_names(),
     ))
 }

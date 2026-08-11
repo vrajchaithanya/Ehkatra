@@ -185,29 +185,7 @@ impl App {
     /// `None` when the sheet has no rows or no columns: there is no cell to put
     /// a cursor on, and every operation below would have to carry an "or maybe
     /// there is nothing" case for a document the product cannot produce.
-    pub fn open(session: Session, width: f32, height: f32, scale: f32) -> Option<App> {
-        let mut app = App::open_cold(session, width, height, scale)?;
-        // **TD-80.** Building the system font database costs 203–321 ms of the
-        // 238–412 ms first non-Latin keystroke (W-FALLBACK, profiled before this
-        // was written), against docs/31's 16 ms keystroke→paint. Started here —
-        // the one place a *real* session begins — it overlaps the seconds
-        // between launch and that keystroke instead of landing on it.
-        //
-        // Here and not in `TextEngine::new`: 114 tests and every benchmark
-        // construct an engine, and warming there would have all of them spawn a
-        // file scan they never use. `open_cold` below is the constructor that
-        // does not, and it is what the suite goes through.
-        app.text.warm();
-        Some(app)
-    }
-
-    /// `open` without the font warm-up — the constructor for callers that are
-    /// not a session (TD-80).
-    ///
-    /// Split out rather than parameterised because the difference is one line
-    /// and a `bool` argument at every call site would be worse documentation
-    /// than two named functions.
-    fn open_cold(mut session: Session, width: f32, height: f32, scale: f32) -> Option<App> {
+    pub fn open(mut session: Session, width: f32, height: f32, scale: f32) -> Option<App> {
         let text = TextEngine::new()?;
         let theme = Theme::default();
         let metrics = Metrics::default();
@@ -242,15 +220,9 @@ impl App {
 
     /// Opens with an in-process clipboard that never touches the OS — what
     /// tests use, so the suite needs no display.
-    ///
-    /// Goes through [`App::open_cold`], so the suite also spawns **no** font
-    /// warm-up: 114 tests each starting a background scan of several hundred
-    /// font files is a real cost for a fallback almost none of them exercise
-    /// (TD-80). The tests that do care about warming call `TextEngine::warm`
-    /// directly, in `text.rs`.
     #[cfg(test)]
     pub fn open_detached(session: Session, width: f32, height: f32, scale: f32) -> Option<App> {
-        let mut app = App::open_cold(session, width, height, scale)?;
+        let mut app = App::open(session, width, height, scale)?;
         app.clipboard = Clipboard::detached();
         app.status.clear();
         Some(app)
@@ -2661,48 +2633,5 @@ mod tests {
             composing[0]
         );
         assert!(composing[3] > 0.0, "a zero-height caret places nothing");
-    }
-
-    /// **TD-80's wiring**, which is the part of it a `text.rs` test cannot see:
-    /// a real open starts the font warm-up and a test open does not.
-    ///
-    /// Both halves matter and the second is the one that would rot silently.
-    /// `warm` in the shared constructor would be invisible — every test would
-    /// still pass, each just quietly spawning a scan of several hundred files
-    /// for a fallback it never uses, and the suite would get slower for a
-    /// reason nothing named. So the suite's own constructor asserts it stays
-    /// cold.
-    #[test]
-    fn a_real_open_warms_the_font_database_and_the_suite_s_open_does_not() {
-        let quiet = App::open_detached(
-            Session::from_log(usk_types::ActorId(1), empty_log(8, 4)),
-            800.0,
-            400.0,
-            1.0,
-        )
-        .expect("the bundled font must load");
-        assert!(
-            !quiet.text.enumerated(),
-            "the constructor the suite uses must not touch the host's fonts"
-        );
-
-        let real = App::open(
-            Session::from_log(usk_types::ActorId(1), empty_log(8, 4)),
-            800.0,
-            400.0,
-            1.0,
-        )
-        .expect("the bundled font must load");
-        assert!(
-            real.text.enumerated(),
-            "a real session must have the enumeration already under way before \
-             the first keystroke arrives (TD-80)"
-        );
-        assert_eq!(
-            real.text.lazy_builds(),
-            0,
-            "and it must be under way *elsewhere* — nothing was built on this \
-             thread"
-        );
     }
 }

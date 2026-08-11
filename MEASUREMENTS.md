@@ -1215,6 +1215,14 @@ its own worst frame is not yet a jank measurement.
 workbook < 1.0 s"*. That is process start to the first presented frame, on the
 5,000-row document.
 
+> **Superseded as a single figure (session 33).** 39.8 ms was one sample. Ten
+> runs on the same host in session 33 — five with TD-80's font warm-up and five
+> from a control binary built without it — measure **52.5–69.3 ms warmed and
+> 51.1–65.2 ms unwarmed**, overlapping. Read cold launch as **~50–70 ms on M1**,
+> and read 39.8 ms as the low end of a distribution rather than the value. The
+> warm-up's contribution is not distinguishable from that spread; see
+> §W-FALLBACK *TD-80 paid*. Both are ~5–7% of the 1.0 s budget.
+
 ### The correction that makes this number mean anything
 
 The first run of this bench reported *"frame to present p50 7.93 ms, p99 10.22
@@ -1347,7 +1355,9 @@ Roughly O(n^1.7), and **75% of the total open cost** at 100,000 rows. Replay and
 recalc are both linear; the graph build is the term to profile. Filed as TD-66.
 
 The shell's default document is 5,000 rows, where the whole open is 43.6 ms and
-the launch-to-first-frame is 39.8 ms. Nothing ships over the line today.
+the launch-to-first-frame is 39.8 ms (**re-measured over 10 runs in session 33
+as ~50–70 ms** — see the note in §W-PRESENT; the conclusion is unchanged).
+Nothing ships over the line today.
 
 ## W-DEPS-CLIPBOARD (ADR-040) — what a feature flag is worth · session 24
 
@@ -1936,6 +1946,54 @@ fonts enumerates for longer; one whose fonts are in none of `PREFERRED` also
 pays the exhaustive second pass, which re-reads every face and is untested
 because M1 never reaches it (named in TD-80). Cross-host layout agreement for
 fallback runs is **not** claimed at all — that is TD-81.
+
+### TD-80 paid — the same workload with the enumeration warmed · session 33
+
+Run: `shell/target/release/ehkatra-shell --fonts`, 3 runs, M1. The benchmark
+grew three lines: a second `TextEngine` that `App::open`'s warm-up has already
+filled, how long that warm-up took, and the inline-build counters that say
+whether the hand-over actually happened.
+
+| stage | session 32 (cold) | session 33 (warmed) | |
+|---|---:|---:|---|
+| **first miss** | **244–887 ms** | **16.8–21.3 ms** | the pick alone |
+|  · enumeration | 203–321 ms on the frame | 222–283 ms **off** it | 379 faces, unchanged |
+| warm-up wait | — | 239–320 ms | background thread |
+| inline builds | 1 | **0** | warmed engine never builds one |
+| warm-ups started | — | **1** | `warm` is idempotent |
+
+The 887 ms cold sample is the first run after a fresh link, with the OS file
+cache cold for the binary and the fonts; the other two cold samples are 255 and
+372 ms, consistent with session 32's 238–412. Stated rather than dropped.
+
+**The two numbers TD-80 required to move or be shown not to.**
+
+* **W-KEYSTROKE, unmoved.** 3 runs of `--keystroke 10000`: typing **1.73–2.62 ms
+  p50**, IME composition **1.68–2.10 ms p50**, commit 4.02–5.83 ms p50, against
+  docs/31's 16 ms and 50 ms. Session 32 measured 1.76–2.30 / 1.79–3.12. The
+  background scan runs *beside* these frames — `--keystroke` goes through
+  `App::open` and therefore warms — and does not steal them.
+* **Cold launch, measured against a control and not against the past.** The
+  warmed build opens to first frame in **52.5–69.3 ms** (5 runs of `--present
+  300`), which against session 32's single **39.8 ms** figure reads like a
+  regression, and a background file scan competing with startup is exactly the
+  failure mode TD-80 named. So a **control binary was built with the single
+  `app.text.warm()` line removed** and measured on the same host minutes apart:
+  **51.1–65.2 ms** (5 runs). The distributions overlap. The warm-up's cost to
+  launch is **not distinguishable from run-to-run variance on M1**, and the
+  shift away from 39.8 ms belongs to this host's state today, not to this
+  change. Both are ~5–7% of docs/31's 1.0 s budget.
+  *This is the measurement the session would have got wrong by comparing to a
+  recorded number instead of to a control run in the same conditions.*
+
+**What is still owed, and it is measured, not suspected.** 16.8–21.3 ms is
+**1.05–1.33× docs/31's 16 ms keystroke→paint**, on one keystroke per process.
+That is the `pick` — walking `PREFERRED` and loading the face that answers
+(`Yu Gothic`, the 7th entry, a large CJK file) — and the split *inside* it is
+**not** measured, so no fix was built. **TD-82**, with both candidate causes
+named: `pick` parses a candidate face to test coverage and `resolve` then reads
+and parses the same face again, and rustybuzz's parse of a multi-megabyte CJK
+face may simply cost this. Profile the split before choosing.
 
 ## Not yet measured (targets remain targets — docs/42)
 A-001 memory/10M cells · A-002 promotion rate · A-003 recalc 100k · A-005 wasm32 **in a real browser / Safari** (WASI-under-Node is not a browser and must not be reported as one) · all docs/31 budget rows.

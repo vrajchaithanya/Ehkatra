@@ -37,26 +37,6 @@
 //!   [`PREFERRED`] is a constant in this file and is consulted before anything
 //!   is enumerated.
 //!
-//! # Where the enumeration happens, and why it is not on the frame (TD-80)
-//! Finding a system face means asking the host what it has, and `fontdb` answers
-//! that by reading and parsing every face file it can find — **203–321 ms of the
-//! 238–412 ms first miss on M1, 379 faces** (W-FALLBACK, profiled before this
-//! was built). That is 15–25× docs/31's 16 ms keystroke→paint budget, landing on
-//! exactly one keystroke: the first non-Latin character a session ever shows.
-//!
-//! So the database is built on a background thread ([`TextEngine::warm`]) and
-//! handed over a channel, overlapping the seconds between launch and that
-//! keystroke. Three properties make this safe rather than merely fast:
-//!
-//! * **The lazy path survives.** A miss that arrives before anyone warmed builds
-//!   the database inline, exactly as it did before — so a `TextEngine` used
-//!   without an `App` around it (every test, every benchmark) still resolves.
-//! * **A miss that arrives mid-scan blocks on the hand-over**, which is what it
-//!   did before too. The change can be neutral or better, never worse.
-//! * **`warm` is not called by [`TextEngine::new`]**, but by `App::open` — 118
-//!   tests and every benchmark construct an engine, and warming there would have
-//!   all of them spawn a 300 ms file scan they never use.
-//!
 //! # The atlas, and why there is still one draw call
 //! Glyphs are rasterised once into an `R8` coverage texture and cached by
 //! `(face, glyph, size)` — **`face` is the part TD-79 added**, and it is not
@@ -69,7 +49,6 @@
 
 use ab_glyph::{Font as _, FontRef, ScaleFont as _};
 use std::collections::HashMap;
-use std::sync::mpsc;
 
 /// The families a missing codepoint is looked for in, **in this order**.
 ///
@@ -189,34 +168,6 @@ impl Run {
     }
 }
 
-/// Where the system font database is in its life (TD-80).
-///
-/// Three states rather than an `Option` because *"not built yet"* and *"being
-/// built by a thread that is not finished"* are different obligations: the first
-/// must build inline, the second must wait for the hand-over. Collapsing them
-/// into `None` is how a warmed engine ends up enumerating twice.
-enum SystemFonts {
-    /// Nothing has been started. A miss builds the database inline — the
-    /// pre-TD-80 behaviour, kept because it is what a `TextEngine` without an
-    /// `App` around it needs.
-    Cold,
-    /// A warm-up thread is building it; the receiver is the hand-over. A miss
-    /// that arrives first blocks here, which is what it did before TD-80.
-    Warming(mpsc::Receiver<fontdb::Database>),
-    /// Built and owned. Every further miss is a lookup.
-    Ready(fontdb::Database),
-}
-
-/// Reads and parses every face the host will admit to.
-///
-/// The expensive call in this file, isolated so that the inline path and the
-/// warm-up thread are demonstrably running the same thing (W-FALLBACK).
-fn load_system() -> fontdb::Database {
-    let mut db = fontdb::Database::new();
-    db.load_system_fonts();
-    db
-}
-
 /// One loaded face: what shapes with it, what rasterises from it, and what it
 /// is called.
 ///
@@ -236,29 +187,14 @@ pub struct TextEngine {
     /// can. Memoised because resolving costs file reads and a codepoint's
     /// answer cannot change while the process runs.
     coverage: HashMap<char, Option<usize>>,
-    /// The system font database: absent, arriving on a thread, or here.
+    /// The system font database, built on the **first** codepoint the bundled
+    /// face cannot draw and never before.
     ///
-    /// Never built by [`TextEngine::new`]. `load_system_fonts` reads several
-    /// hundred files, and a Latin-only workbook — which is every one the
-    /// benchmarks open — must not pay for a fallback it never uses; docs/31's
-    /// 1.0 s cold-launch budget is measured on exactly that path. [`Self::warm`]
-    /// moves the cost off the frame without moving it onto launch.
-    system: SystemFonts,
-    /// How many times the database was built **inline, on the calling thread** —
-    /// the path TD-80 exists to avoid.
-    ///
-    /// A counter rather than a flag because the interesting assertion is
-    /// *"a warmed engine never built one"*, and zero is the only value that
-    /// says so. Not `cfg(test)`: a field that only exists under test is a field
-    /// whose bookkeeping the shipped build does not run.
-    lazy_builds: u32,
-    /// How many warm-up threads this engine has started.
-    ///
-    /// Exists because "warm is idempotent" is otherwise unobservable: a second
-    /// `warm` that spawned a second scan and then handed over the *second*
-    /// database would look identical from the outside and cost twice as much.
-    /// This is the number that catches it.
-    warm_spawns: u32,
+    /// Lazy on purpose: `load_system_fonts` reads several hundred files, and a
+    /// Latin-only workbook — which is every one the benchmarks open — must not
+    /// pay for a fallback it never uses. docs/31's 1.0 s cold-launch budget is
+    /// measured on exactly that path.
+    system: Option<fontdb::Database>,
     atlas: Vec<u8>,
     /// Shelf allocator: current row's top and height, and the pen within it.
     cursor: (u32, u32, u32),
@@ -292,9 +228,7 @@ impl TextEngine {
                 font: FontRef::try_from_slice(bytes).ok()?,
             }],
             coverage: HashMap::new(),
-            system: SystemFonts::Cold,
-            lazy_builds: 0,
-            warm_spawns: 0,
+            system: None,
             atlas: vec![0u8; (ATLAS * ATLAS) as usize],
             cursor: (0, 0, 0),
             cache: HashMap::new(),
@@ -306,115 +240,6 @@ impl TextEngine {
         engine.atlas[0] = 255;
         engine.cursor = (0, 1, 1);
         Some(engine)
-    }
-
-    /// Starts building the system font database on a background thread (TD-80).
-    ///
-    /// Called by `App::open` and by nothing else — see the module note on why
-    /// not [`TextEngine::new`]. **Idempotent**: an engine already warming or
-    /// already warm is left alone, so calling it twice costs one scan, not two.
-    ///
-    /// Failure is silent *and correct*: if the thread cannot be spawned the
-    /// engine stays [`SystemFonts::Cold`], which is the pre-TD-80 behaviour, and
-    /// a later miss still resolves inline. A shell that cannot start a thread
-    /// must still draw kana (DP-A10 — no panic across the boundary).
-    pub fn warm(&mut self) {
-        if !matches!(self.system, SystemFonts::Cold) {
-            return;
-        }
-        let (tx, rx) = mpsc::channel();
-        let spawned = std::thread::Builder::new()
-            .name(String::from("ehkatra-font-warm"))
-            .spawn(move || {
-                // The receiver may already be gone if the process is shutting
-                // down; the scan's result is then simply dropped.
-                let _ = tx.send(load_system());
-            });
-        if spawned.is_ok() {
-            self.warm_spawns += 1;
-            self.system = SystemFonts::Warming(rx);
-        }
-    }
-
-    /// Takes delivery of a warm-up that has finished, **without blocking**.
-    ///
-    /// `true` once the database is in hand. `false` while a warm-up is still
-    /// running, and also `false` for an engine nobody warmed — "not warm" and
-    /// "never asked" are the same answer to this question.
-    ///
-    /// Exists for the benchmark (`--fonts`), which has to know when the overlap
-    /// this whole change buys has actually elapsed before it times the miss that
-    /// follows it. Nothing in the frame path calls it: a real miss uses the
-    /// blocking hand-over, because blocking is the right answer when the glyph
-    /// is needed now.
-    pub fn poll_warm(&mut self) -> bool {
-        match &self.system {
-            SystemFonts::Ready(_) => true,
-            SystemFonts::Cold => false,
-            SystemFonts::Warming(rx) => match rx.try_recv() {
-                Ok(db) => {
-                    self.system = SystemFonts::Ready(db);
-                    true
-                }
-                Err(mpsc::TryRecvError::Empty) => false,
-                // The thread died without sending. Fall back to the lazy path
-                // rather than wait forever for a hand-over that is not coming.
-                Err(mpsc::TryRecvError::Disconnected) => {
-                    self.system = SystemFonts::Cold;
-                    false
-                }
-            },
-        }
-    }
-
-    /// How many times the database was built inline on the calling thread.
-    ///
-    /// The number TD-80 is about: a warmed engine must resolve with this at
-    /// **0**, and an unwarmed one reaches 1 and stays there.
-    pub fn lazy_builds(&self) -> u32 {
-        self.lazy_builds
-    }
-
-    /// How many warm-up threads this engine has started.
-    ///
-    /// At most 1 for an engine's whole life, and that is the assertion
-    /// [`TextEngine::warm`]'s idempotence claim reduces to.
-    pub fn warm_spawns(&self) -> u32 {
-        self.warm_spawns
-    }
-
-    /// The database, waiting for the warm-up or building it inline.
-    ///
-    /// This is the whole of TD-80's hand-over. Three arrivals, one exit:
-    /// warming → block on the channel; cold → build here and count it; ready →
-    /// hand it back.
-    fn system_db(&mut self) -> Option<&fontdb::Database> {
-        if let SystemFonts::Warming(rx) = &self.system {
-            // Blocks only when the user beat the scan — precisely what a miss
-            // did before TD-80, so this path is never worse than it was.
-            self.system = match rx.recv() {
-                Ok(db) => SystemFonts::Ready(db),
-                // The warm-up thread is gone; rebuild inline below.
-                Err(_) => SystemFonts::Cold,
-            };
-        }
-        if matches!(self.system, SystemFonts::Cold) {
-            self.lazy_builds += 1;
-            self.system = SystemFonts::Ready(load_system());
-        }
-        match &self.system {
-            SystemFonts::Ready(db) => Some(db),
-            _ => None,
-        }
-    }
-
-    /// Whether this engine has consulted the host's fonts at all.
-    ///
-    /// A Latin-only session must answer `false` — that is the property the
-    /// bundled face's `cmap` buys, and the one docs/31's cold-launch budget is
-    /// measured on.
-    pub fn enumerated(&self) -> bool {
-        !matches!(self.system, SystemFonts::Cold)
     }
 
     /// Whether the atlas has changed since [`TextEngine::mark_uploaded`].
@@ -496,10 +321,15 @@ impl TextEngine {
         {
             return Some(slot);
         }
+        if self.system.is_none() {
+            let mut db = fontdb::Database::new();
+            db.load_system_fonts();
+            self.system = Some(db);
+        }
         // The borrow of `system` is closed before `faces` grows: the bytes are
         // copied out here and everything after this block is owned.
         let picked = {
-            let db = self.system_db()?;
+            let db = self.system.as_ref()?;
             let id = pick(db, ch)?;
             let info = db.faces().find(|f| f.id == id)?;
             let name = info
@@ -818,14 +648,9 @@ mod tests {
         );
         assert_eq!(latin.unresolved, 0);
         assert!(
-            !engine.enumerated(),
+            engine.system.is_none(),
             "and no system font was enumerated: a Latin workbook must not pay \
              for a fallback it never uses"
-        );
-        assert_eq!(
-            engine.lazy_builds(),
-            0,
-            "nor was one built inline on the frame's thread"
         );
     }
 
@@ -956,113 +781,5 @@ mod tests {
             "the resolved face must be nameable — that record is what makes a \
              layout divergence between two hosts explainable (D-125)"
         );
-    }
-
-    /// **TD-80.** A warmed engine resolves without ever building a database on
-    /// the calling thread.
-    ///
-    /// This asserts the *structure*, not the speed, and deliberately so. The
-    /// tempting test — "warm, sleep a little, check the resolve was fast" — is
-    /// a race dressed as an assertion: it passes on an idle laptop and fails on
-    /// a loaded CI box, and DP-C5 calls that a defect in the test. What TD-80
-    /// actually claims is that the enumeration happens *somewhere else*, and
-    /// `lazy_builds` is exactly that claim as a number.
-    ///
-    /// Host-independent: `poll_warm` waits for the hand-over whatever the host's
-    /// font count is, and the assertion afterwards holds whether or not this
-    /// machine has a face for `に` — a host with none still resolves *through
-    /// the warmed database* and still never builds one inline.
-    ///
-    /// It fails if `warm` is removed, which is the point: an unwarmed engine
-    /// reaches `lazy_builds == 1` on the same line.
-    #[test]
-    fn a_warmed_engine_resolves_without_building_a_database_on_the_frame() {
-        let mut engine = TextEngine::new().expect("the bundled font must load");
-        assert!(!engine.enumerated(), "an engine starts cold");
-        engine.warm();
-        assert_eq!(
-            engine.warm_spawns(),
-            1,
-            "the warm-up thread must be running"
-        );
-
-        // Wait for the hand-over rather than for a duration: a sleep long
-        // enough here is a sleep that fails on a loaded box (DP-C5).
-        while !engine.poll_warm() {
-            assert!(
-                engine.enumerated(),
-                "the warm-up thread died without handing anything over"
-            );
-            std::thread::yield_now();
-        }
-
-        let _ = engine.layout("にほん", CELL_PX, 1.0);
-        assert_eq!(
-            engine.lazy_builds(),
-            0,
-            "a warmed engine must consume the thread's database, not build its \
-             own — the whole of TD-80 is that this number stays 0"
-        );
-        assert_eq!(engine.warm_spawns(), 1, "and one scan, not two");
-    }
-
-    /// The lazy path survives TD-80: an engine nobody warmed still resolves.
-    ///
-    /// The failure this forbids is the plausible one — moving the build to
-    /// `warm` and leaving `resolve` waiting for a hand-over that, for the 118
-    /// tests and every benchmark that never call `warm`, never comes. That
-    /// engine must enumerate inline exactly as it did before, and be able to
-    /// say that it did.
-    #[test]
-    fn an_engine_nobody_warmed_still_enumerates_inline_exactly_once() {
-        let mut engine = TextEngine::new().expect("the bundled font must load");
-        let _ = engine.layout("にほん", CELL_PX, 1.0);
-        assert!(engine.enumerated(), "the miss must have consulted the host");
-        assert_eq!(
-            engine.lazy_builds(),
-            1,
-            "and built the database on this thread, because nobody warmed it"
-        );
-        // A second miss reuses it: the cost is once per process, not per glyph.
-        let _ = engine.layout("한글", CELL_PX, 1.0);
-        assert_eq!(
-            engine.lazy_builds(),
-            1,
-            "a database, once built, is never rebuilt"
-        );
-    }
-
-    /// `warm` is idempotent, and warming after the lazy build is a no-op.
-    ///
-    /// Two ways this could have gone wrong and both cost a 300 ms file scan:
-    /// a second `warm` spawning a second thread, and a `warm` arriving after a
-    /// miss already built the database throwing that database away.
-    #[test]
-    fn warming_twice_and_warming_late_both_cost_nothing() {
-        let mut engine = TextEngine::new().expect("the bundled font must load");
-        engine.warm();
-        engine.warm();
-        assert_eq!(
-            engine.warm_spawns(),
-            1,
-            "warming an engine that is already warming must not start a second \
-             scan of several hundred files"
-        );
-
-        while !engine.poll_warm() {
-            assert!(engine.enumerated(), "the warm-up thread died");
-            std::thread::yield_now();
-        }
-
-        // Late: the database is already in hand, so this must not throw it away
-        // and go and read every font file again.
-        engine.warm();
-        assert_eq!(
-            engine.warm_spawns(),
-            1,
-            "warming an engine that is already warm must do nothing at all"
-        );
-        let _ = engine.layout("にほん", CELL_PX, 1.0);
-        assert_eq!(engine.lazy_builds(), 0);
     }
 }
